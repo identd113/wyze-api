@@ -1504,53 +1504,41 @@ module.exports = class WyzeAPI {
     ];
 
     const characteristics = {
-      mac: deviceMac.toUpperCase(), // Convert MAC address to uppercase
-      index: '1', // Fixed index value
-      ts: moment().valueOf(), // Current timestamp in milliseconds
-      plist: plist // Property list with the ID and value
+      mac: deviceMac.toUpperCase(),
+      index: '1', // Wyze local API always uses index 1
+      ts: Date.now(),
+      plist: plist
     };
 
-    // Convert characteristics object to JSON string
     const characteristicsStr = JSON.stringify(characteristics, null, 0);
     this.log.info(`Characteristics JSON: ${characteristicsStr}`);
 
-    // Encrypt the JSON string
     const characteristicsEnc = util.wyzeEncrypt(deviceEnr, characteristicsStr);
     this.log.info(`Encrypted characteristics: ${characteristicsEnc}`);
 
-    // Create the payload for the request
     const payload = {
-      request: 'set_status', // Request type
-      isSendQueue: 0, // Flag indicating whether to send the request immediately
-      characteristics: characteristicsEnc // Encrypted characteristics data
+      request: 'set_status',
+      isSendQueue: 0,
+      characteristics: characteristicsEnc
     };
 
-    // Convert payload to JSON string and fix any escaped backslashes
+    // JSON.stringify escapes backslashes; the local API expects single backslashes
     const payloadStr = JSON.stringify(payload, null, 0).replace(/\\\\/g, '\\');
-    this.log.info(`Payload JSON: ${payloadStr}`);
-
-    // Define the URL for the local device request
     const url = `http://${deviceIp}:88/device_request`;
-    this.log.info(`Sending request to URL: ${url}`);
+    this.log.info(`Sending request to ${url}`);
 
     try {
-      // Send the POST request to the local device
       const response = await axios.post(url, payloadStr, {
         headers: { 'Content-Type': 'application/json' }
       });
-
-      // Log the response data
       this.log.info(`Response received from device ${deviceMac}: ${JSON.stringify(response.data)}`);
     } catch (error) {
       if (error.response) {
-        // Log the HTTP error details
         this.log.error(`Failed to connect to bulb ${deviceMac}. HTTP status: ${error.response.status}. Response data: ${JSON.stringify(error.response.data)}`);
-
-        // Handle fallback to cloud
+        // Local request failed — fall back to cloud API
         this.log.info(`Attempting to fallback to cloud for device ${deviceMac}.`);
         await this.runActionList(deviceMac, deviceModel, propertyId, propertyValue, actionKey);
       } else {
-        // Log other types of errors
         this.log.error(`Error occurred while sending command to device ${deviceMac}: ${error}`);
       }
     }
