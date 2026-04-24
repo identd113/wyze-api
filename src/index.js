@@ -1083,7 +1083,7 @@ module.exports = class WyzeAPI {
         "User-Agent": this.userAgent,
         appid: constants.oliveAppId,
         appinfo: constants.appInfo,
-        phoneid: constants.phoneId,
+        phoneid: this.phoneId,
         access_token: this.access_token,
         signature2: signature,
         Authorization: this.access_token,
@@ -1138,7 +1138,7 @@ module.exports = class WyzeAPI {
         "User-Agent": this.userAgent,
         appid: constants.oliveAppId,
         appinfo: constants.appInfo,
-        phoneid: constants.phoneId,
+        phoneid: this.phoneId,
         access_token: this.access_token,
         signature2: signature,
       },
@@ -1240,10 +1240,10 @@ module.exports = class WyzeAPI {
     };
     try {
       const url = `${constants.irrigationBaseUrl}get_iot_prop`;
-      if (this.apiLogEnabled) this.log(`Performing request: ${url}`);
+      if (this.apiLogEnabled) this.log.info(`Performing request: ${url}`);
       const result = await axios.get(url, config);
       if (this.apiLogEnabled) {
-        this.log(
+        this.log.info(
           `API response IrrigationGetIotProp: ${JSON.stringify(result.data)}`
         );
       }
@@ -1284,10 +1284,10 @@ module.exports = class WyzeAPI {
     };
     try {
       const url = `${constants.irrigationBaseUrl}device_info`;
-      if (this.apiLogEnabled) this.log(`Performing request: ${url}`);
+      if (this.apiLogEnabled) this.log.info(`Performing request: ${url}`);
       const result = await axios.get(url, config);
       if (this.apiLogEnabled) {
-        this.log(
+        this.log.info(
           `API response IrrigationGetDeviceInfo: ${JSON.stringify(result.data)}`
         );
       }
@@ -1325,10 +1325,10 @@ module.exports = class WyzeAPI {
     };
     try {
       const url = `${constants.irrigationBaseUrl}zone`;
-      if (this.apiLogEnabled) this.log(`Performing request: ${url}`);
+      if (this.apiLogEnabled) this.log.info(`Performing request: ${url}`);
       const result = await axios.get(url, config);
       if (this.apiLogEnabled) {
-        this.log(
+        this.log.info(
           `API response IrrigationGetZones: ${JSON.stringify(result.data)}`
         );
       }
@@ -1376,7 +1376,7 @@ module.exports = class WyzeAPI {
       const url = `${constants.irrigationBaseUrl}quickrun`;
       const result = await axios.post(url, JSON.stringify(payload), config);
       if (this.apiLogEnabled) {
-        this.log(
+        this.log.info(
           `API response IrrigationQuickRun: ${JSON.stringify(result.data)}`
         );
       }
@@ -1423,7 +1423,7 @@ module.exports = class WyzeAPI {
       const url = `${constants.irrigationBaseUrl}runningschedule`;
       const result = await axios.post(url, JSON.stringify(payload), config);
       if (this.apiLogEnabled) {
-        this.log(`API response IrrigationStop: ${JSON.stringify(result.data)}`);
+        this.log.info(`API response IrrigationStop: ${JSON.stringify(result.data)}`);
       }
 
       return result.data;
@@ -1461,10 +1461,10 @@ module.exports = class WyzeAPI {
     };
     try {
       const url = `${constants.irrigationBaseUrl}schedule_runs`;
-      if (this.apiLogEnabled) this.log(`Performing request: ${url}`);
+      if (this.apiLogEnabled) this.log.info(`Performing request: ${url}`);
       const result = await axios.get(url, config);
       if (this.apiLogEnabled) {
-        this.log(
+        this.log.info(
           `API response IrrigationGetScheduleRuns: ${JSON.stringify(
             result.data
           )}`
@@ -1512,11 +1512,11 @@ module.exports = class WyzeAPI {
 
     // Convert characteristics object to JSON string
     const characteristicsStr = JSON.stringify(characteristics, null, 0);
-    console.log(`Characteristics JSON: ${characteristicsStr}`);
+    this.log.info(`Characteristics JSON: ${characteristicsStr}`);
 
     // Encrypt the JSON string
     const characteristicsEnc = util.wyzeEncrypt(deviceEnr, characteristicsStr);
-    console.log(`Encrypted characteristics: ${characteristicsEnc}`);
+    this.log.info(`Encrypted characteristics: ${characteristicsEnc}`);
 
     // Create the payload for the request
     const payload = {
@@ -1527,11 +1527,11 @@ module.exports = class WyzeAPI {
 
     // Convert payload to JSON string and fix any escaped backslashes
     const payloadStr = JSON.stringify(payload, null, 0).replace(/\\\\/g, '\\');
-    console.log(`Payload JSON: ${payloadStr}`);
+    this.log.info(`Payload JSON: ${payloadStr}`);
 
     // Define the URL for the local device request
     const url = `http://${deviceIp}:88/device_request`;
-    console.log(`Sending request to URL: ${url}`);
+    this.log.info(`Sending request to URL: ${url}`);
 
     try {
       // Send the POST request to the local device
@@ -1540,18 +1540,18 @@ module.exports = class WyzeAPI {
       });
 
       // Log the response data
-      console.log(`Response received from device ${deviceMac}:`, response.data);
+      this.log.info(`Response received from device ${deviceMac}: ${JSON.stringify(response.data)}`);
     } catch (error) {
       if (error.response) {
         // Log the HTTP error details
-        console.warn(`Failed to connect to bulb ${deviceMac}. HTTP status: ${error.response.status}. Response data:`, error.response.data);
+        this.log.error(`Failed to connect to bulb ${deviceMac}. HTTP status: ${error.response.status}. Response data: ${JSON.stringify(error.response.data)}`);
 
         // Handle fallback to cloud
-        console.log(`Attempting to fallback to cloud for device ${deviceMac}.`);
-        await runActionList(deviceMac, deviceModel, propertyId, propertyValue, actionKey);
+        this.log.info(`Attempting to fallback to cloud for device ${deviceMac}.`);
+        await this.runActionList(deviceMac, deviceModel, propertyId, propertyValue, actionKey);
       } else {
         // Log other types of errors
-        console.error(`Error occurred while sending command to device ${deviceMac}:`, error);
+        this.log.error(`Error occurred while sending command to device ${deviceMac}: ${error}`);
       }
     }
   }
@@ -1560,7 +1560,7 @@ module.exports = class WyzeAPI {
     const rokuAuth = new RokuAuthLib(this.username, this.password);
     const token = await rokuAuth.getTokenWithUsernamePassword(this.username, this.password);
 
-    print(token)
+    this.log.info(JSON.stringify(token))
   }
 
   /**
@@ -2206,7 +2206,7 @@ module.exports = class WyzeAPI {
   }
 
   async getHmsID() {
-    await this.getPlanBindingListByUser();
+    return await this.getPlanBindingListByUser();
   }
 
   async setHMSState(hms_id, mode) {
