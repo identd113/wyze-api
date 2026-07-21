@@ -432,7 +432,14 @@ module.exports = class WyzeAPI {
         'KeyId Required, Please provide the "keyId" parameter in config.json'
       );
     } else {
-      const result = await this._performLoginRequest();
+      let result = await this._performLoginRequest();
+
+      // Wyze responds with no access_token and an mfa_details block when the
+      // account has 2FA enabled - complete the challenge with a follow-up request.
+      if (result.ok && !result.data.access_token && result.data.mfa_details) {
+        result = await this._performMfaLogin(result.data.mfa_details);
+      }
+
       if (!result.ok || !result.data.access_token) {
         throw new Error(
           `Invalid credentials, please check username/password, keyId/apiKey - ${JSON.stringify(
@@ -445,6 +452,34 @@ module.exports = class WyzeAPI {
       this.log.info("Successfully logged into Wyze API");
       await this._updateTokens(result.data);
     }
+  }
+
+  /**
+   * Completes a TOTP authenticator-app MFA challenge returned by the login endpoint.
+   * @param {object} mfaDetails - The `mfa_details` block from the login response.
+   * @returns {Promise<object>} - The result of the follow-up login request.
+   * @throws {Error} - Throws if no mfaCode was configured or the account uses an
+   *   unsupported MFA method (only TOTP authenticator apps are handled).
+   */
+  async _performMfaLogin(mfaDetails) {
+    if (!this.mfaCode) {
+      throw new Error(
+        'Your account has 2-factor auth enabled. Please provide the "mfaCode" parameter in config.json.'
+      );
+    }
+
+    const totpApp = mfaDetails.totp_apps?.[0];
+    if (!totpApp) {
+      throw new Error(
+        `Unsupported MFA method - only TOTP authenticator apps are currently supported. Received: ${JSON.stringify(mfaDetails)}`
+      );
+    }
+
+    return this._performLoginRequest({
+      mfa_type: "TotpVerificationCode",
+      verification_id: totpApp.app_id,
+      verification_code: this.mfaCode,
+    });
   }
 
   /**
