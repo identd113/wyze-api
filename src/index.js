@@ -376,7 +376,11 @@ module.exports = class WyzeAPI {
 
   async _handleAccessTokenError(result, errorMessage, code, url, data) {
     this.access_token = "";
-    await this.refreshToken().catch((err) => {
+    await this.refreshToken().catch(async (err) => {
+      // The refresh token is also dead - clear it and wipe the persisted
+      // file so the next maybeLogin() falls through to a real login instead
+      // of reloading this same broken pair from disk forever.
+      await this._clearPersistedTokens();
       throw new Error(
         `Refresh Token could not be used to get a new access token. ${err}`
       );
@@ -713,6 +717,25 @@ module.exports = class WyzeAPI {
           this.log.error(`Error persisting tokens: ${error.message}`);
           throw new Error(`Failed to persist tokens: ${error.message}`);
         }
+      }
+    }
+  }
+
+  /**
+  * Clears the in-memory tokens and deletes the persisted token file.
+  * Called once a refresh token is proven dead, so the next maybeLogin()
+  * finds nothing to reload and attempts a fresh login instead.
+  */
+  async _clearPersistedTokens() {
+    this.access_token = "";
+    this.refresh_token = "";
+
+    const tokenPath = this._tokenPersistPath();
+    try {
+      await fs.unlink(tokenPath);
+    } catch (error) {
+      if (error.code !== "ENOENT") {
+        this.log.error(`Error deleting persisted tokens: ${error.message}`);
       }
     }
   }
