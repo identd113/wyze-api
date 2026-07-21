@@ -21,6 +21,7 @@ const options = {
   password: process.env.password,
   keyId: process.env.keyId,
   apiKey: process.env.apiKey,
+  mfaCode: process.env.mfaCode, // optional, only required if your account has 2FA enabled
   persistPath: "./",
   logLevel: "none"
 }
@@ -48,6 +49,16 @@ const wyze = new Wyze(options)
 
 ## Run
 `username=first.last@email.om password=123456 keyId=2222222 apiKey=222222 node index.js`
+
+## 2FA / MFA accounts
+If your Wyze account has two-factor authentication enabled, pass the current code from your
+authenticator app as `mfaCode` in the options above (only TOTP authenticator apps are supported —
+SMS/email codes are not). If `mfaCode` is required but missing, `login()` throws an error telling
+you to provide it.
+
+Note that `mfaCode` is a static config value but TOTP codes rotate every 30 seconds, so this only
+works if the code is still current at the moment `login()` actually runs — a stale code fails with
+the same "provide mfaCode" error.
 
 ## Helper methods
 

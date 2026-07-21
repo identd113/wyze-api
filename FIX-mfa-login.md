@@ -32,10 +32,11 @@ is falsy, so it just throws `Invalid credentials...`. Downstream, `homebridge-wy
 also has no `mfaCode` field in `config.schema.json`, so there's no way to supply one via the UI
 even once this is fixed here (that side is already patched in the homebridge-wyze-smart-home repo).
 
-## Proposed fix (drafted against current `src/index.js`, not a revert of the old code)
+## The fix (implemented in v1.1.16)
 
-Add an MFA branch to `login()` plus a small helper, reusing the current
-`_performLoginRequest()`/`result.ok` plumbing instead of the pre-2024 error-handling style:
+Added an MFA branch to `login()` plus a small helper in `src/index.js`, reusing the current
+`_performLoginRequest()`/`result.ok` plumbing instead of the pre-2024 error-handling style
+(not a revert of the old code):
 
 ```js
 async login() {
@@ -95,10 +96,13 @@ async _performMfaLogin(mfaDetails) {
 
 This was drafted and syntax-checked (`node --check`) against the submodule copy of `src/index.js`
 in `homebridge-wyze-smart-home`, then reverted there since this repo is the right place to own
-and commit it. Not yet verified against a live 2FA account — the old (pre-2024) implementation
-used this same `mfa_type: "TotpVerificationCode"` / `verification_id` / `verification_code` shape
-and presumably worked, but that's the one thing worth confirming with a real account before
-release, since Wyze's API isn't documented and could have changed since 2024.
+and commit it — landed here in commit `61ed5d5` with unit test coverage
+(`tests/login.test.js`) for the branch logic, the MFA request shape, and the error paths (missing
+`mfaCode`, unsupported MFA method). **Still not yet verified against a live 2FA account** — the
+old (pre-2024) implementation used this same `mfa_type: "TotpVerificationCode"` /
+`verification_id` / `verification_code` shape and presumably worked, but that's the one thing
+worth confirming with a real account before calling this fully done, since Wyze's API isn't
+documented and could have changed since 2024.
 
 ## Known limitation worth calling out in the release notes
 
