@@ -36,6 +36,14 @@ module.exports = class WyzeAPI {
   // line and color-codes the level tag, independently of whatever the
   // homebridge plugin layer does with its own log object.
   constructor(options /*, log [unused] */) {
+    if (typeof options.username !== "string" || !options.username) {
+      throw new Error(
+        "WyzeAPI requires a non-empty 'username' option (your Wyze account email) - " +
+        "this is needed even when logging in with apiKey/keyId, since it's used to " +
+        "namespace the persisted token cache file."
+      );
+    }
+
     // Resolve effective log level. apiLogEnabled is the legacy option —
     // honored for back-compat: true → debug, false/unset → info.
     const requestedLevel = options.logLevel
