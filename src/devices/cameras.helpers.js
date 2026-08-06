@@ -118,8 +118,13 @@ module.exports = {
 
   // ---- Thin-wrapper controls -----------------------------------------------
 
+  // Delegates to cameraTurnOn/Off so DeviceMgmt-era cameras (Floodlight
+  // Pro / Battery Cam Pro / OG) route correctly — those don't respond to
+  // the legacy run_action endpoint this used to call unconditionally.
   async cameraPrivacy(deviceMac, deviceModel, value) {
-    await this.runAction(deviceMac, deviceModel, value);
+    return value === "power_on"
+      ? this.cameraTurnOn(deviceMac, deviceModel)
+      : this.cameraTurnOff(deviceMac, deviceModel);
   },
 
   async cameraRestart(deviceMac, deviceModel) {
@@ -133,12 +138,19 @@ module.exports = {
     await this.runAction(deviceMac, deviceModel, "garage_door_trigger");
   },
 
+  // Delegates to cameraSirenOn/Off — see cameraPrivacy comment above.
   async cameraSiren(deviceMac, deviceModel, value) {
-    await this.runAction(deviceMac, deviceModel, value);
+    return value === "siren_on"
+      ? this.cameraSirenOn(deviceMac, deviceModel)
+      : this.cameraSirenOff(deviceMac, deviceModel);
   },
 
+  // Delegates to cameraFloodLightOn/Off — see cameraPrivacy comment above.
+  // Fixes #293 (Bulb Cam floodlight toggle silently reverting).
   async cameraFloodLight(deviceMac, deviceModel, value) {
-    await this.setProperty(deviceMac, deviceModel, PIDs.CAMERA_FLOOD_LIGHT, value);
+    return value === PVals.CAMERA_FLOOD_LIGHT.ON
+      ? this.cameraFloodLightOn(deviceMac, deviceModel)
+      : this.cameraFloodLightOff(deviceMac, deviceModel);
   },
 
   async cameraSpotLight(deviceMac, deviceModel, value) {
@@ -161,8 +173,11 @@ module.exports = {
     await this.setProperty(deviceMac, deviceModel, PIDs.SOUND_NOTIFICATION, "0");
   },
 
+  // Delegates to cameraNotificationsOn/Off — see cameraPrivacy comment above.
   async cameraNotifications(deviceMac, deviceModel, value) {
-    await this.setProperty(deviceMac, deviceModel, PIDs.NOTIFICATION, value);
+    return value === "1"
+      ? this.cameraNotificationsOn(deviceMac, deviceModel)
+      : this.cameraNotificationsOff(deviceMac, deviceModel);
   },
 
   async cameraMotionRecording(deviceMac, deviceModel, value) {
