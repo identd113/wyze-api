@@ -8,7 +8,7 @@ const crypto = require("./utils/crypto");
 const constants = require("./constants");
 const util = require("./util");
 const types = require("./types");
-const { installRedirectGuard, WYZE_ALLOWED_HOSTNAMES } = require("./util/security");
+const { installRedirectGuard, WYZE_ALLOWED_HOSTNAMES, sanitizeLogMessage } = require("./util/security");
 const httpsAgent = require("./httpsAgent");
 const axios = require("axios");
 
@@ -378,7 +378,7 @@ module.exports = class WyzeAPI {
     this.access_token = "";
     await this.refreshToken().catch((err) => {
       throw new Error(
-        `Refresh Token could not be used to get a new access token. ${err}`
+        `Refresh Token could not be used to get a new access token. ${sanitizeLogMessage(err)}`
       );
     });
 
@@ -434,9 +434,12 @@ module.exports = class WyzeAPI {
     } else {
       const result = await this._performLoginRequest();
       if (!result.ok || !result.data.access_token) {
+        // Redact before embedding — this Error's message escapes wyze-api's
+        // own logger redaction once thrown, and what Wyze puts in an error
+        // response body isn't something this library controls.
         throw new Error(
-          `Invalid credentials, please check username/password, keyId/apiKey - ${JSON.stringify(
-            result
+          `Invalid credentials, please check username/password, keyId/apiKey - ${sanitizeLogMessage(
+            JSON.stringify(result)
           )}`
         );
       }
@@ -579,7 +582,7 @@ module.exports = class WyzeAPI {
           return; // Exit if successful.
         } else {
           throw new Error(
-            `Failed to refresh access token - ${JSON.stringify(result)}`
+            `Failed to refresh access token - ${sanitizeLogMessage(JSON.stringify(result))}`
           );
         }
       } catch (error) {
