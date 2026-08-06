@@ -122,22 +122,23 @@ module.exports = {
   },
 
   /**
-   * Set the heating setpoint. Tenths-of-°F regardless of display unit
-   * (e.g. 680 = 68.0°F).
+   * Set the heating setpoint — whole-degree °F (e.g. 68, not 680), matching
+   * what `heat_sp` actually reports on read (see thermostatGetIotProp).
    */
   async setThermostatHeatingSetpoint(deviceMac, deviceModel, value) {
     if (!Number.isInteger(value)) {
-      throw new Error("setThermostatHeatingSetpoint: value must be an integer (tenths of °F)");
+      throw new Error("setThermostatHeatingSetpoint: value must be an integer (whole-degree °F)");
     }
     return this.thermostatSetIotProp(deviceMac, deviceModel, "heat_sp", value);
   },
 
   /**
-   * Set the cooling setpoint (tenths-of-°F).
+   * Set the cooling setpoint — whole-degree °F (e.g. 74, not 740), matching
+   * what `cool_sp` actually reports on read (see thermostatGetIotProp).
    */
   async setThermostatCoolingSetpoint(deviceMac, deviceModel, value) {
     if (!Number.isInteger(value)) {
-      throw new Error("setThermostatCoolingSetpoint: value must be an integer (tenths of °F)");
+      throw new Error("setThermostatCoolingSetpoint: value must be an integer (whole-degree °F)");
     }
     return this.thermostatSetIotProp(deviceMac, deviceModel, "cool_sp", value);
   },

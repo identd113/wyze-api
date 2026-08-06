@@ -3,8 +3,23 @@
  * into single-call operations.
  */
 module.exports = {
+  /**
+   * Resolve the HMS device ID bound to this account. Wyze returns a list of
+   * plans (sometimes multiple — e.g. an expired plan alongside an active
+   * one), so this finds the first plan that actually has a device bound to
+   * it instead of indexing [0] blindly.
+   * @returns {Promise<string>} the hms_id
+   */
   async getHmsID() {
-    return this.getPlanBindingListByUser();
+    const response = await this.getPlanBindingListByUser();
+    const plans = Array.isArray(response?.data) ? response.data : [];
+    for (const plan of plans) {
+      const device = Array.isArray(plan?.deviceList) ? plan.deviceList[0] : null;
+      if (device?.device_id) return device.device_id;
+    }
+    throw new Error(
+      `getHmsID: no HMS device found in plan list. Got ${plans.length} plan(s); none had a non-empty deviceList.`
+    );
   },
 
   /**

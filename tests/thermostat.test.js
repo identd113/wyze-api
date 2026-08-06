@@ -87,7 +87,7 @@ test("setThermostatScenario validates and writes current_scenario", async () => 
   );
 });
 
-test("setpoint setters require integer tenths-of-°F", async () => {
+test("setpoint setters require integer whole-degree °F", async () => {
   const w = stub();
   const calls = [];
   w.thermostatSetIotProp = async (mac, model, key, value) => {
@@ -95,11 +95,11 @@ test("setpoint setters require integer tenths-of-°F", async () => {
     return {};
   };
 
-  await w.setThermostatHeatingSetpoint(thermostat.mac, thermostat.product_model, 680);
-  await w.setThermostatCoolingSetpoint(thermostat.mac, thermostat.product_model, 740);
+  await w.setThermostatHeatingSetpoint(thermostat.mac, thermostat.product_model, 68);
+  await w.setThermostatCoolingSetpoint(thermostat.mac, thermostat.product_model, 74);
   assert.deepStrictEqual(calls, [
-    { key: "heat_sp", value: 680 },
-    { key: "cool_sp", value: 740 },
+    { key: "heat_sp", value: 68 },
+    { key: "cool_sp", value: 74 },
   ]);
 
   await assert.rejects(
@@ -120,10 +120,10 @@ test("setThermostatTemperature writes both setpoints in cool→heat order", asyn
     return {};
   };
 
-  await w.setThermostatTemperature(thermostat.mac, thermostat.product_model, 740, 680);
+  await w.setThermostatTemperature(thermostat.mac, thermostat.product_model, 74, 68);
   assert.deepStrictEqual(calls, [
-    { key: "cool_sp", value: 740 },
-    { key: "heat_sp", value: 680 },
+    { key: "cool_sp", value: 74 },
+    { key: "heat_sp", value: 68 },
   ]);
 });
 
