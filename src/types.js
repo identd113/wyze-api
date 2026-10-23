@@ -97,10 +97,10 @@ const DeviceModels = Object.freeze({
   CAMERA_OUTDOOR: _CAMERA_OUTDOOR,
   CAMERA_OUTDOOR_V2: ["HL_WCO2"],
   // Cameras that use the new devicemgmt-service-beta API (Floodlight Pro,
-  // Battery Cam Pro, OG cam) and don't respond to the standard run_action
+  // Battery Cam Pro, OG cam, Pan v4) and don't respond to the standard run_action
   // endpoint. Cameras in this list need the DeviceMgmt code paths.
-  CAMERA_DEVICEMGMT: ["LD_CFP", "AN_RSCW", "GW_GC1"],
-  CAMERA: [..._CAMERA_V1, ..._CAMERA_V2, ..._CAMERA_V3, ..._CAMERA_OUTDOOR, "HL_WCO2", "LD_CFP", "AN_RSCW", "GW_GC1"],
+  CAMERA_DEVICEMGMT: ["LD_CFP", "AN_RSCW", "GW_GC1", "HL_PAN4"],
+  CAMERA: [..._CAMERA_V1, ..._CAMERA_V2, ..._CAMERA_V3, ..._CAMERA_OUTDOOR, "HL_WCO2", "LD_CFP", "AN_RSCW", "GW_GC1", "HL_PAN4", "HL_BC", "HL_CFL2"],
 
   LOCK: ["YD.LO1"],
   LOCK_GATEWAY: ["YD.GW1"],
@@ -659,9 +659,12 @@ const WyzeAccessoryModels = Object.freeze({
     WyzeCamV4:             "HL_CAM4",
     WyzeCamFloodlight:     "WYZE_CAKP2JFUS",
     WyzeCamFloodlightPro:  "LD_CFP",
+    WyzeCamFloodlightV2:   "HL_CFL2",
+    WyzeBulbCam:           "HL_BC",
     WyzeCamPan:            "WYZECP1_JEF",
     WyzeCamPanv2:          "HL_PAN2",
     WyzeCamPanv3:          "HL_PAN3",
+    WyzeCamPanv4:          "HL_PAN4",
     WyzeCamPanPro:         "HL_PANP",
     WyzeCamOutdoor:        "WVOD1",
     WyzeCamOutdoor2:       "HL_WCO2",

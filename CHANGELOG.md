@@ -6,6 +6,11 @@
 
 Consolidates the fork's post-beta.2 fixes onto the 2.0.0 line.
 
+- **Wyze Cam Pan v4 (`HL_PAN4`) support**, ported from SecKatie/wyzeapy: uses the devicemgmt API for power, siren, spotlight and state. Also registered in the camera model lists.
+- **Bulb Cam (`HL_BC`) light now works**: wyzeapy switches it with `run_action` (`floodlight_on` / `floodlight_off`); writing `P1056` is accepted but does nothing (#293). Reading state is unchanged.
+- **devicemgmt state reads** (`cameraGetDeviceMgmtState`, per-model property lists ported from wyzeapy) so Floodlight Pro, Battery Cam Pro, OG and Pan v4 report light, siren, motion and power state.
+- The raw-value camera methods the plugin calls (`cameraSpotLight`, `cameraFloodLight`, `cameraSiren`, `cameraPrivacy`, `cameraNotifications`) now route devicemgmt cameras to the right API; other models behave as before. Previously they sent `P1056` / `run_action` to cameras that ignore them.
+- Floodlight v2 (`HL_CFL2`) is registered as a camera model. Its light still uses `set_property P1056`, exactly as wyzeapy does; the toggle reported in #264 has no known fix yet.
 - **`totpSecret` option**: generates the 2FA code from the authenticator secret on every login (RFC 6238), waits out near-expiry/reused codes and retries once with the next window. `mfaCode` still works; `totpSecret` takes precedence. Secret is redacted from logs.
 - `totpSecret` and `mfaCode` are cleaned and validated: spaces, newlines, dashes, quotes, invisible copy/paste characters and a pasted `otpauth://` URI are tolerated, and a malformed value fails login with a clear message (without echoing it).
 - **Restored 2FA/MFA login** (TOTP via the `mfaCode` option). MFA handling was accidentally dropped in the Feb 2024 "Clean up MFA" commit; see `FIX-mfa-login.md`. Not yet verified against a live 2FA account.
