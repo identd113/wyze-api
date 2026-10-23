@@ -398,10 +398,17 @@ module.exports = class WyzeAPI {
   async _handleAccessTokenError(result, errorMessage, code, url, data) {
     this.access_token = "";
     await this.refreshToken().catch(async (err) => {
-      // The refresh token is also dead - clear it and wipe the persisted
-      // file so the next maybeLogin() falls through to a real login instead
-      // of reloading this same broken pair from disk forever.
-      await this._clearPersistedTokens();
+      if (this._isTransientError(err)) {
+        // Network/server hiccup, not a verdict on the tokens: keep the
+        // persisted pair so the next call can retry the refresh. Wiping it
+        // here would force a full login (which a one-shot mfaCode can't do).
+        this.log.warn(`Token refresh failed transiently (${err.message}); keeping saved tokens.`);
+      } else {
+        // The refresh token is also dead - clear it and wipe the persisted
+        // file so the next maybeLogin() falls through to a real login instead
+        // of reloading this same broken pair from disk forever.
+        await this._clearPersistedTokens();
+      }
       throw new Error(
         `Refresh Token could not be used to get a new access token. ${err}`
       );
@@ -717,7 +724,7 @@ module.exports = class WyzeAPI {
             return;
           }
           this.log.error(`Error during token refresh: ${error.message}`);
-          throw new Error(`Token refresh failed: ${error.message}`);
+          throw new Error(`Token refresh failed: ${error.message}`, { cause: error });
         }
       }
     }
@@ -792,6 +799,25 @@ module.exports = class WyzeAPI {
         }
       }
     }
+  }
+
+  /**
+   * True for failures that say nothing about token validity: no HTTP response
+   * (DNS/connect/reset/timeout) or a 5xx from Wyze. Walks `cause` so wrapped
+   * errors are classified by the original failure.
+   */
+  _isTransientError(err) {
+    const TRANSIENT_CODES = new Set([
+      "ECONNRESET", "ECONNREFUSED", "ETIMEDOUT", "ECONNABORTED",
+      "ENOTFOUND", "EAI_AGAIN", "EPIPE", "EHOSTUNREACH", "ENETUNREACH",
+    ]);
+    for (let e = err, depth = 0; e && depth < 5; e = e.cause, depth += 1) {
+      if (e.code && TRANSIENT_CODES.has(e.code)) return true;
+      const status = e.response?.status;
+      if (status >= 500) return true;
+      if (e.isAxiosError && !e.response) return true;
+    }
+    return false;
   }
 
   /**

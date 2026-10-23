@@ -167,3 +167,28 @@ test("_persistTokens writes the token file owner-only (0600)", async (t) => {
   const st = await fs.stat(w._tokenPersistPath());
   assert.strictEqual(st.mode & 0o777, 0o600);
 });
+
+test("a transient refresh failure keeps the persisted token file and refresh token", async () => {
+  const persistPath = await fs.mkdtemp(path.join(os.tmpdir(), "wyze-api-test-"));
+  const w = stub({ persistPath, access_token: "at", refresh_token: "rt" });
+  w.log.warn = () => {};
+  w.log.debug = () => {};
+  await w._persistTokens();
+  const netErr = Object.assign(new Error("connect ECONNRESET"), { code: "ECONNRESET" });
+  w.refreshToken = async () => { throw new Error("Token refresh failed: boom", { cause: netErr }); };
+
+  await assert.rejects(() => w._handleAccessTokenError({}, "access token is error", 2001, "url", {}));
+
+  assert.strictEqual(w.refresh_token, "rt");
+  await fs.access(w._tokenPersistPath()); // still on disk
+});
+
+test("_isTransientError classifies network errors, 5xx and wrapped causes; not Wyze rejections", () => {
+  const w = stub();
+  assert.strictEqual(w._isTransientError(Object.assign(new Error("x"), { code: "ETIMEDOUT" })), true);
+  assert.strictEqual(w._isTransientError(Object.assign(new Error("x"), { response: { status: 503 } })), true);
+  assert.strictEqual(w._isTransientError(Object.assign(new Error("x"), { isAxiosError: true })), true);
+  assert.strictEqual(w._isTransientError(new Error("wrap", { cause: Object.assign(new Error("y"), { code: "ENOTFOUND" }) })), true);
+  assert.strictEqual(w._isTransientError(new Error("Failed to refresh access token - {\"ok\":false}")), false);
+  assert.strictEqual(w._isTransientError(Object.assign(new Error("x"), { response: { status: 401 } })), false);
+});
