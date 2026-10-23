@@ -15,6 +15,8 @@ Consolidates the fork's post-beta.2 fixes onto the 2.0.0 line.
 - Removed dead duplicate `olive_create_signature` / `ford_create_signature` and the unused `querystring` import.
 - `setIotProp` parameter renamed `product_model` -> `deviceModel` for consistency.
 - Added live and structural tests for the pinned TLS CA fix (`scripts/verify-tls-pin.js`, `scripts/verify-live.js`).
+- **Security**: the persisted token file is now written owner-only (`0600`), since it holds the access and refresh tokens.
+- Dependency updates from `npm audit fix` (axios, ws, follow-redirects, form-data and others); production vulnerabilities down from 8 to 3. The remaining 3 sit in the `werift` WebRTC chain and need a breaking upgrade.
 
 ### v2.0.0-beta.2
 
