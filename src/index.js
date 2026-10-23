@@ -975,8 +975,8 @@ module.exports = class WyzeAPI {
     );
   }
 
-  async setIotProp(deviceMac, product_model, propKey, value) {
-    const payload = payloadFactory.oliveCreatePostPayload(deviceMac, product_model, propKey, value);
+  async setIotProp(deviceMac, deviceModel, propKey, value) {
+    const payload = payloadFactory.oliveCreatePostPayload(deviceMac, deviceModel, propKey, value);
     return this._oliveSignedPost(
       `${constants.siriusBaseUrl}/plugin/sirius/set_iot_prop_by_topic`,
       payload,
