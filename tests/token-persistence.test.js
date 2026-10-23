@@ -157,3 +157,13 @@ test("concurrent access-token errors that both fail refresh only clear tokens on
   assert.strictEqual(w.refresh_token, "");
 });
 
+
+test("_persistTokens writes the token file owner-only (0600)", async (t) => {
+  if (process.platform === "win32") return t.skip("POSIX file modes");
+  const persistPath = await fs.mkdtemp(path.join(os.tmpdir(), "wyze-api-test-"));
+  const w = stub({ persistPath, access_token: "at", refresh_token: "rt" });
+  w.log.debug = () => {};
+  await w._persistTokens();
+  const st = await fs.stat(w._tokenPersistPath());
+  assert.strictEqual(st.mode & 0o777, 0o600);
+});

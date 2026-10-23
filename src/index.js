@@ -778,7 +778,7 @@ module.exports = class WyzeAPI {
         // its own /var/lib/hoobs/.../persist dir, so the first write
         // here was throwing ENOENT and the plugin never recovered.
         await fs.mkdir(path.dirname(tokenPath), { recursive: true });
-        await fs.writeFile(tokenPath, JSON.stringify(data)); // Write tokens to the file.
+        await fs.writeFile(tokenPath, JSON.stringify(data), { mode: 0o600 }); // Tokens are credentials: owner-only.
         return; // Exit if successful.
       } catch (error) {
         attempt += 1;
