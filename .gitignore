@@ -10,3 +10,5 @@ example/scratch/*
 
 # Claude Code worktree state
 .claude/
+# macOS
+.DS_Store
