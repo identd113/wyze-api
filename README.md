@@ -22,6 +22,7 @@ const options = {
   keyId: process.env.keyId,
   apiKey: process.env.apiKey,
   mfaCode: process.env.mfaCode, // optional, only required if your account has 2FA enabled
+  totpSecret: process.env.totpSecret, // optional, recommended for 2FA: base32 key from the authenticator QR setup
   persistPath: "./",
   logLevel: "none"
 }
@@ -55,6 +56,12 @@ If your Wyze account has two-factor authentication enabled, pass the current cod
 authenticator app as `mfaCode` in the options above (only TOTP authenticator apps are supported —
 SMS/email codes are not). If `mfaCode` is required but missing, `login()` throws an error telling
 you to provide it.
+
+**`totpSecret` (recommended):** instead of typing a code, provide the base32 key Wyze shows next to the QR
+code when you set up the authenticator app ("can't scan? enter this key"). wyze-api generates a fresh code
+for every login, waits for the next 30s window if the current code is about to expire or was already used,
+and retries once with the next code if Wyze rejects it. If both are set, `totpSecret` wins. Keep the host
+clock accurate (NTP); the secret is as sensitive as your password. Authenticator apps only, not SMS.
 
 Note that `mfaCode` is a static config value but TOTP codes rotate every 30 seconds, so this only
 works if the code is still current at the moment `login()` actually runs — a stale code fails with

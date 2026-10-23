@@ -10,6 +10,7 @@ const util = require("./util");
 const types = require("./types");
 const { installRedirectGuard, WYZE_ALLOWED_HOSTNAMES } = require("./util/security");
 const httpsAgent = require("./httpsAgent");
+const { generateTotp, msUntilNextWindow } = require("./util/totp");
 const axios = require("axios");
 
 // Pin the DigiCert roots Wyze's backend depends on into axios's shared
@@ -65,6 +66,7 @@ module.exports = class WyzeAPI {
     this.username = options.username;
     this.password = options.password;
     this.mfaCode = options.mfaCode;
+    this.totpSecret = options.totpSecret;
     this.apiKey = options.apiKey;
     this.keyId = options.keyId;
 
@@ -485,9 +487,9 @@ module.exports = class WyzeAPI {
    *   unsupported MFA method (only TOTP authenticator apps are handled).
    */
   async _performMfaLogin(mfaDetails) {
-    if (!this.mfaCode) {
+    if (!this.totpSecret && !this.mfaCode) {
       throw new Error(
-        'Your account has 2-factor auth enabled. Please provide the "mfaCode" parameter in config.json.'
+        'Your account has 2-factor auth enabled. Please provide the "totpSecret" (recommended) or "mfaCode" parameter in config.json.'
       );
     }
 
@@ -498,11 +500,51 @@ module.exports = class WyzeAPI {
       );
     }
 
+    if (this.totpSecret) {
+      return this._performTotpLogin(totpApp.app_id);
+    }
+
     return this._performLoginRequest({
       mfa_type: "TotpVerificationCode",
       verification_id: totpApp.app_id,
       verification_code: this.mfaCode,
     });
+  }
+
+  /**
+   * Logs in with a code generated from `totpSecret`. Never sends a code that is
+   * about to expire or was already used for a previous login (Wyze may treat a
+   * reused code as a replay), and retries once with the next window's code if
+   * Wyze rejects the first.
+   */
+  async _performTotpLogin(verificationId) {
+    const now = this._totpNow || (() => Date.now());
+    const sleep = this._totpSleep || ((ms) => new Promise((r) => setTimeout(r, ms)));
+    const SAFETY_MS = 3000;
+
+    let result;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      let t = now();
+      let window = Math.floor(t / 30000);
+      if (msUntilNextWindow(t) < SAFETY_MS || window === this._lastTotpWindow) {
+        await sleep(msUntilNextWindow(t) + 250);
+        t = now();
+        window = Math.floor(t / 30000);
+      }
+      this._lastTotpWindow = window;
+
+      result = await this._performLoginRequest({
+        mfa_type: "TotpVerificationCode",
+        verification_id: verificationId,
+        verification_code: generateTotp(this.totpSecret, t),
+      });
+      if (result.ok && result.data?.access_token) return result;
+    }
+
+    this.log.warn(
+      "Wyze rejected the generated TOTP code twice. Check that totpSecret is correct and that this host's clock is accurate (NTP)."
+    );
+    return result;
   }
 
   /**

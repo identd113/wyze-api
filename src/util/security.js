@@ -39,7 +39,7 @@ const WYZE_ALLOWED_HOSTNAMES = new Set(
 // Constructor option keys for the WyzeAPI client — used by the secrets
 // loader to know which fields to merge from secretsFile / env vars.
 const CREDENTIAL_KEYS = [
-  "username", "password", "mfaCode", "keyId", "apiKey",
+  "username", "password", "mfaCode", "totpSecret", "keyId", "apiKey",
   "authApiKey", "phoneId", "appName", "appVer", "appVersion",
   "userAgent", "sc", "sv",
   "fordAppKey", "fordAppSecret",
@@ -50,6 +50,7 @@ const ENV_MAP = {
   username: "WYZE_USERNAME",
   password: "WYZE_PASSWORD",
   mfaCode: "WYZE_MFA_CODE",
+  totpSecret: "WYZE_TOTP_SECRET",
   keyId: "WYZE_KEY_ID",
   apiKey: "WYZE_API_KEY",
   authApiKey: "WYZE_AUTH_API_KEY",
@@ -71,7 +72,7 @@ const ENV_MAP = {
 // CREDENTIAL_KEYS above — these are the field names that show up in
 // JSON dumps of API responses (`"access_token":"..."`, etc.).
 const REDACT_KEYS = [
-  "password", "apiKey", "keyId",
+  "password", "apiKey", "keyId", "mfaCode", "totpSecret", "verification_code",
   "access_token", "refresh_token", "accessToken", "refreshToken",
   "authorization",
   "fordAppSecret", "fordAppKey",

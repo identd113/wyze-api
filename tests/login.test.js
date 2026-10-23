@@ -85,7 +85,7 @@ test("_performMfaLogin throws when no mfaCode is configured", async () => {
   const w = stub();
   await assert.rejects(
     () => w._performMfaLogin({ totp_apps: [{ app_id: "totp-app-1" }] }),
-    /Please provide the "mfaCode" parameter/
+    /Please provide the "totpSecret"/
   );
 });
 
@@ -108,5 +108,5 @@ test("login surfaces the mfaCode-required error via the top-level Invalid creden
     },
   });
 
-  await assert.rejects(() => w.login(), /Please provide the "mfaCode" parameter/);
+  await assert.rejects(() => w.login(), /Please provide the "totpSecret"/);
 });
