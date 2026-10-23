@@ -111,3 +111,63 @@ test("mfaCode alone still works unchanged", async () => {
   await w._performMfaLogin({ totp_apps: [{ app_id: "a" }] });
   assert.strictEqual(sent.verification_code, "123456");
 });
+
+const { normalizeTotpSecret, isValidTotpSecret, normalizeMfaCode, isValidMfaCode } = require("../src/util/totp");
+
+test("normalizeMfaCode cleans copy/paste damage", () => {
+  for (const raw of ["123456", " 123456 ", "123 456", "123-456", "\t123456\r\n", " 123456​", '"123456"', "“123456”", "﻿123456"]) {
+    assert.strictEqual(normalizeMfaCode(raw), "123456", JSON.stringify(raw));
+  }
+  assert.strictEqual(normalizeMfaCode(12345), "012345"); // JSON number lost its leading zero
+  assert.strictEqual(normalizeMfaCode(null), "");
+  assert.strictEqual(isValidMfaCode("123456"), true);
+  for (const bad of ["12345", "1234567", "12345a", "", undefined]) assert.strictEqual(isValidMfaCode(bad), false, String(bad));
+});
+
+test("normalizeTotpSecret cleans copy/paste damage and accepts an otpauth:// URI", () => {
+  const expected = "JBSWY3DPEHPK3PXP";
+  for (const raw of [
+    "JBSWY3DPEHPK3PXP", "  jbswy3dpehpk3pxp\n", "JBSW Y3DP EHPK 3PXP", "jbsw-y3dp-ehpk-3pxp",
+    '"JBSWY3DPEHPK3PXP"', "JBSWY3DPEHPK3PXP====", "​JBSWY3DPEHPK3PXP ",
+    "otpauth://totp/Wyze:me%40example.com?secret=jbsw%20y3dp%20ehpk%203pxp&issuer=Wyze",
+  ]) {
+    assert.strictEqual(normalizeTotpSecret(raw), expected, JSON.stringify(raw));
+  }
+  assert.strictEqual(isValidTotpSecret(expected), true);
+  for (const bad of ["", "not!base32", "JBSWY3DP1", undefined]) assert.strictEqual(isValidTotpSecret(bad), false, String(bad));
+});
+
+test("constructor tidies pasted mfaCode and totpSecret", () => {
+  const w = new WyzeAPI({
+    username: "u@example.com", password: "p", keyId: "k", apiKey: "a",
+    persistPath: require("os").tmpdir(),
+    mfaCode: " 123 456\n", totpSecret: "  jbsw y3dp ehpk 3pxp \n",
+  });
+  assert.strictEqual(w.mfaCode, "123456");
+  assert.strictEqual(w.totpSecret, "JBSWY3DPEHPK3PXP");
+  const blank = new WyzeAPI({ username: "u@example.com", password: "p", keyId: "k", apiKey: "a", persistPath: require("os").tmpdir(), mfaCode: "  ", totpSecret: "" });
+  assert.strictEqual(blank.mfaCode, undefined);
+  assert.strictEqual(blank.totpSecret, undefined);
+});
+
+test("login gives a clear error for an invalid totpSecret or mfaCode (and never echoes them)", async () => {
+  const mfa = { totp_apps: [{ app_id: "a" }] };
+  const bad = stub({ totpSecret: "not!base32" });
+  bad._performLoginRequest = async () => { throw new Error("must not be called"); };
+  await assert.rejects(() => bad._performMfaLogin(mfa), /"totpSecret" is not valid.*base32/);
+
+  const short = stub({ totpSecret: undefined, mfaCode: "12345" });
+  short._performLoginRequest = async () => { throw new Error("must not be called"); };
+  await assert.rejects(
+    () => short._performMfaLogin(mfa),
+    (e) => /6-digit code/.test(e.message) && !e.message.includes("12345")
+  );
+});
+
+test("a pasted code with spaces works end to end", async () => {
+  const w = stub({ totpSecret: undefined, mfaCode: " 123 456 " });
+  let sent;
+  w._performLoginRequest = async (d) => { sent = d; return { ok: true, data: { access_token: "at" } }; };
+  await w._performMfaLogin({ totp_apps: [{ app_id: "a" }] });
+  assert.strictEqual(sent.verification_code, "123456");
+});

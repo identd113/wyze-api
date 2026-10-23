@@ -10,7 +10,10 @@ const util = require("./util");
 const types = require("./types");
 const { installRedirectGuard, WYZE_ALLOWED_HOSTNAMES } = require("./util/security");
 const httpsAgent = require("./httpsAgent");
-const { generateTotp, msUntilNextWindow } = require("./util/totp");
+const {
+  generateTotp, msUntilNextWindow,
+  normalizeTotpSecret, isValidTotpSecret, normalizeMfaCode, isValidMfaCode,
+} = require("./util/totp");
 const axios = require("axios");
 
 // Pin the DigiCert roots Wyze's backend depends on into axios's shared
@@ -65,8 +68,11 @@ module.exports = class WyzeAPI {
     // User login parameters
     this.username = options.username;
     this.password = options.password;
-    this.mfaCode = options.mfaCode;
-    this.totpSecret = options.totpSecret;
+    // Tidy copy/paste damage (spaces, newlines, quotes, otpauth:// URIs) up front.
+    // Validation happens at login time so a bad value is a clear login error,
+    // not a constructor crash.
+    this.mfaCode = normalizeMfaCode(options.mfaCode) || undefined;
+    this.totpSecret = normalizeTotpSecret(options.totpSecret) || undefined;
     this.apiKey = options.apiKey;
     this.keyId = options.keyId;
 
@@ -494,9 +500,22 @@ module.exports = class WyzeAPI {
    *   unsupported MFA method (only TOTP authenticator apps are handled).
    */
   async _performMfaLogin(mfaDetails) {
-    if (!this.totpSecret && !this.mfaCode) {
+    const secret = normalizeTotpSecret(this.totpSecret);
+    const code = normalizeMfaCode(this.mfaCode);
+
+    if (!secret && !code) {
       throw new Error(
         'Your account has 2-factor auth enabled. Please provide the "totpSecret" (recommended) or "mfaCode" parameter in config.json.'
+      );
+    }
+    if (secret && !isValidTotpSecret(secret)) {
+      throw new Error(
+        'The "totpSecret" is not valid: it should be the base32 key shown next to the QR code (letters A-Z and digits 2-7 only).'
+      );
+    }
+    if (!secret && !isValidMfaCode(code)) {
+      throw new Error(
+        `The "mfaCode" must be the 6-digit code from your authenticator app (got ${code.length} characters after removing spaces).`
       );
     }
 
@@ -507,14 +526,14 @@ module.exports = class WyzeAPI {
       );
     }
 
-    if (this.totpSecret) {
-      return this._performTotpLogin(totpApp.app_id);
+    if (secret) {
+      return this._performTotpLogin(totpApp.app_id, secret);
     }
 
     return this._performLoginRequest({
       mfa_type: "TotpVerificationCode",
       verification_id: totpApp.app_id,
-      verification_code: this.mfaCode,
+      verification_code: code,
     });
   }
 
@@ -524,7 +543,7 @@ module.exports = class WyzeAPI {
    * reused code as a replay), and retries once with the next window's code if
    * Wyze rejects the first.
    */
-  async _performTotpLogin(verificationId) {
+  async _performTotpLogin(verificationId, secret = normalizeTotpSecret(this.totpSecret)) {
     const now = this._totpNow || (() => Date.now());
     const sleep = this._totpSleep || ((ms) => new Promise((r) => setTimeout(r, ms)));
     const SAFETY_MS = 3000;
@@ -543,7 +562,7 @@ module.exports = class WyzeAPI {
       result = await this._performLoginRequest({
         mfa_type: "TotpVerificationCode",
         verification_id: verificationId,
-        verification_code: generateTotp(this.totpSecret, t),
+        verification_code: generateTotp(secret, t),
       });
       if (result.ok && result.data?.access_token) return result;
     }

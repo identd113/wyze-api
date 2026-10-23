@@ -2,6 +2,48 @@ const crypto = require("crypto");
 
 const BASE32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 
+// Whitespace plus the invisible characters copy/paste likes to bring along:
+// NBSP, zero-width space/joiners, word joiner, BOM, narrow NBSP.
+const JUNK = /[\s\u00A0\u200B-\u200D\u2060\uFEFF\u202F]/g;
+// Straight and curly quotes/backticks that wrap pasted values.
+const QUOTES = /["'`\u2018\u2019\u201C\u201D]/g;
+
+/**
+ * Cleans a pasted TOTP secret: accepts a full `otpauth://` URI, strips
+ * whitespace/invisible characters/quotes/dashes/trailing `=`, and uppercases.
+ * Does not validate - see isValidTotpSecret.
+ */
+function normalizeTotpSecret(input) {
+  if (input == null) return "";
+  let s = String(input).trim();
+  if (/^otpauth:/i.test(s)) {
+    const m = s.match(/[?&]secret=([^&\s]+)/i);
+    if (m) {
+      try { s = decodeURIComponent(m[1]); } catch (_) { s = m[1]; }
+    }
+  }
+  return s.replace(JUNK, "").replace(QUOTES, "").replace(/-/g, "").replace(/=+$/, "").toUpperCase();
+}
+
+function isValidTotpSecret(secret) {
+  return /^[A-Z2-7]+$/.test(secret || "");
+}
+
+/**
+ * Cleans a typed/pasted 6-digit code: strips whitespace, invisible characters,
+ * quotes and dashes ("123 456", " 123456\n", "123-456"). A JSON number is
+ * zero-padded back to 6 digits. Does not validate - see isValidMfaCode.
+ */
+function normalizeMfaCode(input) {
+  if (input == null) return "";
+  if (typeof input === "number") return String(Math.trunc(input)).padStart(6, "0");
+  return String(input).replace(JUNK, "").replace(QUOTES, "").replace(/-/g, "");
+}
+
+function isValidMfaCode(code) {
+  return /^\d{6}$/.test(code || "");
+}
+
 /**
  * Decodes a base32 TOTP secret (the "enter this key" text shown next to the
  * QR code). Spaces, dashes and case are ignored, as authenticator apps do.
@@ -41,4 +83,7 @@ function msUntilNextWindow(now = Date.now(), period = 30) {
   return ms - (now % ms);
 }
 
-module.exports = { base32Decode, generateTotp, msUntilNextWindow };
+module.exports = {
+  base32Decode, generateTotp, msUntilNextWindow,
+  normalizeTotpSecret, isValidTotpSecret, normalizeMfaCode, isValidMfaCode,
+};
