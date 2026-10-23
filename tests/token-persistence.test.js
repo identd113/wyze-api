@@ -105,3 +105,55 @@ test("maybeLogin falls through to a real login after a dead refresh token was cl
   assert.strictEqual(loginCalled, true);
   assert.strictEqual(w.access_token, "fresh-at");
 });
+
+test("refreshToken() dedupes concurrent callers into a single in-flight refresh", async () => {
+  const w = stub({ refresh_token: "rt" });
+  let performRequestCalls = 0;
+  w.getRequestData = () => ({});
+  w._performRequest = async () => {
+    performRequestCalls += 1;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    return { ok: true, data: { data: { access_token: "at-1", refresh_token: "rt-1" } } };
+  };
+  w._persistTokens = async () => {};
+
+  const [a, b] = await Promise.all([w.refreshToken(), w.refreshToken()]);
+
+  assert.strictEqual(performRequestCalls, 1);
+  assert.strictEqual(w.access_token, "at-1");
+  assert.strictEqual(w.refresh_token, "rt-1");
+
+  // A subsequent call after the in-flight one settles starts a fresh refresh.
+  await w.refreshToken();
+  assert.strictEqual(performRequestCalls, 2);
+});
+
+test("concurrent access-token errors that both fail refresh only clear tokens once, safely", async () => {
+  const persistPath = await fs.mkdtemp(path.join(os.tmpdir(), "wyze-api-test-"));
+  const w = stub({
+    persistPath,
+    access_token: "dead-at",
+    refresh_token: "dead-rt",
+  });
+  let refreshAttempts = 0;
+  w.getRequestData = () => ({});
+  w.sleepSeconds = async () => {};
+  w._performRequest = async () => {
+    refreshAttempts += 1;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    return { ok: false, data: {} };
+  };
+
+  const results = await Promise.allSettled([
+    w._handleAccessTokenError({}, "access token is error", 2001, "url", {}),
+    w._handleAccessTokenError({}, "access token is error", 2001, "url", {}),
+  ]);
+
+  // refreshToken() internally retries once on failure (maxRetries=2); dedup
+  // means both concurrent callers share that single underlying attempt count.
+  assert.strictEqual(refreshAttempts, 2);
+  assert.ok(results.every((r) => r.status === "rejected"));
+  assert.strictEqual(w.access_token, "");
+  assert.strictEqual(w.refresh_token, "");
+});
+

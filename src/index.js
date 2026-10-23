@@ -99,7 +99,18 @@ module.exports = class WyzeAPI {
 
     // Token is good for 216,000 seconds (60 hours) but 48 hours seems like a reasonable refresh interval 172800
     if (this.refreshTokenTimerEnabled === true) {
-      setInterval(this.refreshToken.bind(this), 172800);
+      this._refreshTokenInterval = setInterval(this.refreshToken.bind(this), 172800 * 1000);
+    }
+  }
+
+  /**
+   * Stops the refresh-token timer started when refreshTokenTimerEnabled is true.
+   * Call this when done with the instance to let the process exit cleanly.
+   */
+  destroy() {
+    if (this._refreshTokenInterval) {
+      clearInterval(this._refreshTokenInterval);
+      this._refreshTokenInterval = null;
     }
   }
 
@@ -595,9 +606,21 @@ module.exports = class WyzeAPI {
   /**
    * Refreshes the access token using the refresh token.
    * If successful, updates and persists the new tokens.
+   * Concurrent callers (e.g. several in-flight requests hitting an access-token
+   * error at once) share a single underlying refresh instead of racing each
+   * other with the same refresh token.
    * @throws {Error} - Throws an error if the refresh token request fails or if the response is invalid.
    */
-  async refreshToken() {
+  refreshToken() {
+    if (!this._refreshTokenPromise) {
+      this._refreshTokenPromise = this._doRefreshToken().finally(() => {
+        this._refreshTokenPromise = null;
+      });
+    }
+    return this._refreshTokenPromise;
+  }
+
+  async _doRefreshToken() {
     const data = {
       ...this.getRequestData(),
       refresh_token: this.refresh_token,
