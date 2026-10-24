@@ -83,6 +83,7 @@ async function pickFreeUdpPort() {
     const rtp = await _bindUdp(0);
     if (!rtp) continue;
     const port = rtp.address().port;
+    if (port >= 65535) { await _closeUdp(rtp); continue; } // no room for the RTCP port
     const rtcp = _reservedUdpPorts.has(port) || _reservedUdpPorts.has(port + 1) || _reservedUdpPorts.has(port - 1)
       ? null
       : await _bindUdp(port + 1);
@@ -110,12 +111,42 @@ const SESSION_SETTLE_MS = 750; // let the camera notice the old viewer is gone
 const PEER_CLOSE_TIMEOUT_MS = 3000;
 const _sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/** Close the peer connection first (DTLS goodbye), wait for it, then signaling. */
+const _peerCloses = new WeakMap(); // peer connection → its close promise
+
+/**
+ * Close the peer connection first (DTLS goodbye), wait for it, then signaling.
+ * Safe to call more than once: a peer connection is only closed once.
+ */
 async function _closePeer(pc, ws) {
   try {
-    if (pc) await Promise.race([Promise.resolve(pc.close()), _sleep(PEER_CLOSE_TIMEOUT_MS)]);
+    if (pc) {
+      if (!_peerCloses.has(pc)) {
+        _peerCloses.set(pc, Promise.race([Promise.resolve(pc.close()), _sleep(PEER_CLOSE_TIMEOUT_MS)]));
+      }
+      await _peerCloses.get(pc);
+    }
   } catch (_) { /* already closed */ }
   try { ws?.close(); } catch (_) {}
+}
+
+/**
+ * A timeout that can be aborted (so a session that is being closed stops waiting
+ * at once instead of running out its clock) and cleared. Its promise already has a
+ * handler, so a rejection nobody is awaiting is never an unhandled rejection.
+ */
+function _makeTimeout(ms, message) {
+  let timer;
+  let reject;
+  const promise = new Promise((_, rej) => {
+    reject = rej;
+    timer = setTimeout(() => rej(new Error(message)), ms);
+  });
+  promise.catch(() => {});
+  return {
+    promise,
+    abort: (error) => { clearTimeout(timer); reject(error); },
+    clear: () => clearTimeout(timer),
+  };
 }
 
 /**
@@ -140,11 +171,13 @@ async function _claimSession(key, kind, close) {
     }
     await cur.done;
   }
-  if (waited) await _sleep(SESSION_SETTLE_MS);
+  // Record the claim in the same step as finding the slot empty, so waiters woken
+  // by the same release can't both take it; the settle delay comes after.
   let release;
   const done = new Promise((r) => { release = r; });
   const entry = { kind, close, done, closing: false };
   _sessions.set(key, entry);
+  if (waited) await _sleep(SESSION_SETTLE_MS);
   return () => {
     if (_sessions.get(key) === entry) _sessions.delete(key);
     release();
@@ -381,23 +414,28 @@ async function captureStreamFrame({
   let fwdSock = null;
   let fallbackTimer = null;
   let pliTimer = null;
-  let closed = null;
+  let aborted = false;
+  let timeoutCtl = null;
+  // Safe to run more than once (a preempting stream runs it, then the finally
+  // below does): anything created after the first run is still torn down.
   const cleanup = () => {
-    if (closed) return closed;
+    aborted = true;
+    timeoutCtl?.abort(new Error("capture ended early: the camera was needed for a live stream"));
     clearTimeout(fallbackTimer);
     clearInterval(pliTimer);
     try { fwdSock?.close(); } catch (_) {}
     try { ffmpeg?.kill("SIGKILL"); } catch (_) {}
     try { if (sdpPath) fs.unlinkSync(sdpPath); } catch (_) {}
-    closed = _closePeer(pc, ws);
-    return closed;
+    return _closePeer(pc, ws);
   };
 
   const release = await _claimSession(sessionKey, "capture", cleanup);
   let rtpPort;
 
   try {
+    timeoutCtl = _makeTimeout(timeoutMs, `capture timed out after ${timeoutMs}ms`);
     rtpPort = await pickFreeUdpPort();
+    if (aborted) throw new Error("capture ended early: the camera was needed for a live stream");
     fwdSock = dgram.createSocket("udp4");
 
     const stdoutChunks = [];
@@ -424,7 +462,7 @@ async function captureStreamFrame({
       if (videoReceiver && videoSsrc) videoReceiver.sendRtcpPLI(videoSsrc).catch(() => {});
     };
     const startFfmpeg = (sprop) => {
-      if (started) return;
+      if (started || aborted) return;
       started = true;
       clearTimeout(fallbackTimer);
       log("debug", sprop ? "starting ffmpeg with sprop-parameter-sets" : "starting ffmpeg without sprop-parameter-sets");
@@ -518,9 +556,8 @@ async function captureStreamFrame({
       });
     });
 
-    const timeout = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error(`capture timed out after ${timeoutMs}ms`)), timeoutMs)
-    );
+    remoteAnswered.catch(() => {}); // it can reject before anything awaits it (a closed ws)
+    const timeout = timeoutCtl.promise;
 
     await Promise.race([
       new Promise((resolve, reject) => {
@@ -554,6 +591,7 @@ async function captureStreamFrame({
     log("debug", `captured ${buffer.length} bytes`);
     return buffer;
   } finally {
+    timeoutCtl?.clear();
     try { await cleanup(); } finally { release(); }
   }
 }
@@ -594,6 +632,17 @@ async function _startRtpForwarding({
   const audioSock = localAudioRtpPort ? dgram.createSocket("udp4") : null;
   if (audioSock) audioSock.bind(0, "127.0.0.1");
 
+  // Until the full closer exists below, closing must still release the sockets
+  // (the peer connection constructor can throw).
+  session.close = async () => {
+    try { videoSock.close(); } catch (_) {}
+    try { audioSock?.close(); } catch (_) {}
+  };
+
+  // Aborted when the session is closed mid-setup (a stream replacing it, shutdown),
+  // so setup stops at once instead of running out its clock.
+  const timeoutCtl = _makeTimeout(timeoutMs, `stream negotiation timed out after ${timeoutMs}ms`);
+
   const codecs = { video: H264_CODECS };
   if (localAudioRtpPort) codecs.audio = AUDIO_CODECS;
 
@@ -616,6 +665,7 @@ async function _startRtpForwarding({
   const closeEverything = () => {
     if (closing) return closing;
     log("debug", "stopping RTP forwarding");
+    timeoutCtl.abort(new Error("stream closed while starting"));
     if (pliTimer) { clearInterval(pliTimer); pliTimer = null; }
     if (idleWatchdog) { clearInterval(idleWatchdog); idleWatchdog = null; }
     closing = _closePeer(pc, ws).finally(() => {
@@ -704,9 +754,8 @@ async function _startRtpForwarding({
     });
   });
 
-  const timeout = new Promise((_, reject) =>
-    setTimeout(() => reject(new Error(`stream negotiation timed out after ${timeoutMs}ms`)), timeoutMs)
-  );
+  negotiated.catch(() => {}); // it can reject before anything awaits it (a closed ws)
+  const timeout = timeoutCtl.promise;
 
   await Promise.race([
     new Promise((resolve, reject) => {
@@ -726,6 +775,7 @@ async function _startRtpForwarding({
   });
 
   await Promise.race([negotiated, timeout]);
+  timeoutCtl.clear();
   log("debug", "WebRTC negotiation complete — forwarding RTP");
 
   // Get SPS/PPS for FFmpeg's H.264 decoder.
@@ -743,6 +793,7 @@ async function _startRtpForwarding({
     if (spropParameterSets) log("debug", "captured SPS/PPS from RTP");
     else log("warning", "timed out waiting for SPS/PPS — H.264 may not decode");
   }
+  if (closing) throw new Error("stream closed while starting");
 
   // After ffmpeg comes up, the caller can call requestKeyframe() to force
   // a fresh IDR so decoding starts immediately rather than at the next
@@ -811,6 +862,7 @@ module.exports = {
   extractAudioCodec,
   _claimSession, // exported for tests
   _closePeer, // exported for tests
+  _makeTimeout, // exported for tests
   pickFreeUdpPort,
   writeSdpFile,
   writeAudioSdpFile,

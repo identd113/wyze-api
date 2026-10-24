@@ -423,6 +423,9 @@ module.exports = {
 
     const MAX_RETRIES = 3;
     const MAX_AUDIO_RETRIES = 3;
+    // An audio process that ran this long without a single audio packet means the camera
+    // sends none (microphone off), not that ffmpeg failed.
+    const AUDIO_SILENCE_MIN_MS = 15_000;
     let stopped = false;
     let retries = 0;
     let audioRetries = 0;
@@ -452,6 +455,7 @@ module.exports = {
     const spawnAudio = () => {
       if (!(localAudioRtpPort && audioPort && audioSrtpKey && audioSrtpSalt)) return;
       audioSdpPath = writeAudioSdpFile(localAudioRtpPort, forwarder?.audioCodec ?? null);
+      const audioStartedAt = Date.now();
       const audioSrtpParams = Buffer.concat([audioSrtpKey, audioSrtpSalt]).toString("base64");
 
       audioFfmpeg = spawn(resolveFfmpegPath(), [
@@ -486,7 +490,8 @@ module.exports = {
         audioSdpPath = null;
         // A camera that negotiates audio but never sends any (microphone off in
         // the Wyze app) isn't a failure to retry: carry on with video only.
-        if (forwarder?.audioSeen && !forwarder.audioSeen()) {
+        // (A process that died almost at once failed for another reason: retry it.)
+        if (forwarder?.audioSeen && !forwarder.audioSeen() && Date.now() - audioStartedAt >= AUDIO_SILENCE_MIN_MS) {
           log("debug", "[stream] camera sent no audio (microphone off?) — continuing video-only");
           return;
         }
@@ -519,6 +524,13 @@ module.exports = {
           videoIdleMs: 10_000,
         }
       );
+
+      // stop() may have been called while this (re)connect was negotiating: close
+      // the forwarder we just got instead of starting ffmpeg for a dead stream.
+      if (stopped) {
+        try { forwarder.stop(); } catch (_) {}
+        return;
+      }
 
       // Video stream — bake the camera's SPS/PPS into the SDP so FFmpeg can
       // decode the very first IDR slice without waiting for in-band params.

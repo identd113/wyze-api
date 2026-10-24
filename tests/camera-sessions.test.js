@@ -7,7 +7,7 @@
 const test = require("node:test");
 const assert = require("node:assert");
 
-const { _claimSession, _closePeer, closeAllSessions } = require("../src/devices/cameraStreamCapture");
+const { _claimSession, _closePeer, _makeTimeout, closeAllSessions } = require("../src/devices/cameraStreamCapture");
 
 const tick = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -75,4 +75,55 @@ test("closeAllSessions closes every open session", async () => {
   r2 = await _claimSession("cam-y", "stream", async () => { closed.push("y"); r2(); });
   await closeAllSessions();
   assert.deepStrictEqual(closed.sort(), ["x", "y"]);
+});
+
+test("two waiters woken by the same release never hold the camera at once", async () => {
+  const releaseA = await _claimSession("cam-race", "capture", async () => {});
+  let holders = 0;
+  let maxHolders = 0;
+  const waiter = async () => {
+    const release = await _claimSession("cam-race", "capture", async () => {});
+    holders += 1;
+    maxHolders = Math.max(maxHolders, holders);
+    await tick(20);
+    holders -= 1;
+    release();
+  };
+  const both = Promise.all([waiter(), waiter()]);
+  await tick(10);
+  releaseA();
+  await both;
+  assert.strictEqual(maxHolders, 1);
+});
+
+test("an aborted timeout rejects at once, a cleared one never fires, and neither is an unhandled rejection", async () => {
+  const unhandled = [];
+  const onUnhandled = (reason) => unhandled.push(reason);
+  process.on("unhandledRejection", onUnhandled);
+  try {
+    const aborted = _makeTimeout(10_000, "late");
+    aborted.abort(new Error("stopped"));
+    await assert.rejects(aborted.promise, /stopped/);
+
+    const cleared = _makeTimeout(20, "should not fire");
+    cleared.clear();
+    let settled = false;
+    cleared.promise.then(() => { settled = true; }, () => { settled = true; });
+    await tick(60);
+    assert.strictEqual(settled, false);
+
+    const expired = _makeTimeout(10, "expired"); // nobody awaits it
+    await tick(50);
+    assert.deepStrictEqual(unhandled, []);
+  } finally {
+    process.off("unhandledRejection", onUnhandled);
+  }
+});
+
+test("closing a peer connection twice only closes it once", async () => {
+  let closes = 0;
+  const pc = { close: async () => { closes += 1; } };
+  await _closePeer(pc, null);
+  await _closePeer(pc, { close () {} });
+  assert.strictEqual(closes, 1);
 });
