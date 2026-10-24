@@ -58,6 +58,18 @@ The same methods route automatically by model:
 
 `cameraUsesDeviceMgmt(model)` tells you which path a model takes. Ported from SecKatie/wyzeapy; not yet verified on real hardware.
 
+## Wyze Cam Doorbell v2 (`HL_DB2`)
+
+Registered as a camera in 2.0.0-beta.3. Probed against real hardware (firmware `4.51.3.6791`):
+
+- **Video:** the WebRTC (Kinesis) stream is **640x480 at 15 fps**, H.264 Main profile (level 5.0), whether or not `substream` is requested. Wyze cameras such as the v3 send 1920x1080. Snapshot capture works (`getCameraSnapshotImage(mac, { skipCloud: true })`). The sensor is marketed as 2K; a higher-resolution feed is not reachable through WebRTC, and the Tutk module here is Linux-only and doesn't list this model.
+- **Stream info:** `cameraGetStreamInfo` returns a signaling URL for it, but no `iot-device::iot-power` property, so only an explicit `0` is treated as "camera is off".
+- **State (device list):** `power_switch`, `motion_alarm_switch`, `records_event_switch`, `power_saving_mode_switch`, `audio_alarm_switch`, `accessory_switch`.
+- **Property IDs seen:** `P1` notification, `P1001` motion detection, `P1047` motion recording, `P1048` sound recording, `P1049`/`P1050` siren state and timestamp, `P1013` Wi-Fi signal, plus others with no known name.
+- **devicemgmt reads answer** for `iot-device` (online, power, push), `siren`, `motion-detection`, `wifi` (signal) and `memory-card-management` (storage status). `camera.resolution`, `frame-rate`, `bit-rate`, `microphone`, `night-shot` and `infrared-mode` are named but report no value, so they can't be read or restored. Battery and solar report nothing: it is wired.
+- **No LAN services:** none of 20 common TCP ports (including 554) is open. Control and video go through the Wyze cloud.
+- **Not verified:** power on/off, siren and notification writes, and a doorbell-press (ring) event.
+
 ## Motion detection
 
 | Method | Notes |

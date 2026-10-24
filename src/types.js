@@ -106,7 +106,7 @@ const DeviceModels = Object.freeze({
   // Cameras whose light is driven by run_action floodlight_on/off; P1056 can be
   // read but writes do nothing.
   CAMERA_LIGHT_RUN_ACTION: ["HL_BC"],
-  CAMERA: [..._CAMERA_V1, ..._CAMERA_V2, ..._CAMERA_V3, ..._CAMERA_OUTDOOR, "HL_WCO2", "LD_CFP", "AN_RSCW", "GW_GC1", "HL_PAN4", "HL_BC", "HL_CFL2"],
+  CAMERA: [..._CAMERA_V1, ..._CAMERA_V2, ..._CAMERA_V3, ..._CAMERA_OUTDOOR, "HL_WCO2", "LD_CFP", "AN_RSCW", "GW_GC1", "HL_PAN4", "HL_BC", "HL_CFL2", "HL_DB2"],
 
   LOCK: ["YD.LO1"],
   LOCK_GATEWAY: ["YD.GW1"],
@@ -677,6 +677,7 @@ const WyzeAccessoryModels = Object.freeze({
     WyzeCamDoorbell:       "WYZEDB3",
     WyzeCamDoorbellPro:    "GW_BE1",
     WyzeCamDoorbellPro2:   "AN_RDB1",
+    WyzeCamDoorbellV2:     "HL_DB2",
     WyzeBatteryCamPro:     "AN_RSCW",
     WyzeCamOG:             "GW_GC1",
     WyzeCamOGTelephoto3x:  "GW_GC",

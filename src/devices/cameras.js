@@ -125,11 +125,15 @@ module.exports = {
       // Cameras in WebRTC-only mode report iot-state=0 but still return a valid
       // signaling URL. Only block if there's genuinely no way to reach the camera.
       const hasSignalingUrl = typeof entry.params?.signaling_url === "string" && entry.params.signaling_url.length > 0;
+      // Only the capability map goes in the messages: the rest of the entry holds
+      // the signed signaling URL and auth token, which must not reach logs.
       if (entry.property["iot-device::iot-state"] !== 1 && !hasSignalingUrl) {
-        throw new Error(`Camera is offline: ${JSON.stringify(entry)}`);
+        throw new Error(`Camera is offline: ${JSON.stringify(entry.property)}`);
       }
-      if (entry.property["iot-device::iot-power"] !== 1) {
-        throw new Error(`Camera is off: ${JSON.stringify(entry)}`);
+      // Some models (Doorbell v2) don't report iot-power at all; only an explicit
+      // 0 means the camera is off.
+      if (entry.property["iot-device::iot-power"] === 0) {
+        throw new Error(`Camera is off: ${JSON.stringify(entry.property)}`);
       }
       return entry.params;
     } catch (error) {
