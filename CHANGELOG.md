@@ -2,6 +2,24 @@
 
 ## Releases
 
+### v2.0.0-beta.3
+
+Consolidates the fork's post-beta.2 fixes onto the 2.0.0 line.
+
+- **`totpSecret` option**: generates the 2FA code from the authenticator secret on every login (RFC 6238), waits out near-expiry/reused codes and retries once with the next window. `mfaCode` still works; `totpSecret` takes precedence. Secret is redacted from logs.
+- `totpSecret` and `mfaCode` are cleaned and validated: spaces, newlines, dashes, quotes, invisible copy/paste characters and a pasted `otpauth://` URI are tolerated, and a malformed value fails login with a clear message (without echoing it).
+- **Restored 2FA/MFA login** (TOTP via the `mfaCode` option). MFA handling was accidentally dropped in the Feb 2024 "Clean up MFA" commit; see `FIX-mfa-login.md`. Not yet verified against a live 2FA account.
+- **Fixed the persisted-token loop** that permanently blocked re-login after a stale/invalid token file (see `BUG-persisted-token-loop.md`).
+- **Username validated at construction** instead of failing cryptically later.
+- Refresh timer fired every ~2.9 minutes (seconds passed where milliseconds were required); now 48 hours. Added `destroy()` to stop the timer.
+- Concurrent `refreshToken()` calls now share one in-flight refresh instead of racing.
+- Removed dead duplicate `olive_create_signature` / `ford_create_signature` and the unused `querystring` import.
+- `setIotProp` parameter renamed `product_model` -> `deviceModel` for consistency.
+- Added live and structural tests for the pinned TLS CA fix (`scripts/verify-tls-pin.js`, `scripts/verify-live.js`).
+- Saved tokens are no longer deleted when a refresh fails for a transient reason (network error, timeout, 5xx); they are cleared only when Wyze actually rejects them. A one-shot `mfaCode` cannot redo a full login, so wiping good tokens on a blip could lock the plugin out.
+- **Security**: the persisted token file is now written owner-only (`0600`), since it holds the access and refresh tokens.
+- Dependency updates from `npm audit fix` (axios, ws, follow-redirects, form-data and others); production vulnerabilities down from 8 to 3. The remaining 3 sit in the `werift` WebRTC chain and need a breaking upgrade.
+
 ### v2.0.0-beta.2
 
 Merges `main`'s unreleased fixes (since the 2.0.0 branch's last sync at v1.1.11) into the 2.0.0 line. `main` and `2.0.0` had structurally diverged — `main` kept the monolithic `index.js`, `2.0.0` had already split into `src/devices/`/`src/services/` — so this was a manual reconciliation, not a mechanical merge.
