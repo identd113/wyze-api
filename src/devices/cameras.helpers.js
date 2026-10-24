@@ -193,6 +193,11 @@ module.exports = {
     return DeviceModels.CAMERA_DEVICEMGMT.includes(deviceModel);
   },
 
+  /** True for cameras with a doorbell button. */
+  cameraIsDoorbell(deviceModel) {
+    return DeviceModels.DOORBELL.includes(deviceModel);
+  },
+
   _cameraLightUsesActionApi(deviceModel) {
     return this.cameraUsesDeviceMgmt(deviceModel) || DeviceModels.CAMERA_LIGHT_RUN_ACTION.includes(deviceModel);
   },

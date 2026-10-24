@@ -106,6 +106,8 @@ const DeviceModels = Object.freeze({
   // Cameras whose light is driven by run_action floodlight_on/off; P1056 can be
   // read but writes do nothing.
   CAMERA_LIGHT_RUN_ACTION: ["HL_BC"],
+  // Cameras with a doorbell button (a press shows up as a "Doorbell rang" event).
+  DOORBELL: ["HL_DB2"],
   CAMERA: [..._CAMERA_V1, ..._CAMERA_V2, ..._CAMERA_V3, ..._CAMERA_OUTDOOR, "HL_WCO2", "LD_CFP", "AN_RSCW", "GW_GC1", "HL_PAN4", "HL_BC", "HL_CFL2", "HL_DB2"],
 
   LOCK: ["YD.LO1"],
@@ -319,6 +321,30 @@ function parseLockEventSource(code) {
   }
   return null;
 }
+
+// Event types in the app/v2 cloud event list (`event_value`). A doorbell press is
+// first recorded as MOTION and flipped to DOORBELL_RANG when Wyze has classified
+// the clip. Values from wyze-sdk's EventAlarmType, checked against a Doorbell v2.
+const EventAlarmType = Object.freeze({
+  MOTION: [1, 6, 7, 13],
+  SOUND: [2],
+  OTHER: [3],
+  SMOKE: [4],
+  CO: [5],
+  TRIGGERED: [8],
+  DOORBELL_RANG: [10],
+  SCENE: [11],
+  FACE: [12],
+});
+
+// AI detection tags attached to events (`tag_list`).
+const AiEventTag = Object.freeze({
+  PERSON: 101,
+  FACE: 101001,
+  VEHICLE: 102,
+  PET: 103,
+  PACKAGE: 104,
+});
 
 const LockVolumeLevel = Object.freeze({
   OFF: 0,
@@ -775,4 +801,6 @@ module.exports = {
   IrrigationNozzleType,
   IrrigationSlopeType,
   IrrigationSoilType,
+  EventAlarmType,
+  AiEventTag,
 };
