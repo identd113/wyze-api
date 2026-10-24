@@ -442,6 +442,7 @@ module.exports = {
     let videoSdpPath = null;
     let audioSdpPath = null;
     let keepaliveTimer = null;
+    let dead = false;
 
     const cleanup = () => {
       if (keepaliveTimer) { clearInterval(keepaliveTimer); keepaliveTimer = null; }
@@ -600,6 +601,10 @@ module.exports = {
         if (stopped) return;
         log("warn", `[stream] FFmpeg/video exited (${code})`);
         cleanup();
+        if (retries >= MAX_RETRIES) {
+          dead = true;
+          log("warn", "[stream] Retry budget exhausted — video stream ended");
+        }
         if (retries < MAX_RETRIES) {
           retries++;
           const delay = Math.min(1000 * retries, 8000);
@@ -621,6 +626,9 @@ module.exports = {
         stopped = true;
         cleanup();
       },
+      // False once stopped, or once reconnecting has given up: nothing is streaming
+      // any more, even if the caller never gets a stop request.
+      isAlive: () => !stopped && !dead,
     };
   },
 

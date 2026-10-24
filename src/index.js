@@ -812,6 +812,7 @@ module.exports = class WyzeAPI {
         // here was throwing ENOENT and the plugin never recovered.
         await fs.mkdir(path.dirname(tokenPath), { recursive: true });
         await fs.writeFile(tokenPath, JSON.stringify(data), { mode: 0o600 }); // Tokens are credentials: owner-only.
+        await fs.chmod(tokenPath, 0o600); // `mode` only applies to a newly created file; fix one saved by an older version.
         return; // Exit if successful.
       } catch (error) {
         attempt += 1;
@@ -876,6 +877,8 @@ module.exports = class WyzeAPI {
     try {
       const data = await fs.readFile(tokenPath); // Read the token file.
       const parsedData = JSON.parse(data); // Parse the token data.
+      // A file saved by an older version may be readable by other users.
+      await fs.chmod(tokenPath, 0o600).catch(() => {});
 
       // Validate the token data structure.
       if (parsedData.access_token && parsedData.refresh_token) {
