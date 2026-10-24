@@ -109,6 +109,9 @@ Use these helper methods to interact with wyze-api.
 - wyze.cameraMotionRecording(device.mac, device.product_model, value)
 - wyze.cameraMotionRecordingOn(device.mac, device.product_model)
 - wyze.cameraMotionRecordingOff(device.mac, device.product_model)
+- wyze.cameraGetDeviceMgmtState(device.mac, device.product_model) — state for cameras on the devicemgmt API (Floodlight Pro, Battery Cam Pro, OG, Pan v4) in one call: `{on, available, siren, floodlight, notify, motion}`
+- wyze.cameraGetEvents(device.mac, [{sinceMs=300000, count=20}]) — recent cloud events for a camera, newest first: `{id, time, value, type, tags, params}` where `type` is `MOTION`, `SOUND`, `DOORBELL_RANG` and so on (`EventAlarmType`, with `AiEventTag` for person/vehicle/package). Read-only. Events change after they appear (a doorbell press starts as `MOTION` and is flipped to `DOORBELL_RANG` within seconds), so compare by `id` on every poll. The list depends on the Wyze plan: a camera without one records about one motion event per 5 minutes.
+- wyze.cameraUsesDeviceMgmt(model) / cameraIsDoorbell(model) / cameraSupportsPowerControl(model) — sync checks by model. The Doorbell v2 (`HL_DB2`) is a doorbell and can't be powered off through the API, so `cameraSupportsPowerControl("HL_DB2")` is false.
 
 ### Camera Stream Methods (WebRTC)
 
@@ -117,6 +120,8 @@ These return the credentials a WebRTC client (werift, go2rtc, Kinesis Video Stre
 **Primary**:
 - wyze.getCameraWebRTCConnectionInfo(mac, model, [options]) — bundled, ready-to-use shape: `{signalingUrl, iceServers, authToken, clientId, mac, model, substream, cached}`. `iceServers` are normalized to the `{urls, ...}` shape `RTCPeerConnection` expects; `signalingUrl` has any double-encoding decoded and (by default) the generated `clientId` injected as `X-Amz-ClientId`. Cached for 60s per `(mac, substream)`. Options: `substream`, `includeClientId`, `clientId`, `clientIdPrefix`, `noCache`, `cacheTtlMs`.
 - wyze.getCameraWebRTCConnectionInfoWithReconnect(mac, model, [options], [retryOptions]) — same, with exponential-backoff retry. `retryOptions`: `{maxAttempts=3, baseDelayMs=2000, onRetry}`.
+
+**Sessions**: a Wyze camera serves one WebRTC viewer at a time. `captureStreamFrame`, `cameraStartRtpForwarding` and `startCameraHKStream` keep at most one session per camera: a new one waits for the previous to finish closing, a live stream replaces a snapshot capture in flight, and a snapshot is refused while a stream is open. `startCameraHKStream` returns `{stop(), isAlive()}`. Call `wyze.closeAllCameraSessions()` when your process shuts down so cameras aren't left with a dead viewer.
 
 **Lower-level**:
 - wyze.cameraGetStreamInfo(mac, model, [options]) — raw API shape `{signaling_url, ice_servers, auth_token, ...}`. `options.substream` requests the lower-bitrate sub stream.
