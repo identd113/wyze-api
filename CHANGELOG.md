@@ -6,6 +6,7 @@
 
 Consolidates the fork's post-beta.2 fixes onto the 2.0.0 line.
 
+- **Breaking:** the constructor now throws when `username` is empty (previously it failed later at login). Callers that build a client without credentials must handle the error.
 - **Requires Node.js 22 or newer** (`engines.node` is now `>=22`). `werift` is upgraded to `^0.25.1`, which needs Node 22 and clears the `ip` (SSRF) and `uuid` audit findings; `npm audit --omit=dev` is now clean. Homebridge 2.x already requires Node 22+.
 - **Wyze Cam Pan v4 (`HL_PAN4`) support**, ported from SecKatie/wyzeapy: uses the devicemgmt API for power, siren, spotlight and state. Also registered in the camera model lists.
 - **Bulb Cam (`HL_BC`) light now works**: wyzeapy switches it with `run_action` (`floodlight_on` / `floodlight_off`); writing `P1056` is accepted but does nothing (#293). Reading state is unchanged.

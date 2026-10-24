@@ -57,10 +57,10 @@ module.exports = {
   // Mirrors SecKatie/wyzeapy CameraService.floodlight_on/off.
   async _cameraLightSet(deviceMac, deviceModel, on) {
     if (DeviceModels.CAMERA_DEVICEMGMT.includes(deviceModel)) {
-      const type = ["AN_RSCW", "HL_PAN4"].includes(deviceModel) ? "spotlight" : "floodlight";
+      const type = DeviceModels.CAMERA_DEVICEMGMT_SPOTLIGHT.includes(deviceModel) ? "spotlight" : "floodlight";
       return this._deviceMgmtRunAction(deviceMac, deviceModel, type, on ? "1" : "0");
     }
-    if (deviceModel === "HL_BC") {
+    if (DeviceModels.CAMERA_LIGHT_RUN_ACTION.includes(deviceModel)) {
       // Bulb Cam: P1056 can be read but not written - the light is driven by run_action.
       return this.runAction(deviceMac, deviceModel, on ? "floodlight_on" : "floodlight_off");
     }
@@ -193,7 +193,7 @@ module.exports = {
   },
 
   _cameraLightUsesActionApi(deviceModel) {
-    return DeviceModels.CAMERA_DEVICEMGMT.includes(deviceModel) || deviceModel === "HL_BC";
+    return this.cameraUsesDeviceMgmt(deviceModel) || DeviceModels.CAMERA_LIGHT_RUN_ACTION.includes(deviceModel);
   },
 
   async cameraSpotLightOn(deviceMac, deviceModel) {

@@ -116,6 +116,8 @@ module.exports = class WyzeAPI {
     // Token is good for 216,000 seconds (60 hours) but 48 hours seems like a reasonable refresh interval 172800
     if (this.refreshTokenTimerEnabled === true) {
       this._refreshTokenInterval = setInterval(this.refreshToken.bind(this), 172800 * 1000);
+      // Don't keep a short-lived script (or a test) alive just for the refresh timer.
+      this._refreshTokenInterval.unref();
     }
   }
 

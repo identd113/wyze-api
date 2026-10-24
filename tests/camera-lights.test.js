@@ -106,6 +106,20 @@ test("devicemgmt state is parsed like wyzeapy's CameraService.update", () => {
   assert.deepStrictEqual(w._deviceMgmtParseState(undefined), {});
 });
 
+test("devicemgmt state treats string/number flags as booleans (\"0\" is off)", () => {
+  const { w } = stub();
+  const state = w._deviceMgmtParseState({
+    data: {
+      capabilities: [
+        { name: "siren", properties: { state: "0" } },
+        { name: "spotlight", properties: { on: "1" } },
+        { name: "iot-device", properties: { "push-switch": 0, "iot-power": 1 } },
+      ],
+    },
+  });
+  assert.deepStrictEqual(state, { siren: false, floodlight: true, notify: false, on: true, available: undefined });
+});
+
 test("cameraGetDeviceMgmtState posts the per-model property list and parses the reply", async () => {
   const axios = require("axios");
   const orig = axios.post;

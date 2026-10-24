@@ -108,23 +108,25 @@ module.exports = {
    */
   _deviceMgmtParseState(response) {
     const state = {};
+    // Wyze reports these as booleans; accept 1/"1"/"true" too so a string "0" is never read as on.
+    const flag = (v) => (v === undefined ? undefined : v === true || v === 1 || v === "1" || v === "true");
     for (const cap of response?.data?.capabilities || []) {
       const props = cap.properties || {};
       switch (cap.name) {
         case "camera":
-          state.motion = props["motion-detect-recording"];
+          state.motion = flag(props["motion-detect-recording"]);
           break;
         case "floodlight":
         case "spotlight":
-          state.floodlight = props.on;
+          state.floodlight = flag(props.on);
           break;
         case "siren":
-          state.siren = props.state;
+          state.siren = flag(props.state);
           break;
         case "iot-device":
-          state.notify = props["push-switch"];
-          state.on = props["iot-power"];
-          state.available = props["iot-state"];
+          state.notify = flag(props["push-switch"]);
+          state.on = flag(props["iot-power"]);
+          state.available = flag(props["iot-state"]);
           break;
         default:
       }
