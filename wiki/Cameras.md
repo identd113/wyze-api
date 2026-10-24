@@ -70,6 +70,15 @@ Registered as a camera in 2.0.0-beta.3. Probed against real hardware (firmware `
 - **No LAN services:** none of 20 common TCP ports (including 554) is open. Control and video go through the Wyze cloud.
 - **Not verified:** power on/off, siren and notification writes, and a doorbell-press (ring) event.
 
+## Cloud events (`cameraGetEvents`)
+
+`cameraGetEvents(mac, { sinceMs, count })` reads Wyze's cloud event list (motion, sound, doorbell rang), newest first, with `type`, `tags` and `time`. It is read-only.
+
+- **A free-plan camera only records one motion event every ~5 minutes.** Measured on two Cam v3 (no subscription): the shortest gap between motion events was 5.0 and 5.2 minutes, and none carried AI tags. A camera with a plan (a Doorbell v2 here) showed events 20 seconds apart, every one tagged person/vehicle/package. So motion read from this list is coarse on a free plan, and a doorbell press on a doorbell without a plan could be swallowed by the same cooldown (not verified).
+- **Events change after they appear.** A doorbell press is first recorded as motion (13), then flipped to "Doorbell rang" (10) within seconds; AI tags arrive a few seconds late. Compare by `id` on every poll.
+- **Lag:** a new event was visible within about 10-12 seconds of the motion.
+- Live view and snapshots do not use this list and are not affected by the plan.
+
 ## Motion detection
 
 | Method | Notes |
