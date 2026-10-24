@@ -41,3 +41,27 @@ test("writeAudioSdpFile declares the negotiated payload type, or both defaults w
   const fallback = read(writeAudioSdpFile(5000));
   assert.match(fallback, /RTP\/AVP 0 111/);
 });
+
+// ---- video SDP / payload types -------------------------------------------------
+
+const { h264Codecs, audioCodecs } = require("../src/devices/cameraStreamCapture");
+
+test("the video SDP names the payload type that was negotiated, defaulting to 96", () => {
+  const read = (p) => { const s = fs.readFileSync(p, "utf8"); fs.unlinkSync(p); return s; };
+  const named = read(require("../src/devices/cameraStreamCapture").writeSdpFile(5000, "AAA,BBB", 98));
+  assert.match(named, /m=video 5000 RTP\/AVP 98\n/);
+  assert.match(named, /a=rtpmap:98 H264\/90000\n/);
+  assert.match(named, /a=fmtp:98 packetization-mode=1;sprop-parameter-sets=AAA,BBB\n/);
+  assert.ok(!named.includes("AVP 96"));
+  const fallback = read(require("../src/devices/cameraStreamCapture").writeSdpFile(5000));
+  assert.match(fallback, /RTP\/AVP 96\n/);
+});
+
+test("codec objects are not shared between sessions (the library numbers payload types by mutating them)", () => {
+  const first = h264Codecs();
+  first[0].payloadType = 98; // what a session does to the objects it is handed
+  const second = h264Codecs();
+  assert.notStrictEqual(first[0], second[0]);
+  assert.notStrictEqual(second[0].payloadType, 98);
+  assert.notStrictEqual(audioCodecs()[0], audioCodecs()[0]);
+});

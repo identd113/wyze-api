@@ -21,7 +21,11 @@ const WebSocket = require("ws");
 const { RTCPeerConnection, RTCRtpCodecParameters } = require("werift");
 
 // Pin H.264 baseline 3.1 — Wyze rejects VP8/VP9 and werift's defaults include those.
-const H264_CODECS = [
+// Built fresh for every session: werift assigns payload types by mutating these
+// objects, so sharing one instance made later sessions get different numbers (a
+// video payload type of 98 instead of 96 after a stream with audio), and ffmpeg
+// ignores packets whose payload type its SDP doesn't name.
+const h264Codecs = () => [
   new RTCRtpCodecParameters({
     mimeType: "video/H264",
     clockRate: 90000,
@@ -36,7 +40,7 @@ const H264_CODECS = [
 ];
 
 // Accept PCMU (G.711 µ-law, PT 0) and Opus — let the camera pick whichever it supports.
-const AUDIO_CODECS = [
+const audioCodecs = () => [
   new RTCRtpCodecParameters({ mimeType: "audio/PCMU", clockRate: 8000, channels: 1 }),
   new RTCRtpCodecParameters({
     mimeType: "audio/opus",
@@ -194,21 +198,21 @@ async function closeAllSessions() {
   }));
 }
 
-function writeSdpFile(rtpPort, spropParameterSets = null) {
+function writeSdpFile(rtpPort, spropParameterSets = null, payloadType = 96) {
   // sprop-parameter-sets gives FFmpeg the H.264 SPS/PPS up front. Without it,
   // FFmpeg has to wait for in-band parameter sets — and Wyze cameras often
   // only put them in the WebRTC answer SDP, never in RTP. Result: continuous
   // "non-existing PPS 0 referenced / no frame!" decoding errors.
   const fmtp = spropParameterSets
-    ? `a=fmtp:96 packetization-mode=1;sprop-parameter-sets=${spropParameterSets}\n`
-    : `a=fmtp:96 packetization-mode=1\n`;
+    ? `a=fmtp:${payloadType} packetization-mode=1;sprop-parameter-sets=${spropParameterSets}\n`
+    : `a=fmtp:${payloadType} packetization-mode=1\n`;
   const sdp = `v=0
 o=- 0 0 IN IP4 127.0.0.1
 s=WyzeCapture
 c=IN IP4 127.0.0.1
 t=0 0
-m=video ${rtpPort} RTP/AVP 96
-a=rtpmap:96 H264/90000
+m=video ${rtpPort} RTP/AVP ${payloadType}
+a=rtpmap:${payloadType} H264/90000
 ${fmtp}`;
   const sdpPath = path.join(
     os.tmpdir(),
@@ -455,6 +459,7 @@ async function captureStreamFrame({
     let capturedPps = null;
     let videoReceiver = null;
     let videoSsrc = null;
+    let videoPayloadType = 96;
     const forward = (buf) => {
       try { fwdSock.send(buf, rtpPort, "127.0.0.1"); } catch (_) { /* socket may be closed */ }
     };
@@ -466,7 +471,7 @@ async function captureStreamFrame({
       started = true;
       clearTimeout(fallbackTimer);
       log("debug", sprop ? "starting ffmpeg with sprop-parameter-sets" : "starting ffmpeg without sprop-parameter-sets");
-      sdpPath = writeSdpFile(rtpPort, sprop);
+      sdpPath = writeSdpFile(rtpPort, sprop, videoPayloadType);
       ffmpeg = _spawnFfmpeg(sdpPath);
       ffmpeg.stdout.on("data", (chunk) => stdoutChunks.push(chunk));
       ffmpeg.stderr.on("data", (chunk) => stderrChunks.push(chunk));
@@ -499,7 +504,7 @@ async function captureStreamFrame({
 
     pc = new RTCPeerConnection({
       iceServers,
-      codecs: { video: H264_CODECS },
+      codecs: { video: h264Codecs() },
     });
     pc.addTransceiver("video", { direction: "recvonly" });
 
@@ -507,11 +512,15 @@ async function captureStreamFrame({
       log("debug", `track received kind=${track.kind} codec=${track.codec?.name}`);
       videoReceiver = pc.getReceivers().find((r) => r.kind === "video") ?? null;
       videoSsrc = track.ssrc;
+      if (track.codec?.payloadType != null) videoPayloadType = track.codec.payloadType;
       // Some firmwares send P-frames first and ignore the first PLI or two, so
       // keep asking until we have the SPS/PPS ffmpeg needs.
       requestKeyframe();
+      // Keep asking until ffmpeg has actually produced a frame, not merely started:
+      // under load ffmpeg can open its port after the replay below, miss the first
+      // keyframe, and would otherwise wait for the camera's next one.
       pliTimer = setInterval(() => {
-        if (started) clearInterval(pliTimer);
+        if (stdoutChunks.length > 0 || aborted) clearInterval(pliTimer);
         else requestKeyframe();
       }, 500);
       track.onReceiveRtp.subscribe((rtp) => {
@@ -643,8 +652,8 @@ async function _startRtpForwarding({
   // so setup stops at once instead of running out its clock.
   const timeoutCtl = _makeTimeout(timeoutMs, `stream negotiation timed out after ${timeoutMs}ms`);
 
-  const codecs = { video: H264_CODECS };
-  if (localAudioRtpPort) codecs.audio = AUDIO_CODECS;
+  const codecs = { video: h264Codecs() };
+  if (localAudioRtpPort) codecs.audio = audioCodecs();
 
   const pc = new RTCPeerConnection({ iceServers, codecs });
   pc.addTransceiver("video", { direction: "recvonly" });
@@ -656,6 +665,7 @@ async function _startRtpForwarding({
   let idleWatchdog = null;
   let idleFired = false;
   let audioPackets = 0;
+  let videoPayloadType = 96; // replaced by what the camera negotiates
 
   // Everything this forwarder holds is closed through here, whether it stops
   // normally, fails to negotiate, or is preempted: peer connection first
@@ -686,6 +696,7 @@ async function _startRtpForwarding({
     log("debug", `forwarding track kind=${track.kind}`);
     if (track.kind === "video") {
       videoTrackInfo = { receiver: pc.getReceivers().find((r) => r.kind === "video"), ssrc: track.ssrc };
+      if (track.codec?.payloadType != null) videoPayloadType = track.codec.payloadType;
       // Ask the camera to emit a keyframe immediately so HomeKit doesn't have
       // to wait for the next natural IDR. Keep prodding until we've actually
       // captured SPS+PPS — some firmwares send P-frames first and ignore the
@@ -830,7 +841,7 @@ async function _startRtpForwarding({
   }
 
   // audioSeen() is false for a camera that negotiates audio but sends none (microphone off).
-  return { stop, spropParameterSets, requestKeyframe, audioCodec, audioSeen: () => audioPackets > 0 };
+  return { stop, spropParameterSets, requestKeyframe, audioCodec, videoPayloadType, audioSeen: () => audioPackets > 0 };
 }
 
 /**
@@ -863,6 +874,8 @@ module.exports = {
   _claimSession, // exported for tests
   _closePeer, // exported for tests
   _makeTimeout, // exported for tests
+  h264Codecs, // exported for tests
+  audioCodecs, // exported for tests
   pickFreeUdpPort,
   writeSdpFile,
   writeAudioSdpFile,

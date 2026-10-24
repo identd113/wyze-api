@@ -516,6 +516,13 @@ module.exports = {
         try { videoFfmpeg?.kill("SIGKILL"); } catch (_) {}
       };
 
+      // Fresh local ports for every attempt. The ones picked when HomeKit prepared
+      // the stream can have been taken since (several WebRTC sessions open sockets
+      // at once), and retrying on the same number would fail the same way every time.
+      localRtpPort = await pickFreeUdpPort();
+      if (localAudioRtpPort) localAudioRtpPort = await pickFreeUdpPort();
+      if (stopped) return;
+
       forwarder = await this.cameraStartRtpForwarding(
         deviceMac, deviceModel, localRtpPort,
         {
@@ -534,7 +541,7 @@ module.exports = {
 
       // Video stream — bake the camera's SPS/PPS into the SDP so FFmpeg can
       // decode the very first IDR slice without waiting for in-band params.
-      videoSdpPath = writeSdpFile(localRtpPort, forwarder.spropParameterSets);
+      videoSdpPath = writeSdpFile(localRtpPort, forwarder.spropParameterSets, forwarder.videoPayloadType);
       const videoSrtpParams = Buffer.concat([srtpKey, srtpSalt]).toString("base64");
 
       videoFfmpeg = spawn(resolveFfmpegPath(), [
