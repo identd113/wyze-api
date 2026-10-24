@@ -108,6 +108,10 @@ const DeviceModels = Object.freeze({
   CAMERA_LIGHT_RUN_ACTION: ["HL_BC"],
   // Cameras with a doorbell button (a press shows up as a "Doorbell rang" event).
   DOORBELL: ["HL_DB2"],
+  // Cameras that cannot be powered off through the API: Wyze answers run_action power_off
+  // with result 3, and acknowledges the devicemgmt "sleep" without doing anything (checked
+  // on a Doorbell v2: it kept streaming).
+  CAMERA_NO_POWER_CONTROL: ["HL_DB2"],
   CAMERA: [..._CAMERA_V1, ..._CAMERA_V2, ..._CAMERA_V3, ..._CAMERA_OUTDOOR, "HL_WCO2", "LD_CFP", "AN_RSCW", "GW_GC1", "HL_PAN4", "HL_BC", "HL_CFL2", "HL_DB2"],
 
   LOCK: ["YD.LO1"],

@@ -193,6 +193,11 @@ module.exports = {
     return DeviceModels.CAMERA_DEVICEMGMT.includes(deviceModel);
   },
 
+  /** False for cameras that can't be powered on/off through the API (see DeviceModels). */
+  cameraSupportsPowerControl(deviceModel) {
+    return !DeviceModels.CAMERA_NO_POWER_CONTROL.includes(deviceModel);
+  },
+
   /** True for cameras with a doorbell button. */
   cameraIsDoorbell(deviceModel) {
     return DeviceModels.DOORBELL.includes(deviceModel);

@@ -167,3 +167,11 @@ test("raw entry points are unchanged for ordinary cameras", async () => {
     ["setProperty", "MAC", "WYZE_CAKP2JFUS", "P1", "1"],
   ]);
 });
+
+test("the Doorbell v2 is the model that can't be powered off through the API", () => {
+  const { w } = stub();
+  assert.strictEqual(w.cameraSupportsPowerControl("HL_DB2"), false);
+  assert.strictEqual(w.cameraSupportsPowerControl("WYZE_CAKP2JFUS"), true);
+  assert.strictEqual(w.cameraSupportsPowerControl("HL_PAN4"), true);
+  assert.ok(DeviceModels.CAMERA_NO_POWER_CONTROL.includes("HL_DB2"));
+});
