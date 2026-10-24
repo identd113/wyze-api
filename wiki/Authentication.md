@@ -54,7 +54,7 @@ const wyze = new Wyze({
   password: process.env.PASSWORD,
   keyId: process.env.KEY_ID,
   apiKey: process.env.API_KEY,
-  totpSecret: process.env.TOTP_SECRET, // or the WYZE_TOTP_SECRET environment variable
+  totpSecret: process.env.TOTP_SECRET,
   persistPath: "./",
 });
 ```

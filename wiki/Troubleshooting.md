@@ -1,6 +1,13 @@
 # Troubleshooting
 
-Camera scope only. Other library issues are covered in the project [README](../README.md).
+Mostly camera issues, plus login and 2FA errors. Other library issues are covered in the project [README](../README.md).
+
+## Login / 2FA errors
+
+- **`Please provide the "totpSecret" (recommended) or "mfaCode" parameter`** — your account has 2FA on. Add `totpSecret` (the base32 key Wyze shows next to the QR code) or the current `mfaCode`. See [Authentication](Authentication.md#mfa).
+- **`The "totpSecret" is not valid`** — it must be the base32 key (letters A-Z and digits 2-7). Spaces, dashes, quotes and a pasted `otpauth://` link are cleaned up for you; anything else, such as a URL or a typo, is rejected.
+- **`The "mfaCode" must be the 6-digit code`** — the message gives the length it got after cleanup (it never echoes the code). The code expires after 30 seconds, so prefer `totpSecret`.
+- **A correct secret still fails** — the clock on the machine may be off by more than 30 seconds. Sync it (NTP) and retry; the library logs a hint when a code is rejected twice.
 
 ## All cameras show as offline
 
