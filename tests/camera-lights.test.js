@@ -167,3 +167,21 @@ test("raw entry points are unchanged for ordinary cameras", async () => {
     ["setProperty", "MAC", "WYZE_CAKP2JFUS", "P1", "1"],
   ]);
 });
+
+test("Doorbell v2 is powered through devicemgmt, but its other controls stay on the standard API", async () => {
+  const { w, calls } = stub();
+  await w.cameraTurnOn("MAC", "HL_DB2");
+  await w.cameraTurnOff("MAC", "HL_DB2");
+  await w.cameraPrivacy("MAC", "HL_DB2", "power_off");
+  await w.cameraPrivacy("MAC", "HL_DB2", "power_on");
+  assert.deepStrictEqual(calls.map((c) => c.slice(0, 1).concat(c.slice(3)).join(":")), [
+    "devicemgmt:power:wakeup",
+    "devicemgmt:power:sleep",
+    "devicemgmt:power:sleep",
+    "devicemgmt:power:wakeup",
+  ]);
+  assert.strictEqual(w.cameraUsesDeviceMgmt("HL_DB2"), false); // state reads etc. unchanged
+  calls.length = 0;
+  await w.cameraSiren("MAC", "HL_DB2", "siren_on");
+  assert.deepStrictEqual(calls, [["runAction", "MAC", "HL_DB2", "siren_on"]]);
+});

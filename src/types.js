@@ -108,6 +108,10 @@ const DeviceModels = Object.freeze({
   CAMERA_LIGHT_RUN_ACTION: ["HL_BC"],
   // Cameras with a doorbell button (a press shows up as a "Doorbell rang" event).
   DOORBELL: ["HL_DB2"],
+  // Cameras that ignore run_action power_on/power_off (Wyze answers result 3 and nothing
+  // changes) and are powered through the devicemgmt "power" capability instead. Their state
+  // and other controls stay on the standard API.
+  CAMERA_POWER_DEVICEMGMT: ["HL_DB2"],
   CAMERA: [..._CAMERA_V1, ..._CAMERA_V2, ..._CAMERA_V3, ..._CAMERA_OUTDOOR, "HL_WCO2", "LD_CFP", "AN_RSCW", "GW_GC1", "HL_PAN4", "HL_BC", "HL_CFL2", "HL_DB2"],
 
   LOCK: ["YD.LO1"],

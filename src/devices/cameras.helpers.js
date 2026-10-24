@@ -26,14 +26,14 @@ module.exports = {
   // ---- Model-branching controls --------------------------------------------
 
   async cameraTurnOn(deviceMac, deviceModel) {
-    if (DeviceModels.CAMERA_DEVICEMGMT.includes(deviceModel)) {
+    if (this._cameraPowerUsesDeviceMgmt(deviceModel)) {
       return this._deviceMgmtRunAction(deviceMac, deviceModel, "power", "wakeup");
     }
     await this.runAction(deviceMac, deviceModel, "power_on");
   },
 
   async cameraTurnOff(deviceMac, deviceModel) {
-    if (DeviceModels.CAMERA_DEVICEMGMT.includes(deviceModel)) {
+    if (this._cameraPowerUsesDeviceMgmt(deviceModel)) {
       return this._deviceMgmtRunAction(deviceMac, deviceModel, "power", "sleep");
     }
     await this.runAction(deviceMac, deviceModel, "power_off");
@@ -146,7 +146,7 @@ module.exports = {
   // devicemgmt API don't answer run_action/set_property, so they are routed to
   // the model-aware On/Off methods; all other models keep the original behavior.
   async cameraPrivacy(deviceMac, deviceModel, value) {
-    if (this.cameraUsesDeviceMgmt(deviceModel)) {
+    if (this._cameraPowerUsesDeviceMgmt(deviceModel)) {
       return value === "power_on"
         ? this.cameraTurnOn(deviceMac, deviceModel)
         : this.cameraTurnOff(deviceMac, deviceModel);
@@ -191,6 +191,11 @@ module.exports = {
   /** True for cameras controlled and read through the devicemgmt API. */
   cameraUsesDeviceMgmt(deviceModel) {
     return DeviceModels.CAMERA_DEVICEMGMT.includes(deviceModel);
+  },
+
+  /** True when the camera is powered on/off through the devicemgmt "power" capability. */
+  _cameraPowerUsesDeviceMgmt(deviceModel) {
+    return this.cameraUsesDeviceMgmt(deviceModel) || DeviceModels.CAMERA_POWER_DEVICEMGMT.includes(deviceModel);
   },
 
   /** True for cameras with a doorbell button. */
