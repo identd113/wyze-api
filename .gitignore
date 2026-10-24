@@ -12,3 +12,6 @@ example/scratch/*
 .claude/
 # macOS
 .DS_Store
+
+# local working documents (never pushed)
+testing/
