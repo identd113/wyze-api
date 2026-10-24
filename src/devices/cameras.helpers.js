@@ -357,6 +357,30 @@ module.exports = {
 
   // ---- Long-lived RTP forwarding (for HomeKit streaming) -------------------
 
+  /**
+   * Reconnect a dropped stream, trying again with a growing delay until an attempt
+   * gets as far as starting video or the budget runs out. A reconnect that fails
+   * (the camera never answers the new session, e.g. because it still holds the old
+   * viewer) used to end the stream for good, because only an ffmpeg exit scheduled a
+   * retry. Returns true if an attempt succeeded.
+   */
+  async _streamReconnect({ budget, max, attempt, isStopped, sleep = (ms) => new Promise((r) => setTimeout(r, ms)), log = () => {} }) {
+    while (!isStopped() && budget.retries < max) {
+      budget.retries += 1;
+      const delay = Math.min(1000 * budget.retries, 8000);
+      log("debug", `[stream] Reconnecting in ${delay}ms (attempt ${budget.retries}/${max})`);
+      await sleep(delay);
+      if (isStopped()) return false;
+      try {
+        await attempt();
+        return true;
+      } catch (err) {
+        log("error", `[stream] Reconnect failed (attempt ${budget.retries}/${max}): ${err.message}`);
+      }
+    }
+    return false;
+  },
+
   /** Close every open camera WebRTC session (call on shutdown). */
   async closeAllCameraSessions() {
     await closeAllSessions();
@@ -426,13 +450,14 @@ module.exports = {
       if (logger && typeof logger[level] === "function") logger[level](msg);
     };
 
-    const MAX_RETRIES = 3;
+    const MAX_RETRIES = 4;
     const MAX_AUDIO_RETRIES = 3;
     // An audio process that ran this long without a single audio packet means the camera
     // sends none (microphone off), not that ffmpeg failed.
     const AUDIO_SILENCE_MIN_MS = 15_000;
     let stopped = false;
-    let retries = 0;
+    const retryBudget = { retries: 0 };
+    let stableTimer = null;
     let audioRetries = 0;
 
     // Current-attempt resources
@@ -446,6 +471,7 @@ module.exports = {
 
     const cleanup = () => {
       if (keepaliveTimer) { clearInterval(keepaliveTimer); keepaliveTimer = null; }
+      if (stableTimer) { clearTimeout(stableTimer); stableTimer = null; }
       try { videoFfmpeg?.kill("SIGKILL"); } catch (_) {}
       try { audioFfmpeg?.kill("SIGKILL"); } catch (_) {}
       try { forwarder?.stop(); } catch (_) {}
@@ -596,25 +622,25 @@ module.exports = {
       // clock jumping forward in chunks.
       setTimeout(() => forwarder?.requestKeyframe?.(), 200);
 
+      // A connection that stays up for 30 seconds earns a fresh retry budget.
+      stableTimer = setTimeout(() => { retryBudget.retries = 0; }, 30_000);
+      stableTimer.unref?.();
+
       // Reconnect on unexpected video FFmpeg exit
       videoFfmpeg.once("close", async (code) => {
         if (stopped) return;
         log("warn", `[stream] FFmpeg/video exited (${code})`);
         cleanup();
-        if (retries >= MAX_RETRIES) {
+        const reconnected = await this._streamReconnect({
+          budget: retryBudget,
+          max: MAX_RETRIES,
+          attempt,
+          isStopped: () => stopped,
+          log,
+        });
+        if (!reconnected && !stopped) {
           dead = true;
           log("warn", "[stream] Retry budget exhausted — video stream ended");
-        }
-        if (retries < MAX_RETRIES) {
-          retries++;
-          const delay = Math.min(1000 * retries, 8000);
-          log("debug", `[stream] Reconnecting in ${delay}ms (attempt ${retries}/${MAX_RETRIES})`);
-          await new Promise((r) => setTimeout(r, delay));
-          if (!stopped) {
-            try { await attempt(); } catch (err) {
-              log("error", `[stream] Reconnect failed: ${err.message}`);
-            }
-          }
         }
       });
     };
