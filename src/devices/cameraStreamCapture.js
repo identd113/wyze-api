@@ -212,17 +212,57 @@ function localIpAddress() {
 }
 
 // Audio SDP accepts both PCMU (PT 0) and Opus (PT 111) so FFmpeg handles either codec.
-function writeAudioSdpFile(rtpPort) {
+/**
+ * The audio codec the camera negotiated, from its SDP answer:
+ * `{ payloadType, name, clockRate, channels, fmtp }`, or null. Wyze cameras
+ * answer PCMU/8000 under a dynamic payload type (96), not the static 0, so the
+ * SDP given to ffmpeg must name the payload type the camera really uses.
+ */
+function extractAudioCodec(sdp) {
+  if (!sdp) return null;
+  let inAudio = false;
+  let payloadTypes = [];
+  const maps = {};
+  const fmtps = {};
+  for (const raw of String(sdp).split(/\r?\n/)) {
+    const line = raw.trim();
+    if (line.startsWith("m=")) {
+      inAudio = line.startsWith("m=audio");
+      if (inAudio) payloadTypes = line.split(/\s+/).slice(3);
+      continue;
+    }
+    if (!inAudio) continue;
+    const map = line.match(/^a=rtpmap:(\d+)\s+([^/\s]+)\/(\d+)(?:\/(\d+))?/);
+    if (map) maps[map[1]] = { payloadType: Number(map[1]), name: map[2], clockRate: Number(map[3]), channels: map[4] ? Number(map[4]) : 1 };
+    const fmtp = line.match(/^a=fmtp:(\d+)\s+(.+)/);
+    if (fmtp) fmtps[fmtp[1]] = fmtp[2];
+  }
+  for (const pt of payloadTypes) {
+    if (maps[pt]) return { ...maps[pt], fmtp: fmtps[pt] ?? null };
+    if (pt === "0") return { payloadType: 0, name: "PCMU", clockRate: 8000, channels: 1, fmtp: null };
+    if (pt === "8") return { payloadType: 8, name: "PCMA", clockRate: 8000, channels: 1, fmtp: null };
+  }
+  return null;
+}
+
+// With `codec` (from extractAudioCodec) the SDP declares exactly what the camera
+// sends; without it, both PCMU (PT 0) and Opus (PT 111) are accepted.
+function writeAudioSdpFile(rtpPort, codec = null) {
+  const media = codec
+    ? `m=audio ${rtpPort} RTP/AVP ${codec.payloadType}
+a=rtpmap:${codec.payloadType} ${codec.name}/${codec.clockRate}${codec.channels > 1 ? `/${codec.channels}` : ""}
+${codec.fmtp ? `a=fmtp:${codec.payloadType} ${codec.fmtp}\n` : ""}`
+    : `m=audio ${rtpPort} RTP/AVP 0 111
+a=rtpmap:0 PCMU/8000
+a=rtpmap:111 opus/48000/2
+a=fmtp:111 minptime=10;useinbandfec=1
+`;
   const sdp = `v=0
 o=- 0 0 IN IP4 127.0.0.1
 s=WyzeAudio
 c=IN IP4 127.0.0.1
 t=0 0
-m=audio ${rtpPort} RTP/AVP 0 111
-a=rtpmap:0 PCMU/8000
-a=rtpmap:111 opus/48000/2
-a=fmtp:111 minptime=10;useinbandfec=1
-`;
+${media}`;
   const sdpPath = path.join(
     os.tmpdir(),
     `wyze-audio-${process.pid}-${nodeCrypto.randomBytes(4).toString("hex")}.sdp`
@@ -566,6 +606,7 @@ async function _startRtpForwarding({
   let lastVideoRtpAt = 0;
   let idleWatchdog = null;
   let idleFired = false;
+  let audioPackets = 0;
 
   // Everything this forwarder holds is closed through here, whether it stops
   // normally, fails to negotiate, or is preempted: peer connection first
@@ -632,6 +673,7 @@ async function _startRtpForwarding({
       });
     } else if (track.kind === "audio" && audioSock) {
       track.onReceiveRtp.subscribe((rtp) => {
+        audioPackets += 1;
         try { audioSock.send(rtp.serialize(), localAudioRtpPort, "127.0.0.1"); } catch (_) {}
       });
     }
@@ -729,7 +771,15 @@ async function _startRtpForwarding({
 
   const stop = () => closeEverything();
 
-  return { stop, spropParameterSets, requestKeyframe };
+  const audioCodec = localAudioRtpPort ? extractAudioCodec(pc.remoteDescription?.sdp ?? null) : null;
+  if (localAudioRtpPort) {
+    log("debug", audioCodec
+      ? `audio: ${audioCodec.name}/${audioCodec.clockRate} on payload type ${audioCodec.payloadType}`
+      : "audio: no codec found in the SDP answer");
+  }
+
+  // audioSeen() is false for a camera that negotiates audio but sends none (microphone off).
+  return { stop, spropParameterSets, requestKeyframe, audioCodec, audioSeen: () => audioPackets > 0 };
 }
 
 /**
@@ -758,6 +808,7 @@ module.exports = {
   captureStreamFrame,
   startRtpForwarding,
   closeAllSessions,
+  extractAudioCodec,
   _claimSession, // exported for tests
   _closePeer, // exported for tests
   pickFreeUdpPort,

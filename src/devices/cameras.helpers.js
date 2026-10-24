@@ -446,7 +446,7 @@ module.exports = {
     // independent of WebRTC — we only need to relaunch ffmpeg.
     const spawnAudio = () => {
       if (!(localAudioRtpPort && audioPort && audioSrtpKey && audioSrtpSalt)) return;
-      audioSdpPath = writeAudioSdpFile(localAudioRtpPort);
+      audioSdpPath = writeAudioSdpFile(localAudioRtpPort, forwarder?.audioCodec ?? null);
       const audioSrtpParams = Buffer.concat([audioSrtpKey, audioSrtpSalt]).toString("base64");
 
       audioFfmpeg = spawn(resolveFfmpegPath(), [
@@ -479,6 +479,12 @@ module.exports = {
         try { if (audioSdpPath) fs.unlinkSync(audioSdpPath); } catch (_) {}
         audioFfmpeg = null;
         audioSdpPath = null;
+        // A camera that negotiates audio but never sends any (microphone off in
+        // the Wyze app) isn't a failure to retry: carry on with video only.
+        if (forwarder?.audioSeen && !forwarder.audioSeen()) {
+          log("debug", "[stream] camera sent no audio (microphone off?) — continuing video-only");
+          return;
+        }
         if (audioRetries < MAX_AUDIO_RETRIES) {
           audioRetries++;
           const delay = Math.min(1000 * audioRetries, 8000);
