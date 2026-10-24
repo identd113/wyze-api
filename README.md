@@ -5,6 +5,8 @@
 [![GitHub last commit](https://img.shields.io/github/last-commit/jfarmer08/wyze-api)](https://github.com/jfarmer08/wyze-api)
 
 
+> **`next` channel:** `npm install wyze-api@next` installs 2.1.0-next.1, which has 2FA/TOTP login, Cam Pan v4 and Bulb Cam, the camera streaming fixes and the Wyze Cam Doorbell v2. It needs Node.js 22 or newer and leaves `latest` and `beta` untouched.
+
 # Funding   [![Donate](https://img.shields.io/badge/Donate-PayPal-blue.svg?style=flat-square&maxAge=2592000)](https://www.paypal.com/paypalme/AllenFarmer) [![Donate](https://img.shields.io/badge/Donate-Venmo-blue.svg?style=flat-square&maxAge=2592000)](https://venmo.com/u/Allen-Farmer) [![Donate](https://img.shields.io/badge/Donate-Cash_App-blue.svg?style=flat-square&maxAge=2592000)](https://cash.app/$Jfamer08)
 
 This is an unofficial Wyze API. This library uses the internal APIs from the Wyze mobile app. A list of all Wyze devices can be retrieved to check the status of Cameras, Senors, Bulbs, Plugs, Locks and more. This API can turn on and off cameras, lightbulbs and plugs and more.

@@ -2,6 +2,10 @@
 
 ## Releases
 
+### v2.1.0-next.1 (npm tag `next`)
+
+The work described under 2.0.0-beta.3 below, published as its own version and tag so it can't be picked up by installs of the 2.0.0 betas: `npm install wyze-api@next`. It is a prerelease of 2.1.0, so ranges such as `^2.0.0-beta.2` do not match it, and `latest` and `beta` are unchanged. Needs Node.js 22 or newer.
+
 ### v2.0.0-beta.3
 
 Consolidates the fork's post-beta.2 fixes onto the 2.0.0 line.
