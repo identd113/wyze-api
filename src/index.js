@@ -543,7 +543,9 @@ module.exports = class WyzeAPI {
    * Logs in with a code generated from `totpSecret`. Never sends a code that is
    * about to expire or was already used for a previous login (Wyze may treat a
    * reused code as a replay), and retries once with the next window's code if
-   * Wyze rejects the first.
+   * Wyze answers without issuing a token. Network errors and API error codes
+   * throw and are not retried here, and neither is a throttled (ok: false)
+   * response.
    */
   async _performTotpLogin(verificationId, secret = normalizeTotpSecret(this.totpSecret)) {
     const now = this._totpNow || (() => Date.now());
@@ -567,6 +569,9 @@ module.exports = class WyzeAPI {
         verification_code: generateTotp(secret, t),
       });
       if (result.ok && result.data?.access_token) return result;
+      // A throttled or otherwise failed request (ok: false) is not a rejected
+      // code: don't spend another code, let the caller's backoff handle it.
+      if (!result.ok) return result;
     }
 
     this.log.warn(
@@ -807,6 +812,7 @@ module.exports = class WyzeAPI {
         // here was throwing ENOENT and the plugin never recovered.
         await fs.mkdir(path.dirname(tokenPath), { recursive: true });
         await fs.writeFile(tokenPath, JSON.stringify(data), { mode: 0o600 }); // Tokens are credentials: owner-only.
+        await fs.chmod(tokenPath, 0o600); // `mode` only applies to a newly created file; fix one saved by an older version.
         return; // Exit if successful.
       } catch (error) {
         attempt += 1;
@@ -871,6 +877,8 @@ module.exports = class WyzeAPI {
     try {
       const data = await fs.readFile(tokenPath); // Read the token file.
       const parsedData = JSON.parse(data); // Parse the token data.
+      // A file saved by an older version may be readable by other users.
+      await fs.chmod(tokenPath, 0o600).catch(() => {});
 
       // Validate the token data structure.
       if (parsedData.access_token && parsedData.refresh_token) {

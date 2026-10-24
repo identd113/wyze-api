@@ -4,6 +4,7 @@ const { spawn } = require("child_process");
 const {
   startRtpForwarding,
   pickFreeUdpPort,
+  closeAllSessions,
   writeSdpFile,
   writeAudioSdpFile,
   resolveFfmpegPath,
@@ -192,6 +193,16 @@ module.exports = {
     return DeviceModels.CAMERA_DEVICEMGMT.includes(deviceModel);
   },
 
+  /** False for cameras that can't be powered on/off through the API (see DeviceModels). */
+  cameraSupportsPowerControl(deviceModel) {
+    return !DeviceModels.CAMERA_NO_POWER_CONTROL.includes(deviceModel);
+  },
+
+  /** True for cameras with a doorbell button. */
+  cameraIsDoorbell(deviceModel) {
+    return DeviceModels.DOORBELL.includes(deviceModel);
+  },
+
   _cameraLightUsesActionApi(deviceModel) {
     return this.cameraUsesDeviceMgmt(deviceModel) || DeviceModels.CAMERA_LIGHT_RUN_ACTION.includes(deviceModel);
   },
@@ -346,6 +357,11 @@ module.exports = {
 
   // ---- Long-lived RTP forwarding (for HomeKit streaming) -------------------
 
+  /** Close every open camera WebRTC session (call on shutdown). */
+  async closeAllCameraSessions() {
+    await closeAllSessions();
+  },
+
   /**
    * Establish a WebRTC connection to the camera and continuously forward
    * incoming H.264 RTP packets to `localRtpPort` on 127.0.0.1.
@@ -364,6 +380,7 @@ module.exports = {
       localAudioRtpPort,
       onVideoIdle,
       videoIdleMs,
+      sessionKey: deviceMac, // one WebRTC session per camera
       logger: this.apiLogEnabled ? this.log : null,
     });
   },
@@ -411,6 +428,9 @@ module.exports = {
 
     const MAX_RETRIES = 3;
     const MAX_AUDIO_RETRIES = 3;
+    // An audio process that ran this long without a single audio packet means the camera
+    // sends none (microphone off), not that ffmpeg failed.
+    const AUDIO_SILENCE_MIN_MS = 15_000;
     let stopped = false;
     let retries = 0;
     let audioRetries = 0;
@@ -422,6 +442,7 @@ module.exports = {
     let videoSdpPath = null;
     let audioSdpPath = null;
     let keepaliveTimer = null;
+    let dead = false;
 
     const cleanup = () => {
       if (keepaliveTimer) { clearInterval(keepaliveTimer); keepaliveTimer = null; }
@@ -439,7 +460,8 @@ module.exports = {
     // independent of WebRTC — we only need to relaunch ffmpeg.
     const spawnAudio = () => {
       if (!(localAudioRtpPort && audioPort && audioSrtpKey && audioSrtpSalt)) return;
-      audioSdpPath = writeAudioSdpFile(localAudioRtpPort);
+      audioSdpPath = writeAudioSdpFile(localAudioRtpPort, forwarder?.audioCodec ?? null);
+      const audioStartedAt = Date.now();
       const audioSrtpParams = Buffer.concat([audioSrtpKey, audioSrtpSalt]).toString("base64");
 
       audioFfmpeg = spawn(resolveFfmpegPath(), [
@@ -472,6 +494,13 @@ module.exports = {
         try { if (audioSdpPath) fs.unlinkSync(audioSdpPath); } catch (_) {}
         audioFfmpeg = null;
         audioSdpPath = null;
+        // A camera that negotiates audio but never sends any (microphone off in
+        // the Wyze app) isn't a failure to retry: carry on with video only.
+        // (A process that died almost at once failed for another reason: retry it.)
+        if (forwarder?.audioSeen && !forwarder.audioSeen() && Date.now() - audioStartedAt >= AUDIO_SILENCE_MIN_MS) {
+          log("debug", "[stream] camera sent no audio (microphone off?) — continuing video-only");
+          return;
+        }
         if (audioRetries < MAX_AUDIO_RETRIES) {
           audioRetries++;
           const delay = Math.min(1000 * audioRetries, 8000);
@@ -493,6 +522,13 @@ module.exports = {
         try { videoFfmpeg?.kill("SIGKILL"); } catch (_) {}
       };
 
+      // Fresh local ports for every attempt. The ones picked when HomeKit prepared
+      // the stream can have been taken since (several WebRTC sessions open sockets
+      // at once), and retrying on the same number would fail the same way every time.
+      localRtpPort = await pickFreeUdpPort();
+      if (localAudioRtpPort) localAudioRtpPort = await pickFreeUdpPort();
+      if (stopped) return;
+
       forwarder = await this.cameraStartRtpForwarding(
         deviceMac, deviceModel, localRtpPort,
         {
@@ -502,9 +538,16 @@ module.exports = {
         }
       );
 
+      // stop() may have been called while this (re)connect was negotiating: close
+      // the forwarder we just got instead of starting ffmpeg for a dead stream.
+      if (stopped) {
+        try { forwarder.stop(); } catch (_) {}
+        return;
+      }
+
       // Video stream — bake the camera's SPS/PPS into the SDP so FFmpeg can
       // decode the very first IDR slice without waiting for in-band params.
-      videoSdpPath = writeSdpFile(localRtpPort, forwarder.spropParameterSets);
+      videoSdpPath = writeSdpFile(localRtpPort, forwarder.spropParameterSets, forwarder.videoPayloadType);
       const videoSrtpParams = Buffer.concat([srtpKey, srtpSalt]).toString("base64");
 
       videoFfmpeg = spawn(resolveFfmpegPath(), [
@@ -558,6 +601,10 @@ module.exports = {
         if (stopped) return;
         log("warn", `[stream] FFmpeg/video exited (${code})`);
         cleanup();
+        if (retries >= MAX_RETRIES) {
+          dead = true;
+          log("warn", "[stream] Retry budget exhausted — video stream ended");
+        }
         if (retries < MAX_RETRIES) {
           retries++;
           const delay = Math.min(1000 * retries, 8000);
@@ -579,6 +626,9 @@ module.exports = {
         stopped = true;
         cleanup();
       },
+      // False once stopped, or once reconnecting has given up: nothing is streaming
+      // any more, even if the caller never gets a stop request.
+      isAlive: () => !stopped && !dead,
     };
   },
 

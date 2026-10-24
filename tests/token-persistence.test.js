@@ -192,3 +192,28 @@ test("_isTransientError classifies network errors, 5xx and wrapped causes; not W
   assert.strictEqual(w._isTransientError(new Error("Failed to refresh access token - {\"ok\":false}")), false);
   assert.strictEqual(w._isTransientError(Object.assign(new Error("x"), { response: { status: 401 } })), false);
 });
+
+test("a token file saved by an older version with loose permissions is tightened to owner-only", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "wyze-perm-"));
+  try {
+    const WyzeAPI = require("../src/index");
+    const w = Object.create(WyzeAPI.prototype);
+    w.log = { info: () => {}, debug: () => {}, warn: () => {}, error: () => {} };
+    w.persistPath = dir;
+    w.username = "u@example.com";
+    const tokenPath = w._tokenPersistPath();
+    await fs.writeFile(tokenPath, JSON.stringify({ access_token: "a", refresh_token: "r" }), { mode: 0o644 });
+    await fs.chmod(tokenPath, 0o644);
+    await w._loadPersistedTokens();
+    assert.strictEqual((await fs.stat(tokenPath)).mode & 0o777, 0o600);
+    assert.strictEqual(w.access_token, "a");
+
+    // and rewriting an existing loose file also tightens it
+    await fs.chmod(tokenPath, 0o644);
+    w.access_token = "a2"; w.refresh_token = "r2";
+    await w._persistTokens();
+    assert.strictEqual((await fs.stat(tokenPath)).mode & 0o777, 0o600);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});

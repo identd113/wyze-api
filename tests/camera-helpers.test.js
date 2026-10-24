@@ -134,3 +134,29 @@ test("device-info accessors", async (t) => {
     );
   });
 });
+
+test("each stream (re)connect attempt uses fresh local ports, not the pre-picked ones", async () => {
+  const WyzeAPI = require("../src/index");
+  const w = Object.create(WyzeAPI.prototype);
+  w.log = { info: () => {}, debug: () => {}, warn: () => {}, error: () => {} };
+  const used = [];
+  w.cameraStartRtpForwarding = async (mac, model, rtpPort, options) => {
+    used.push([rtpPort, options.localAudioRtpPort]);
+    throw new Error("stop here"); // we only care which ports the attempt asked for
+  };
+  await assert.rejects(() => w.startCameraHKStream("MAC", "HL_DB2", {
+    localRtpPort: 1111,
+    localAudioRtpPort: 2222,
+    targetAddress: "127.0.0.1",
+    videoPort: 3333,
+    rtcpPort: 3334,
+    srtpKey: Buffer.alloc(16),
+    srtpSalt: Buffer.alloc(14),
+    videoSsrc: 1,
+  }), /stop here/);
+  assert.strictEqual(used.length, 1);
+  assert.notStrictEqual(used[0][0], 1111);
+  assert.notStrictEqual(used[0][1], 2222);
+  assert.ok(used[0][0] > 1024 && used[0][1] > 1024);
+  assert.ok(Math.abs(used[0][0] - used[0][1]) > 1, "video and audio ports must not be adjacent");
+});

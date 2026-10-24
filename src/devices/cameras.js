@@ -2,6 +2,10 @@ const axios = require("axios");
 const crypto = require("../utils/crypto");
 const constants = require("../constants");
 const cameraStreamCapture = require("./cameraStreamCapture");
+const { EventAlarmType } = require("../types");
+
+// `sv` the Wyze app sends with app/v2/device/get_event_list (from wyze-sdk).
+const SV_GET_EVENT_LIST = "bdcb412e230049c0be0916e75022d3f3";
 
 /**
  * Wyze Cameras — controls (power, siren, lights, motion, notifications,
@@ -125,11 +129,15 @@ module.exports = {
       // Cameras in WebRTC-only mode report iot-state=0 but still return a valid
       // signaling URL. Only block if there's genuinely no way to reach the camera.
       const hasSignalingUrl = typeof entry.params?.signaling_url === "string" && entry.params.signaling_url.length > 0;
+      // Only the capability map goes in the messages: the rest of the entry holds
+      // the signed signaling URL and auth token, which must not reach logs.
       if (entry.property["iot-device::iot-state"] !== 1 && !hasSignalingUrl) {
-        throw new Error(`Camera is offline: ${JSON.stringify(entry)}`);
+        throw new Error(`Camera is offline: ${JSON.stringify(entry.property)}`);
       }
-      if (entry.property["iot-device::iot-power"] !== 1) {
-        throw new Error(`Camera is off: ${JSON.stringify(entry)}`);
+      // Some models (Doorbell v2) don't report iot-power at all; only an explicit
+      // 0 means the camera is off.
+      if (entry.property["iot-device::iot-power"] === 0) {
+        throw new Error(`Camera is off: ${JSON.stringify(entry.property)}`);
       }
       return entry.params;
     } catch (error) {
@@ -139,6 +147,45 @@ module.exports = {
       }
       throw error;
     }
+  },
+
+  // ---- Cloud events (motion, sound, doorbell rang) --------------------------
+
+  /**
+   * Recent events for a camera from the cloud event list, newest first:
+   * `{ id, time, value, type, tags, params }`. `type` is the EventAlarmType name
+   * ("MOTION", "DOORBELL_RANG", ...). Events change after they appear (a doorbell
+   * press starts as MOTION and is flipped to DOORBELL_RANG, AI tags arrive a few
+   * seconds late), so compare by `id` on every call. Read-only.
+   * @param {string} deviceMac
+   * @param {{ sinceMs?: number, count?: number }} [options] look-back window (default 5 min) and max events (1-20)
+   */
+  async cameraGetEvents(deviceMac, { sinceMs = 5 * 60_000, count = 20 } = {}) {
+    const now = Date.now();
+    const result = await this.request("app/v2/device/get_event_list", {
+      device_mac_list: [deviceMac],
+      event_value_list: [],
+      event_tag_list: [],
+      event_type: "1",
+      order_by: 2,
+      count: Math.min(Math.max(count, 1), 20),
+      begin_time: now - sinceMs,
+      end_time: now + 60_000,
+      sv: SV_GET_EVENT_LIST,
+    });
+    const events = result?.data?.data?.event_list ?? [];
+    return events.map((e) => {
+      const value = Number(e.event_value);
+      const type = Object.keys(EventAlarmType).find((name) => EventAlarmType[name].includes(value)) ?? null;
+      return {
+        id: e.event_id,
+        time: Number(e.event_ts),
+        value,
+        type,
+        tags: Array.isArray(e.tag_list) ? e.tag_list : [],
+        params: e.event_params ?? {},
+      };
+    });
   },
 
   // ---- Snapshot capture (headless WebRTC) ---------------------------------
@@ -166,6 +213,7 @@ module.exports = {
       iceServers: conn.iceServers,
       logger: this.apiLogEnabled ? this.log : null,
       timeoutMs,
+      sessionKey: deviceMac, // one WebRTC session per camera
     });
 
     if (!noCache) {
