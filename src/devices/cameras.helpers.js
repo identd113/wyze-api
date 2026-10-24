@@ -4,6 +4,7 @@ const { spawn } = require("child_process");
 const {
   startRtpForwarding,
   pickFreeUdpPort,
+  closeAllSessions,
   writeSdpFile,
   writeAudioSdpFile,
   resolveFfmpegPath,
@@ -346,6 +347,11 @@ module.exports = {
 
   // ---- Long-lived RTP forwarding (for HomeKit streaming) -------------------
 
+  /** Close every open camera WebRTC session (call on shutdown). */
+  async closeAllCameraSessions() {
+    await closeAllSessions();
+  },
+
   /**
    * Establish a WebRTC connection to the camera and continuously forward
    * incoming H.264 RTP packets to `localRtpPort` on 127.0.0.1.
@@ -364,6 +370,7 @@ module.exports = {
       localAudioRtpPort,
       onVideoIdle,
       videoIdleMs,
+      sessionKey: deviceMac, // one WebRTC session per camera
       logger: this.apiLogEnabled ? this.log : null,
     });
   },

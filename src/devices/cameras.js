@@ -170,6 +170,7 @@ module.exports = {
       iceServers: conn.iceServers,
       logger: this.apiLogEnabled ? this.log : null,
       timeoutMs,
+      sessionKey: deviceMac, // one WebRTC session per camera
     });
 
     if (!noCache) {

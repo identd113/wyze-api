@@ -98,6 +98,69 @@ async function pickFreeUdpPort() {
   throw new Error("could not find a free local UDP port pair for ffmpeg");
 }
 
+// ---- One WebRTC session per camera, closed cleanly ----------------------------
+//
+// Wyze cameras (the Doorbell v2 at least) serve a single viewer. A session that
+// is closed abruptly, or a new one opened while the old is still closing, leaves
+// the camera answering nothing. So: at most one session per camera, a new one
+// waits until the previous is fully closed, and a live stream is never
+// preempted by a snapshot capture.
+const _sessions = new Map(); // key → { kind, close(), done, closing }
+const SESSION_SETTLE_MS = 750; // let the camera notice the old viewer is gone
+const PEER_CLOSE_TIMEOUT_MS = 3000;
+const _sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** Close the peer connection first (DTLS goodbye), wait for it, then signaling. */
+async function _closePeer(pc, ws) {
+  try {
+    if (pc) await Promise.race([Promise.resolve(pc.close()), _sleep(PEER_CLOSE_TIMEOUT_MS)]);
+  } catch (_) { /* already closed */ }
+  try { ws?.close(); } catch (_) {}
+}
+
+/**
+ * Claim the camera's single session slot. Resolves to `release()`, which the
+ * caller must call once its session is completely closed. `close` is how this
+ * session is torn down when something else needs the slot.
+ */
+async function _claimSession(key, kind, close) {
+  if (!key) return () => {};
+  let waited = false;
+  for (;;) {
+    const cur = _sessions.get(key);
+    if (!cur) break;
+    waited = true;
+    if (kind === "capture" && cur.kind === "stream" && !cur.closing) {
+      throw new Error("camera has a live stream open");
+    }
+    // A stream replaces whatever is open; a capture waits for another capture.
+    if (kind === "stream" && !cur.closing) {
+      cur.closing = true;
+      Promise.resolve(cur.close()).catch(() => {});
+    }
+    await cur.done;
+  }
+  if (waited) await _sleep(SESSION_SETTLE_MS);
+  let release;
+  const done = new Promise((r) => { release = r; });
+  const entry = { kind, close, done, closing: false };
+  _sessions.set(key, entry);
+  return () => {
+    if (_sessions.get(key) === entry) _sessions.delete(key);
+    release();
+  };
+}
+
+/** Close every open session (used on shutdown). */
+async function closeAllSessions() {
+  const open = [..._sessions.values()];
+  await Promise.all(open.map(async (entry) => {
+    entry.closing = true;
+    try { await entry.close(); } catch (_) {}
+    await Promise.race([entry.done, _sleep(PEER_CLOSE_TIMEOUT_MS + 1000)]);
+  }));
+}
+
 function writeSdpFile(rtpPort, spropParameterSets = null) {
   // sprop-parameter-sets gives FFmpeg the H.264 SPS/PPS up front. Without it,
   // FFmpeg has to wait for in-band parameter sets — and Wyze cameras often
@@ -264,13 +327,12 @@ async function captureStreamFrame({
   iceServers,
   logger = null,
   timeoutMs = 20_000,
+  sessionKey = null,
 }) {
   const log = (level, msg) => {
     if (!logger) return;
     if (typeof logger[level] === "function") logger[level](`[capture] ${msg}`);
   };
-
-  const rtpPort = await pickFreeUdpPort();
 
   let sdpPath = null;
   let ffmpeg = null;
@@ -279,17 +341,23 @@ async function captureStreamFrame({
   let fwdSock = null;
   let fallbackTimer = null;
   let pliTimer = null;
+  let closed = null;
   const cleanup = () => {
+    if (closed) return closed;
     clearTimeout(fallbackTimer);
     clearInterval(pliTimer);
-    try { ws?.close(); } catch (_) {}
-    try { pc?.close(); } catch (_) {}
     try { fwdSock?.close(); } catch (_) {}
     try { ffmpeg?.kill("SIGKILL"); } catch (_) {}
     try { if (sdpPath) fs.unlinkSync(sdpPath); } catch (_) {}
+    closed = _closePeer(pc, ws);
+    return closed;
   };
 
+  const release = await _claimSession(sessionKey, "capture", cleanup);
+  let rtpPort;
+
   try {
+    rtpPort = await pickFreeUdpPort();
     fwdSock = dgram.createSocket("udp4");
 
     const stdoutChunks = [];
@@ -446,7 +514,7 @@ async function captureStreamFrame({
     log("debug", `captured ${buffer.length} bytes`);
     return buffer;
   } finally {
-    cleanup();
+    try { await cleanup(); } finally { release(); }
   }
 }
 
@@ -465,7 +533,7 @@ async function captureStreamFrame({
  * @param {number} [params.timeoutMs=15000] — signaling negotiation timeout
  * @returns {Promise<{stop:Function}>}
  */
-async function startRtpForwarding({
+async function _startRtpForwarding({
   signalingUrl,
   iceServers,
   localRtpPort,
@@ -474,7 +542,7 @@ async function startRtpForwarding({
   timeoutMs = 15_000,
   onVideoIdle = null,
   videoIdleMs = 10_000,
-}) {
+}, session) {
   const log = (level, msg) => {
     if (!logger) return;
     if (typeof logger[level] === "function") logger[level](`[stream] ${msg}`);
@@ -498,6 +566,24 @@ async function startRtpForwarding({
   let lastVideoRtpAt = 0;
   let idleWatchdog = null;
   let idleFired = false;
+
+  // Everything this forwarder holds is closed through here, whether it stops
+  // normally, fails to negotiate, or is preempted: peer connection first
+  // (awaited), then signaling, then the local sockets.
+  let ws = null;
+  let closing = null;
+  const closeEverything = () => {
+    if (closing) return closing;
+    log("debug", "stopping RTP forwarding");
+    if (pliTimer) { clearInterval(pliTimer); pliTimer = null; }
+    if (idleWatchdog) { clearInterval(idleWatchdog); idleWatchdog = null; }
+    closing = _closePeer(pc, ws).finally(() => {
+      try { videoSock.close(); } catch (_) {}
+      try { audioSock?.close(); } catch (_) {}
+    });
+    return closing;
+  };
+  session.close = closeEverything;
 
   // Resolves with `<base64Sps>,<base64Pps>` once both NALs are seen in RTP.
   let capturedSps = null;
@@ -551,7 +637,7 @@ async function startRtpForwarding({
     }
   });
 
-  const ws = new WebSocket(signalingUrl);
+  ws = new WebSocket(signalingUrl);
 
   const negotiated = new Promise((resolve, reject) => {
     const onMsg = async (raw) => {
@@ -641,22 +727,39 @@ async function startRtpForwarding({
     }, Math.min(2000, videoIdleMs)).unref();
   }
 
-  const stop = () => {
-    log("debug", "stopping RTP forwarding");
-    if (pliTimer) { clearInterval(pliTimer); pliTimer = null; }
-    if (idleWatchdog) { clearInterval(idleWatchdog); idleWatchdog = null; }
-    try { ws.close(); } catch (_) {}
-    try { pc.close(); } catch (_) {}
-    try { videoSock.close(); } catch (_) {}
-    try { audioSock?.close(); } catch (_) {}
-  };
+  const stop = () => closeEverything();
 
   return { stop, spropParameterSets, requestKeyframe };
+}
+
+/**
+ * Public entry: claims the camera's single session slot (waiting for any
+ * previous session to finish closing), runs the forwarder, and guarantees the
+ * session is closed and the slot released on every exit path. `sessionKey` is
+ * normally the camera's MAC.
+ */
+async function startRtpForwarding(params) {
+  const session = { close: null };
+  let release = () => {};
+  const closeAndRelease = async () => {
+    try { if (session.close) await session.close(); } finally { release(); }
+  };
+  release = await _claimSession(params.sessionKey, "stream", closeAndRelease);
+  try {
+    const handle = await _startRtpForwarding(params, session);
+    return { ...handle, stop: closeAndRelease };
+  } catch (err) {
+    await closeAndRelease().catch(() => {});
+    throw err;
+  }
 }
 
 module.exports = {
   captureStreamFrame,
   startRtpForwarding,
+  closeAllSessions,
+  _claimSession, // exported for tests
+  _closePeer, // exported for tests
   pickFreeUdpPort,
   writeSdpFile,
   writeAudioSdpFile,
