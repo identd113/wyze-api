@@ -168,6 +168,13 @@ function _extractH264Nals(payload) {
   return [];
 }
 
+// captureStreamFrame: how long to let a freshly started ffmpeg bind its UDP
+// port before replaying held RTP, how long to wait for SPS/PPS before giving
+// up on them, and a cap on held packets.
+const FFMPEG_BIND_MS = 300;
+const SPROP_WAIT_MS = 5000;
+const MAX_HELD_PACKETS = 5000;
+
 function _spawnFfmpeg(sdpPath) {
   return spawn(resolveFfmpegPath(), [
     "-loglevel", "error",
@@ -237,49 +244,85 @@ async function captureStreamFrame({
   };
 
   const rtpPort = await pickFreeUdpPort();
-  const sdpPath = writeSdpFile(rtpPort);
 
+  let sdpPath = null;
   let ffmpeg = null;
   let pc = null;
   let ws = null;
   let fwdSock = null;
+  let fallbackTimer = null;
+  let pliTimer = null;
   const cleanup = () => {
+    clearTimeout(fallbackTimer);
+    clearInterval(pliTimer);
     try { ws?.close(); } catch (_) {}
     try { pc?.close(); } catch (_) {}
     try { fwdSock?.close(); } catch (_) {}
     try { ffmpeg?.kill("SIGKILL"); } catch (_) {}
-    try { fs.unlinkSync(sdpPath); } catch (_) {}
+    try { if (sdpPath) fs.unlinkSync(sdpPath); } catch (_) {}
   };
 
   try {
-    ffmpeg = _spawnFfmpeg(sdpPath);
     fwdSock = dgram.createSocket("udp4");
 
     const stdoutChunks = [];
     const stderrChunks = [];
-    ffmpeg.stdout.on("data", (chunk) => stdoutChunks.push(chunk));
-    ffmpeg.stderr.on("data", (chunk) => stderrChunks.push(chunk));
+    let settleOutcome;
+    const ffmpegOutcome = new Promise((resolve, reject) => { settleOutcome = { resolve, reject }; });
+    ffmpegOutcome.catch(() => {}); // may reject before anything is awaiting it
 
-    // Attach error/close handlers immediately so spawn failures (ENOENT,
-    // crashes) reject the outcome promise instead of going unhandled and
-    // crashing the Node process.
-    const ffmpegOutcome = new Promise((resolve, reject) => {
+    // ffmpeg can only decode once it has the camera's SPS/PPS, and Wyze cameras
+    // often don't repeat them in RTP: an ffmpeg started without them fails with
+    // "non-existing PPS 0 referenced" until the timeout. So hold the RTP until
+    // they're known, start ffmpeg with them baked into its SDP, then replay.
+    const held = [];
+    let started = false;
+    let replayed = false;
+    let capturedSps = null;
+    let capturedPps = null;
+    let videoReceiver = null;
+    let videoSsrc = null;
+    const forward = (buf) => {
+      try { fwdSock.send(buf, rtpPort, "127.0.0.1"); } catch (_) { /* socket may be closed */ }
+    };
+    const requestKeyframe = () => {
+      if (videoReceiver && videoSsrc) videoReceiver.sendRtcpPLI(videoSsrc).catch(() => {});
+    };
+    const startFfmpeg = (sprop) => {
+      if (started) return;
+      started = true;
+      clearTimeout(fallbackTimer);
+      log("debug", sprop ? "starting ffmpeg with sprop-parameter-sets" : "starting ffmpeg without sprop-parameter-sets");
+      sdpPath = writeSdpFile(rtpPort, sprop);
+      ffmpeg = _spawnFfmpeg(sdpPath);
+      ffmpeg.stdout.on("data", (chunk) => stdoutChunks.push(chunk));
+      ffmpeg.stderr.on("data", (chunk) => stderrChunks.push(chunk));
+      // Attach error/close handlers immediately so spawn failures (ENOENT,
+      // crashes) reject the outcome promise instead of going unhandled and
+      // crashing the Node process.
       ffmpeg.once("error", (err) => {
         if (err && err.code === "ENOENT") {
-          reject(new Error(
+          settleOutcome.reject(new Error(
             `ffmpeg binary not found (tried: ${resolveFfmpegPath()}). ` +
             "Re-run `npm install` to fetch the bundled ffmpeg via ffmpeg-static, " +
             "or install ffmpeg on your system PATH if your platform isn't supported."
           ));
         } else {
-          reject(err);
+          settleOutcome.reject(err);
         }
       });
       ffmpeg.once("close", (code) => {
-        if (stdoutChunks.length > 0) resolve(Buffer.concat(stdoutChunks));
-        else reject(new Error(`ffmpeg exited (${code}) without producing a frame: ${Buffer.concat(stderrChunks).toString()}`));
+        if (stdoutChunks.length > 0) settleOutcome.resolve(Buffer.concat(stdoutChunks));
+        else settleOutcome.reject(new Error(`ffmpeg exited (${code}) without producing a frame: ${Buffer.concat(stderrChunks).toString()}`));
       });
-    });
+      // Let ffmpeg bind its UDP port before replaying what was held, then ask
+      // the camera for a fresh keyframe in case the first one was missed.
+      setTimeout(() => {
+        replayed = true;
+        held.splice(0).forEach(forward);
+        requestKeyframe();
+      }, FFMPEG_BIND_MS);
+    };
 
     pc = new RTCPeerConnection({
       iceServers,
@@ -289,10 +332,30 @@ async function captureStreamFrame({
 
     pc.onTrack.subscribe((track) => {
       log("debug", `track received kind=${track.kind} codec=${track.codec?.name}`);
+      videoReceiver = pc.getReceivers().find((r) => r.kind === "video") ?? null;
+      videoSsrc = track.ssrc;
+      // Some firmwares send P-frames first and ignore the first PLI or two, so
+      // keep asking until we have the SPS/PPS ffmpeg needs.
+      requestKeyframe();
+      pliTimer = setInterval(() => {
+        if (started) clearInterval(pliTimer);
+        else requestKeyframe();
+      }, 500);
       track.onReceiveRtp.subscribe((rtp) => {
-        try {
-          fwdSock.send(rtp.serialize(), rtpPort, "127.0.0.1");
-        } catch (_) { /* socket may be closed */ }
+        const buf = rtp.serialize();
+        if (replayed) return forward(buf);
+        if (held.length < MAX_HELD_PACKETS) held.push(buf);
+        if (!started && (!capturedSps || !capturedPps)) {
+          for (const nal of _extractH264Nals(rtp.payload)) {
+            const t = nal[0] & 0x1f;
+            if (t === 7 && !capturedSps) capturedSps = nal;
+            else if (t === 8 && !capturedPps) capturedPps = nal;
+          }
+          if (capturedSps && capturedPps) {
+            log("debug", "captured SPS/PPS from RTP");
+            startFfmpeg(`${capturedSps.toString("base64")},${capturedPps.toString("base64")}`);
+          }
+        }
       });
     });
 
@@ -343,6 +406,15 @@ async function captureStreamFrame({
 
     await Promise.race([remoteAnswered, ffmpegOutcome, timeout]);
     log("debug", "WebRTC negotiation complete, waiting for frame");
+    const answerSprop = extractSpropParameterSets(pc.remoteDescription?.sdp ?? null);
+    if (answerSprop) {
+      log("debug", "extracted sprop-parameter-sets from answer SDP");
+      startFfmpeg(answerSprop);
+    } else {
+      // No parameter sets in the SDP: wait for them to appear in the RTP, but
+      // not forever (an ffmpeg started without them is still our last resort).
+      fallbackTimer = setTimeout(() => startFfmpeg(null), SPROP_WAIT_MS);
+    }
     const buffer = await Promise.race([ffmpegOutcome, timeout]);
     log("debug", `captured ${buffer.length} bytes`);
     return buffer;
