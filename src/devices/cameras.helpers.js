@@ -52,18 +52,41 @@ module.exports = {
     await this.runAction(deviceMac, deviceModel, "siren_off");
   },
 
-  async cameraFloodLightOn(deviceMac, deviceModel) {
+  // Models whose integrated light is exposed as a "spotlight" capability on
+  // the devicemgmt API (everything else on that API uses "floodlight").
+  // Mirrors SecKatie/wyzeapy CameraService.floodlight_on/off.
+  async _cameraLightSet(deviceMac, deviceModel, on) {
     if (DeviceModels.CAMERA_DEVICEMGMT.includes(deviceModel)) {
-      return this._deviceMgmtRunAction(deviceMac, deviceModel, "floodlight", "1");
+      const type = DeviceModels.CAMERA_DEVICEMGMT_SPOTLIGHT.includes(deviceModel) ? "spotlight" : "floodlight";
+      return this._deviceMgmtRunAction(deviceMac, deviceModel, type, on ? "1" : "0");
     }
-    await this.setProperty(deviceMac, deviceModel, PIDs.CAMERA_FLOOD_LIGHT, PVals.CAMERA_FLOOD_LIGHT.ON);
+    if (DeviceModels.CAMERA_LIGHT_RUN_ACTION.includes(deviceModel)) {
+      // Bulb Cam: P1056 can be read but not written - the light is driven by run_action.
+      return this.runAction(deviceMac, deviceModel, on ? "floodlight_on" : "floodlight_off");
+    }
+    await this.setProperty(
+      deviceMac,
+      deviceModel,
+      PIDs.CAMERA_FLOOD_LIGHT,
+      on ? PVals.CAMERA_FLOOD_LIGHT.ON : PVals.CAMERA_FLOOD_LIGHT.OFF
+    );
+  },
+
+  async cameraFloodLightOn(deviceMac, deviceModel) {
+    return this._cameraLightSet(deviceMac, deviceModel, true);
   },
 
   async cameraFloodLightOff(deviceMac, deviceModel) {
-    if (DeviceModels.CAMERA_DEVICEMGMT.includes(deviceModel)) {
-      return this._deviceMgmtRunAction(deviceMac, deviceModel, "floodlight", "0");
-    }
-    await this.setProperty(deviceMac, deviceModel, PIDs.CAMERA_FLOOD_LIGHT, PVals.CAMERA_FLOOD_LIGHT.OFF);
+    return this._cameraLightSet(deviceMac, deviceModel, false);
+  },
+
+  /**
+   * Current state of a devicemgmt-API camera as
+   * { motion, floodlight, siren, notify, on, available }.
+   */
+  async cameraGetDeviceMgmtState(deviceMac, deviceModel) {
+    const response = await this._deviceMgmtGetIotProp(deviceMac, deviceModel);
+    return this._deviceMgmtParseState(response);
   },
 
   async cameraMotionOn(deviceMac, deviceModel) {
@@ -118,7 +141,15 @@ module.exports = {
 
   // ---- Thin-wrapper controls -----------------------------------------------
 
+  // Raw-value entry points ("power_on" / "siren_on" / "1" ...). Cameras on the
+  // devicemgmt API don't answer run_action/set_property, so they are routed to
+  // the model-aware On/Off methods; all other models keep the original behavior.
   async cameraPrivacy(deviceMac, deviceModel, value) {
+    if (this.cameraUsesDeviceMgmt(deviceModel)) {
+      return value === "power_on"
+        ? this.cameraTurnOn(deviceMac, deviceModel)
+        : this.cameraTurnOff(deviceMac, deviceModel);
+    }
     await this.runAction(deviceMac, deviceModel, value);
   },
 
@@ -134,23 +165,43 @@ module.exports = {
   },
 
   async cameraSiren(deviceMac, deviceModel, value) {
+    if (this.cameraUsesDeviceMgmt(deviceModel)) {
+      return value === "siren_on"
+        ? this.cameraSirenOn(deviceMac, deviceModel)
+        : this.cameraSirenOff(deviceMac, deviceModel);
+    }
     await this.runAction(deviceMac, deviceModel, value);
   },
 
+  // Raw-value entry points (value is the P1056 value: "1" on, "2" off). Models
+  // that don't accept P1056 writes (devicemgmt cameras, Bulb Cam) are routed
+  // through _cameraLightSet; everything else keeps the original behavior.
   async cameraFloodLight(deviceMac, deviceModel, value) {
+    if (this._cameraLightUsesActionApi(deviceModel)) {
+      return this._cameraLightSet(deviceMac, deviceModel, String(value) === "1");
+    }
     await this.setProperty(deviceMac, deviceModel, PIDs.CAMERA_FLOOD_LIGHT, value);
   },
 
   async cameraSpotLight(deviceMac, deviceModel, value) {
-    await this.setProperty(deviceMac, deviceModel, PIDs.CAMERA_FLOOD_LIGHT, value);
+    return this.cameraFloodLight(deviceMac, deviceModel, value);
+  },
+
+  /** True for cameras controlled and read through the devicemgmt API. */
+  cameraUsesDeviceMgmt(deviceModel) {
+    return DeviceModels.CAMERA_DEVICEMGMT.includes(deviceModel);
+  },
+
+  _cameraLightUsesActionApi(deviceModel) {
+    return this.cameraUsesDeviceMgmt(deviceModel) || DeviceModels.CAMERA_LIGHT_RUN_ACTION.includes(deviceModel);
   },
 
   async cameraSpotLightOn(deviceMac, deviceModel) {
-    await this.setProperty(deviceMac, deviceModel, PIDs.CAMERA_FLOOD_LIGHT, PVals.CAMERA_FLOOD_LIGHT.ON);
+    return this._cameraLightSet(deviceMac, deviceModel, true);
   },
 
   async cameraSpotLightOff(deviceMac, deviceModel) {
-    await this.setProperty(deviceMac, deviceModel, PIDs.CAMERA_FLOOD_LIGHT, PVals.CAMERA_FLOOD_LIGHT.OFF);
+    return this._cameraLightSet(deviceMac, deviceModel, false);
   },
 
   async cameraSoundNotificationOn(deviceMac, deviceModel) {
@@ -162,6 +213,11 @@ module.exports = {
   },
 
   async cameraNotifications(deviceMac, deviceModel, value) {
+    if (this.cameraUsesDeviceMgmt(deviceModel)) {
+      return String(value) === "1"
+        ? this.cameraNotificationsOn(deviceMac, deviceModel)
+        : this.cameraNotificationsOff(deviceMac, deviceModel);
+    }
     await this.setProperty(deviceMac, deviceModel, PIDs.NOTIFICATION, value);
   },
 
