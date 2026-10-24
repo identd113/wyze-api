@@ -60,15 +60,42 @@ function resolveFfmpegPath() {
   return _ffmpegBinaryPath;
 }
 
+// Ports handed out recently. A port is only held by us for the instant we probe
+// it; ffmpeg binds it later (a capture waits for the camera's SPS/PPS first, a
+// live stream is set up by HomeKit seconds before it starts), so remember what
+// we gave out or two requests can be handed the same number.
+const _reservedUdpPorts = new Set();
+const UDP_PORT_RESERVE_MS = 120_000;
+
+const _bindUdp = (port) => new Promise((resolve) => {
+  const sock = dgram.createSocket("udp4");
+  sock.once("error", () => { try { sock.close(); } catch (_) {} resolve(null); });
+  sock.bind(port, "127.0.0.1", () => resolve(sock));
+});
+const _closeUdp = (sock) => new Promise((resolve) => sock.close(() => resolve()));
+
+/**
+ * Pick a local UDP port for ffmpeg's RTP input. ffmpeg also binds the next port
+ * up for RTCP, so both must be free, and neither may belong to another stream.
+ */
 async function pickFreeUdpPort() {
-  return new Promise((resolve, reject) => {
-    const sock = dgram.createSocket("udp4");
-    sock.once("error", reject);
-    sock.bind(0, "127.0.0.1", () => {
-      const { port } = sock.address();
-      sock.close(() => resolve(port));
-    });
-  });
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    const rtp = await _bindUdp(0);
+    if (!rtp) continue;
+    const port = rtp.address().port;
+    const rtcp = _reservedUdpPorts.has(port) || _reservedUdpPorts.has(port + 1) || _reservedUdpPorts.has(port - 1)
+      ? null
+      : await _bindUdp(port + 1);
+    await _closeUdp(rtp);
+    if (!rtcp) continue;
+    await _closeUdp(rtcp);
+    for (const reserved of [port - 1, port, port + 1]) {
+      _reservedUdpPorts.add(reserved);
+      setTimeout(() => _reservedUdpPorts.delete(reserved), UDP_PORT_RESERVE_MS).unref();
+    }
+    return port;
+  }
+  throw new Error("could not find a free local UDP port pair for ffmpeg");
 }
 
 function writeSdpFile(rtpPort, spropParameterSets = null) {
