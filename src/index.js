@@ -543,7 +543,9 @@ module.exports = class WyzeAPI {
    * Logs in with a code generated from `totpSecret`. Never sends a code that is
    * about to expire or was already used for a previous login (Wyze may treat a
    * reused code as a replay), and retries once with the next window's code if
-   * Wyze rejects the first.
+   * Wyze answers without issuing a token. Network errors and API error codes
+   * throw and are not retried here, and neither is a throttled (ok: false)
+   * response.
    */
   async _performTotpLogin(verificationId, secret = normalizeTotpSecret(this.totpSecret)) {
     const now = this._totpNow || (() => Date.now());
@@ -567,6 +569,9 @@ module.exports = class WyzeAPI {
         verification_code: generateTotp(secret, t),
       });
       if (result.ok && result.data?.access_token) return result;
+      // A throttled or otherwise failed request (ok: false) is not a rejected
+      // code: don't spend another code, let the caller's backoff handle it.
+      if (!result.ok) return result;
     }
 
     this.log.warn(

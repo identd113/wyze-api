@@ -95,6 +95,23 @@ test("totpSecret path retries once with the next window's code, then gives up wi
   assert.match(warnings[0], /clock/);
 });
 
+test("totpSecret path does not retry (or spend a second code) on a throttled response or a thrown error", async () => {
+  let t = 1000000 * 30000 + 5000;
+  const w = stub({ _totpNow: () => t });
+  w._totpSleep = async (ms) => { t += ms; };
+  let calls = 0;
+  w._performLoginRequest = async () => { calls += 1; return { ok: false, data: {} }; };
+  const r = await w._performMfaLogin({ totp_apps: [{ app_id: "a" }] });
+  assert.strictEqual(calls, 1);
+  assert.strictEqual(r.ok, false);
+
+  calls = 0;
+  w._lastTotpWindow = undefined;
+  w._performLoginRequest = async () => { calls += 1; throw new Error("connect ETIMEDOUT"); };
+  await assert.rejects(() => w._performMfaLogin({ totp_apps: [{ app_id: "a" }] }), /ETIMEDOUT/);
+  assert.strictEqual(calls, 1);
+});
+
 test("totpSecret takes precedence over mfaCode", async () => {
   const t = 1111111109 * 1000 - 20000;
   const w = stub({ _totpNow: () => t, mfaCode: "000000" });

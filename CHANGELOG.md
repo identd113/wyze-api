@@ -15,6 +15,7 @@ Consolidates the fork's post-beta.2 fixes onto the 2.0.0 line.
 - Floodlight v2 (`HL_CFL2`) is registered as a camera model. Its light still uses `set_property P1056`, exactly as wyzeapy does; the toggle reported in #264 has no known fix yet.
 - **`totpSecret` option**: generates the 2FA code from the authenticator secret on every login (RFC 6238), waits out near-expiry/reused codes and retries once with the next window. `mfaCode` still works; `totpSecret` takes precedence. Secret is redacted from logs.
 - `totpSecret` and `mfaCode` are cleaned and validated: spaces, newlines, dashes, quotes, invisible copy/paste characters and a pasted `otpauth://` URI are tolerated, and a malformed value fails login with a clear message (without echoing it).
+- The `totpSecret` retry only happens when Wyze answers without issuing a token. A throttled response no longer spends a second code and fires another login immediately, and network errors and Wyze error codes are not retried.
 - **Restored 2FA/MFA login** (TOTP via the `mfaCode` option). MFA handling was accidentally dropped in the Feb 2024 "Clean up MFA" commit; see `FIX-mfa-login.md`. Not yet verified against a live 2FA account.
 - **Fixed the persisted-token loop** that permanently blocked re-login after a stale/invalid token file (see `BUG-persisted-token-loop.md`).
 - **Username validated at construction** instead of failing cryptically later.
