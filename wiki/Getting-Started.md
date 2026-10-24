@@ -6,7 +6,7 @@
 npm install wyze-api
 ```
 
-Node.js 18+ recommended. All deps install via `npm` — no system packages required.
+Node.js 22 or newer is required (`engines.node` is `>=22`; the WebRTC library `werift` needs it). All deps install via `npm` — no system packages required.
 
 ## Minimum viable example
 

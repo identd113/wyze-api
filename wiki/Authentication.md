@@ -1,6 +1,6 @@
 # Authentication
 
-Wyze requires four pieces of credentials to log in: account `username` + `password`, plus a developer `keyId` + `apiKey`. Get the latter two from <https://developer-api-console.wyze.com/>. MFA accounts also need a `mfaCode`.
+Wyze requires four pieces of credentials to log in: account `username` + `password`, plus a developer `keyId` + `apiKey`. Get the latter two from <https://developer-api-console.wyze.com/>. MFA accounts also need a `totpSecret` (recommended) or a `mfaCode`.
 
 You don't normally call `login()` directly — every public method calls `maybeLogin()` first.
 
@@ -41,6 +41,27 @@ Attempting to login before debounce has cleared, waiting N seconds
 …something else is failing. Check `apiLogEnabled: true` to see the actual API error.
 
 ## MFA
+
+Only authenticator-app (TOTP) 2FA is supported; SMS and email codes are not.
+
+### `totpSecret` (recommended)
+
+Pass the base32 key Wyze shows next to the QR code when you set up the authenticator app, and the library generates a fresh 6-digit code on every login (a typed `mfaCode` expires after 30 seconds):
+
+```js
+const wyze = new Wyze({
+  username: process.env.USERNAME,
+  password: process.env.PASSWORD,
+  keyId: process.env.KEY_ID,
+  apiKey: process.env.API_KEY,
+  totpSecret: process.env.TOTP_SECRET, // or the WYZE_TOTP_SECRET environment variable
+  persistPath: "./",
+});
+```
+
+Spaces, dashes, quotes and a pasted `otpauth://...?secret=` link are cleaned up automatically; a malformed secret gives a clear login error. If a code is about to expire or was already used, the library waits for the next window and retries once. If both are set, `totpSecret` wins.
+
+### `mfaCode`
 
 Pass the current TOTP code as `mfaCode` in the constructor:
 

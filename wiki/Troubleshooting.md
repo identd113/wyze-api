@@ -20,7 +20,7 @@ You're modifying the signed signaling URL. Wyze pre-signs with AWS SigV4, and ch
 
 werift's default codec list doesn't include H.264, but Wyze cameras only stream H.264. The lib pins H.264 baseline 3.1 (`profile-level-id=42001f`) explicitly inside `cameraStreamCapture.js`. If you see this error, you're either:
 
-- On a stale install — re-run `npm install` and check that `werift` resolves to ≥0.20.
+- On a stale install — re-run `npm install` and check that `werift` resolves to ≥0.25 (Node 22 or newer is required).
 - Using `cameraGetStreamInfo` directly with your own `RTCPeerConnection` setup (browser code) — make sure your transceiver advertises H.264. The browser does this automatically; werift in Node does not.
 
 ## "ffmpeg binary not found"

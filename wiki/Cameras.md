@@ -48,6 +48,16 @@ For cameras with a spotlight (Cam v3, etc.).
 
 > Note: floodlight and spotlight share property `P1056`. The actual hardware behavior depends on the camera model.
 
+### Models that don't use `P1056`
+
+The same methods route automatically by model:
+
+- **devicemgmt cameras** (Floodlight Pro `LD_CFP`, Battery Cam Pro `AN_RSCW`, OG `GW_GC1`, Pan v4 `HL_PAN4`): the light, siren and notifications are set through the devicemgmt API (`run_action`). `AN_RSCW` and `HL_PAN4` use the "spotlight" capability, the others "floodlight".
+- **Bulb Cam** (`HL_BC`): the light is switched with `run_action` `floodlight_on` / `floodlight_off`; writing `P1056` is accepted but does nothing.
+- **Floodlight v2** (`HL_CFL2`) still uses `P1056`; the toggle is reported not to work and has no known fix.
+
+`cameraUsesDeviceMgmt(model)` tells you which path a model takes. Ported from SecKatie/wyzeapy; not yet verified on real hardware.
+
 ## Motion detection
 
 | Method | Notes |
@@ -111,6 +121,15 @@ For the full list:
 ```js
 const props = await wyze.getDevicePID(cam.mac, cam.product_model);
 console.log(props.data.property_list);
+```
+
+### devicemgmt cameras
+
+For `LD_CFP`, `AN_RSCW`, `GW_GC1` and `HL_PAN4`, property IDs don't apply. Use:
+
+```js
+const state = await wyze.cameraGetDeviceMgmtState(cam.mac, cam.product_model);
+// { motion, floodlight, siren, notify, on, available } (booleans; missing fields are undefined)
 ```
 
 ## See also

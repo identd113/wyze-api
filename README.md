@@ -12,6 +12,8 @@ This is an unofficial Wyze API. This library uses the internal APIs from the Wyz
 ## Setup
 `npm install wyze-api --save`
 
+Requires Node.js 22 or newer.
+
 ## Example
 ```
 const Wyze = require('wyze-api')
