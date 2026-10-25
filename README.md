@@ -12,6 +12,8 @@ This is an unofficial Wyze API. This library uses the internal APIs from the Wyz
 ## Setup
 `npm install wyze-api --save`
 
+Requires Node.js 22 or newer.
+
 ## Example
 ```
 const Wyze = require('wyze-api')
@@ -21,6 +23,8 @@ const options = {
   password: process.env.password,
   keyId: process.env.keyId,
   apiKey: process.env.apiKey,
+  mfaCode: process.env.mfaCode, // optional, only required if your account has 2FA enabled
+  totpSecret: process.env.totpSecret, // optional, recommended for 2FA: base32 key from the authenticator QR setup
   persistPath: "./",
   logLevel: "none"
 }
@@ -48,6 +52,22 @@ const wyze = new Wyze(options)
 
 ## Run
 `username=first.last@email.om password=123456 keyId=2222222 apiKey=222222 node index.js`
+
+## 2FA / MFA accounts
+If your Wyze account has two-factor authentication enabled, pass the current code from your
+authenticator app as `mfaCode` in the options above (only TOTP authenticator apps are supported —
+SMS/email codes are not). If `mfaCode` is required but missing, `login()` throws an error telling
+you to provide it.
+
+**`totpSecret` (recommended):** instead of typing a code, provide the base32 key Wyze shows next to the QR
+code when you set up the authenticator app ("can't scan? enter this key"). wyze-api generates a fresh code
+for every login, waits for the next 30s window if the current code is about to expire or was already used,
+and retries once with the next code if Wyze rejects it. If both are set, `totpSecret` wins. Spaces, dashes and pasted `otpauth://` URIs are cleaned automatically. Keep the host
+clock accurate (NTP); the secret is as sensitive as your password. Authenticator apps only, not SMS.
+
+Note that `mfaCode` is a static config value but TOTP codes rotate every 30 seconds, so this only
+works if the code is still current at the moment `login()` actually runs — a stale code fails with
+the same "provide mfaCode" error.
 
 ## Helper methods
 
@@ -89,6 +109,9 @@ Use these helper methods to interact with wyze-api.
 - wyze.cameraMotionRecording(device.mac, device.product_model, value)
 - wyze.cameraMotionRecordingOn(device.mac, device.product_model)
 - wyze.cameraMotionRecordingOff(device.mac, device.product_model)
+- wyze.cameraGetDeviceMgmtState(device.mac, device.product_model) — state for cameras on the devicemgmt API (Floodlight Pro, Battery Cam Pro, OG, Pan v4) in one call: `{on, available, siren, floodlight, notify, motion}`
+- wyze.cameraGetEvents(device.mac, [{sinceMs=300000, count=20}]) — recent cloud events for a camera, newest first: `{id, time, value, type, tags, params}` where `type` is `MOTION`, `SOUND`, `DOORBELL_RANG` and so on (`EventAlarmType`, with `AiEventTag` for person/vehicle/package). Read-only. Events change after they appear (a doorbell press starts as `MOTION` and is flipped to `DOORBELL_RANG` within seconds), so compare by `id` on every poll. The list depends on the Wyze plan: a camera without one records about one motion event per 5 minutes.
+- wyze.cameraUsesDeviceMgmt(model) / cameraIsDoorbell(model) / cameraSupportsPowerControl(model) — sync checks by model. The Doorbell v2 (`HL_DB2`) is a doorbell and can't be powered off through the API, so `cameraSupportsPowerControl("HL_DB2")` is false.
 
 ### Camera Stream Methods (WebRTC)
 
@@ -97,6 +120,8 @@ These return the credentials a WebRTC client (werift, go2rtc, Kinesis Video Stre
 **Primary**:
 - wyze.getCameraWebRTCConnectionInfo(mac, model, [options]) — bundled, ready-to-use shape: `{signalingUrl, iceServers, authToken, clientId, mac, model, substream, cached}`. `iceServers` are normalized to the `{urls, ...}` shape `RTCPeerConnection` expects; `signalingUrl` has any double-encoding decoded and (by default) the generated `clientId` injected as `X-Amz-ClientId`. Cached for 60s per `(mac, substream)`. Options: `substream`, `includeClientId`, `clientId`, `clientIdPrefix`, `noCache`, `cacheTtlMs`.
 - wyze.getCameraWebRTCConnectionInfoWithReconnect(mac, model, [options], [retryOptions]) — same, with exponential-backoff retry. `retryOptions`: `{maxAttempts=3, baseDelayMs=2000, onRetry}`.
+
+**Sessions**: a Wyze camera serves one WebRTC viewer at a time. `captureStreamFrame`, `cameraStartRtpForwarding` and `startCameraHKStream` keep at most one session per camera: a new one waits for the previous to finish closing, a live stream replaces a snapshot capture in flight, and a snapshot is refused while a stream is open. `startCameraHKStream` returns `{stop(), isAlive()}`. Call `wyze.closeAllCameraSessions()` when your process shuts down so cameras aren't left with a dead viewer.
 
 **Lower-level**:
 - wyze.cameraGetStreamInfo(mac, model, [options]) — raw API shape `{signaling_url, ice_servers, auth_token, ...}`. `options.substream` requests the lower-bitrate sub stream.
