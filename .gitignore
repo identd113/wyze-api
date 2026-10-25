@@ -10,3 +10,8 @@ example/scratch/*
 
 # Claude Code worktree state
 .claude/
+# macOS
+.DS_Store
+
+# local working documents (never pushed)
+testing/
