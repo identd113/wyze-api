@@ -65,7 +65,7 @@ The capture is cached per-mac for 10 seconds — rapid repeat calls share one ca
 5. ffmpeg decodes one frame, encodes to JPEG, writes to stdout. We capture stdout, return the buffer.
 6. Tear down: WebSocket close, peer connection close, UDP socket close, ffmpeg kill, temp file unlink.
 
-Code: [src/cameraStreamCapture.js](../src/cameraStreamCapture.js).
+Code: [src/devices/cameraStreamCapture.js](../src/devices/cameraStreamCapture.js).
 
 ## When to use which
 

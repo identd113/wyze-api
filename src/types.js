@@ -97,10 +97,22 @@ const DeviceModels = Object.freeze({
   CAMERA_OUTDOOR: _CAMERA_OUTDOOR,
   CAMERA_OUTDOOR_V2: ["HL_WCO2"],
   // Cameras that use the new devicemgmt-service-beta API (Floodlight Pro,
-  // Battery Cam Pro, OG cam) and don't respond to the standard run_action
+  // Battery Cam Pro, OG cam, Pan v4) and don't respond to the standard run_action
   // endpoint. Cameras in this list need the DeviceMgmt code paths.
-  CAMERA_DEVICEMGMT: ["LD_CFP", "AN_RSCW", "GW_GC1"],
-  CAMERA: [..._CAMERA_V1, ..._CAMERA_V2, ..._CAMERA_V3, ..._CAMERA_OUTDOOR, "HL_WCO2", "LD_CFP", "AN_RSCW", "GW_GC1"],
+  CAMERA_DEVICEMGMT: ["LD_CFP", "AN_RSCW", "GW_GC1", "HL_PAN4"],
+  // Of those, the models whose integrated light is a "spotlight" capability
+  // (the rest use "floodlight"). Mirrors SecKatie/wyzeapy.
+  CAMERA_DEVICEMGMT_SPOTLIGHT: ["AN_RSCW", "HL_PAN4"],
+  // Cameras whose light is driven by run_action floodlight_on/off; P1056 can be
+  // read but writes do nothing.
+  CAMERA_LIGHT_RUN_ACTION: ["HL_BC"],
+  // Cameras with a doorbell button (a press shows up as a "Doorbell rang" event).
+  DOORBELL: ["HL_DB2"],
+  // Cameras that cannot be powered off through the API: Wyze answers run_action power_off
+  // with result 3, and acknowledges the devicemgmt "sleep" without doing anything (checked
+  // on a Doorbell v2: it kept streaming).
+  CAMERA_NO_POWER_CONTROL: ["HL_DB2"],
+  CAMERA: [..._CAMERA_V1, ..._CAMERA_V2, ..._CAMERA_V3, ..._CAMERA_OUTDOOR, "HL_WCO2", "LD_CFP", "AN_RSCW", "GW_GC1", "HL_PAN4", "HL_BC", "HL_CFL2", "HL_DB2"],
 
   LOCK: ["YD.LO1"],
   LOCK_GATEWAY: ["YD.GW1"],
@@ -313,6 +325,30 @@ function parseLockEventSource(code) {
   }
   return null;
 }
+
+// Event types in the app/v2 cloud event list (`event_value`). A doorbell press is
+// first recorded as MOTION and flipped to DOORBELL_RANG when Wyze has classified
+// the clip. Values from wyze-sdk's EventAlarmType, checked against a Doorbell v2.
+const EventAlarmType = Object.freeze({
+  MOTION: [1, 6, 7, 13],
+  SOUND: [2],
+  OTHER: [3],
+  SMOKE: [4],
+  CO: [5],
+  TRIGGERED: [8],
+  DOORBELL_RANG: [10],
+  SCENE: [11],
+  FACE: [12],
+});
+
+// AI detection tags attached to events (`tag_list`).
+const AiEventTag = Object.freeze({
+  PERSON: 101,
+  FACE: 101001,
+  VEHICLE: 102,
+  PET: 103,
+  PACKAGE: 104,
+});
 
 const LockVolumeLevel = Object.freeze({
   OFF: 0,
@@ -659,15 +695,19 @@ const WyzeAccessoryModels = Object.freeze({
     WyzeCamV4:             "HL_CAM4",
     WyzeCamFloodlight:     "WYZE_CAKP2JFUS",
     WyzeCamFloodlightPro:  "LD_CFP",
+    WyzeCamFloodlightV2:   "HL_CFL2",
+    WyzeBulbCam:           "HL_BC",
     WyzeCamPan:            "WYZECP1_JEF",
     WyzeCamPanv2:          "HL_PAN2",
     WyzeCamPanv3:          "HL_PAN3",
+    WyzeCamPanv4:          "HL_PAN4",
     WyzeCamPanPro:         "HL_PANP",
     WyzeCamOutdoor:        "WVOD1",
     WyzeCamOutdoor2:       "HL_WCO2",
     WyzeCamDoorbell:       "WYZEDB3",
     WyzeCamDoorbellPro:    "GW_BE1",
     WyzeCamDoorbellPro2:   "AN_RDB1",
+    WyzeCamDoorbellV2:     "HL_DB2",
     WyzeBatteryCamPro:     "AN_RSCW",
     WyzeCamOG:             "GW_GC1",
     WyzeCamOGTelephoto3x:  "GW_GC",
@@ -765,4 +805,6 @@ module.exports = {
   IrrigationNozzleType,
   IrrigationSlopeType,
   IrrigationSoilType,
+  EventAlarmType,
+  AiEventTag,
 };

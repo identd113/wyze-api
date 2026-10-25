@@ -4,6 +4,7 @@ const { spawn } = require("child_process");
 const {
   startRtpForwarding,
   pickFreeUdpPort,
+  closeAllSessions,
   writeSdpFile,
   writeAudioSdpFile,
   resolveFfmpegPath,
@@ -52,18 +53,41 @@ module.exports = {
     await this.runAction(deviceMac, deviceModel, "siren_off");
   },
 
-  async cameraFloodLightOn(deviceMac, deviceModel) {
+  // Models whose integrated light is exposed as a "spotlight" capability on
+  // the devicemgmt API (everything else on that API uses "floodlight").
+  // Mirrors SecKatie/wyzeapy CameraService.floodlight_on/off.
+  async _cameraLightSet(deviceMac, deviceModel, on) {
     if (DeviceModels.CAMERA_DEVICEMGMT.includes(deviceModel)) {
-      return this._deviceMgmtRunAction(deviceMac, deviceModel, "floodlight", "1");
+      const type = DeviceModels.CAMERA_DEVICEMGMT_SPOTLIGHT.includes(deviceModel) ? "spotlight" : "floodlight";
+      return this._deviceMgmtRunAction(deviceMac, deviceModel, type, on ? "1" : "0");
     }
-    await this.setProperty(deviceMac, deviceModel, PIDs.CAMERA_FLOOD_LIGHT, PVals.CAMERA_FLOOD_LIGHT.ON);
+    if (DeviceModels.CAMERA_LIGHT_RUN_ACTION.includes(deviceModel)) {
+      // Bulb Cam: P1056 can be read but not written - the light is driven by run_action.
+      return this.runAction(deviceMac, deviceModel, on ? "floodlight_on" : "floodlight_off");
+    }
+    await this.setProperty(
+      deviceMac,
+      deviceModel,
+      PIDs.CAMERA_FLOOD_LIGHT,
+      on ? PVals.CAMERA_FLOOD_LIGHT.ON : PVals.CAMERA_FLOOD_LIGHT.OFF
+    );
+  },
+
+  async cameraFloodLightOn(deviceMac, deviceModel) {
+    return this._cameraLightSet(deviceMac, deviceModel, true);
   },
 
   async cameraFloodLightOff(deviceMac, deviceModel) {
-    if (DeviceModels.CAMERA_DEVICEMGMT.includes(deviceModel)) {
-      return this._deviceMgmtRunAction(deviceMac, deviceModel, "floodlight", "0");
-    }
-    await this.setProperty(deviceMac, deviceModel, PIDs.CAMERA_FLOOD_LIGHT, PVals.CAMERA_FLOOD_LIGHT.OFF);
+    return this._cameraLightSet(deviceMac, deviceModel, false);
+  },
+
+  /**
+   * Current state of a devicemgmt-API camera as
+   * { motion, floodlight, siren, notify, on, available }.
+   */
+  async cameraGetDeviceMgmtState(deviceMac, deviceModel) {
+    const response = await this._deviceMgmtGetIotProp(deviceMac, deviceModel);
+    return this._deviceMgmtParseState(response);
   },
 
   async cameraMotionOn(deviceMac, deviceModel) {
@@ -118,7 +142,15 @@ module.exports = {
 
   // ---- Thin-wrapper controls -----------------------------------------------
 
+  // Raw-value entry points ("power_on" / "siren_on" / "1" ...). Cameras on the
+  // devicemgmt API don't answer run_action/set_property, so they are routed to
+  // the model-aware On/Off methods; all other models keep the original behavior.
   async cameraPrivacy(deviceMac, deviceModel, value) {
+    if (this.cameraUsesDeviceMgmt(deviceModel)) {
+      return value === "power_on"
+        ? this.cameraTurnOn(deviceMac, deviceModel)
+        : this.cameraTurnOff(deviceMac, deviceModel);
+    }
     await this.runAction(deviceMac, deviceModel, value);
   },
 
@@ -134,23 +166,53 @@ module.exports = {
   },
 
   async cameraSiren(deviceMac, deviceModel, value) {
+    if (this.cameraUsesDeviceMgmt(deviceModel)) {
+      return value === "siren_on"
+        ? this.cameraSirenOn(deviceMac, deviceModel)
+        : this.cameraSirenOff(deviceMac, deviceModel);
+    }
     await this.runAction(deviceMac, deviceModel, value);
   },
 
+  // Raw-value entry points (value is the P1056 value: "1" on, "2" off). Models
+  // that don't accept P1056 writes (devicemgmt cameras, Bulb Cam) are routed
+  // through _cameraLightSet; everything else keeps the original behavior.
   async cameraFloodLight(deviceMac, deviceModel, value) {
+    if (this._cameraLightUsesActionApi(deviceModel)) {
+      return this._cameraLightSet(deviceMac, deviceModel, String(value) === "1");
+    }
     await this.setProperty(deviceMac, deviceModel, PIDs.CAMERA_FLOOD_LIGHT, value);
   },
 
   async cameraSpotLight(deviceMac, deviceModel, value) {
-    await this.setProperty(deviceMac, deviceModel, PIDs.CAMERA_FLOOD_LIGHT, value);
+    return this.cameraFloodLight(deviceMac, deviceModel, value);
+  },
+
+  /** True for cameras controlled and read through the devicemgmt API. */
+  cameraUsesDeviceMgmt(deviceModel) {
+    return DeviceModels.CAMERA_DEVICEMGMT.includes(deviceModel);
+  },
+
+  /** False for cameras that can't be powered on/off through the API (see DeviceModels). */
+  cameraSupportsPowerControl(deviceModel) {
+    return !DeviceModels.CAMERA_NO_POWER_CONTROL.includes(deviceModel);
+  },
+
+  /** True for cameras with a doorbell button. */
+  cameraIsDoorbell(deviceModel) {
+    return DeviceModels.DOORBELL.includes(deviceModel);
+  },
+
+  _cameraLightUsesActionApi(deviceModel) {
+    return this.cameraUsesDeviceMgmt(deviceModel) || DeviceModels.CAMERA_LIGHT_RUN_ACTION.includes(deviceModel);
   },
 
   async cameraSpotLightOn(deviceMac, deviceModel) {
-    await this.setProperty(deviceMac, deviceModel, PIDs.CAMERA_FLOOD_LIGHT, PVals.CAMERA_FLOOD_LIGHT.ON);
+    return this._cameraLightSet(deviceMac, deviceModel, true);
   },
 
   async cameraSpotLightOff(deviceMac, deviceModel) {
-    await this.setProperty(deviceMac, deviceModel, PIDs.CAMERA_FLOOD_LIGHT, PVals.CAMERA_FLOOD_LIGHT.OFF);
+    return this._cameraLightSet(deviceMac, deviceModel, false);
   },
 
   async cameraSoundNotificationOn(deviceMac, deviceModel) {
@@ -162,6 +224,11 @@ module.exports = {
   },
 
   async cameraNotifications(deviceMac, deviceModel, value) {
+    if (this.cameraUsesDeviceMgmt(deviceModel)) {
+      return String(value) === "1"
+        ? this.cameraNotificationsOn(deviceMac, deviceModel)
+        : this.cameraNotificationsOff(deviceMac, deviceModel);
+    }
     await this.setProperty(deviceMac, deviceModel, PIDs.NOTIFICATION, value);
   },
 
@@ -291,6 +358,35 @@ module.exports = {
   // ---- Long-lived RTP forwarding (for HomeKit streaming) -------------------
 
   /**
+   * Reconnect a dropped stream, trying again with a growing delay until an attempt
+   * gets as far as starting video or the budget runs out. A reconnect that fails
+   * (the camera never answers the new session, e.g. because it still holds the old
+   * viewer) used to end the stream for good, because only an ffmpeg exit scheduled a
+   * retry. Returns true if an attempt succeeded.
+   */
+  async _streamReconnect({ budget, max, attempt, isStopped, sleep = (ms) => new Promise((r) => setTimeout(r, ms)), log = () => {} }) {
+    while (!isStopped() && budget.retries < max) {
+      budget.retries += 1;
+      const delay = Math.min(1000 * budget.retries, 8000);
+      log("debug", `[stream] Reconnecting in ${delay}ms (attempt ${budget.retries}/${max})`);
+      await sleep(delay);
+      if (isStopped()) return false;
+      try {
+        await attempt();
+        return true;
+      } catch (err) {
+        log("error", `[stream] Reconnect failed (attempt ${budget.retries}/${max}): ${err.message}`);
+      }
+    }
+    return false;
+  },
+
+  /** Close every open camera WebRTC session (call on shutdown). */
+  async closeAllCameraSessions() {
+    await closeAllSessions();
+  },
+
+  /**
    * Establish a WebRTC connection to the camera and continuously forward
    * incoming H.264 RTP packets to `localRtpPort` on 127.0.0.1.
    * Returns `{ stop() }` — call stop() when the stream ends.
@@ -308,6 +404,7 @@ module.exports = {
       localAudioRtpPort,
       onVideoIdle,
       videoIdleMs,
+      sessionKey: deviceMac, // one WebRTC session per camera
       logger: this.apiLogEnabled ? this.log : null,
     });
   },
@@ -353,10 +450,14 @@ module.exports = {
       if (logger && typeof logger[level] === "function") logger[level](msg);
     };
 
-    const MAX_RETRIES = 3;
+    const MAX_RETRIES = 4;
     const MAX_AUDIO_RETRIES = 3;
+    // An audio process that ran this long without a single audio packet means the camera
+    // sends none (microphone off), not that ffmpeg failed.
+    const AUDIO_SILENCE_MIN_MS = 15_000;
     let stopped = false;
-    let retries = 0;
+    const retryBudget = { retries: 0 };
+    let stableTimer = null;
     let audioRetries = 0;
 
     // Current-attempt resources
@@ -366,9 +467,11 @@ module.exports = {
     let videoSdpPath = null;
     let audioSdpPath = null;
     let keepaliveTimer = null;
+    let dead = false;
 
     const cleanup = () => {
       if (keepaliveTimer) { clearInterval(keepaliveTimer); keepaliveTimer = null; }
+      if (stableTimer) { clearTimeout(stableTimer); stableTimer = null; }
       try { videoFfmpeg?.kill("SIGKILL"); } catch (_) {}
       try { audioFfmpeg?.kill("SIGKILL"); } catch (_) {}
       try { forwarder?.stop(); } catch (_) {}
@@ -383,7 +486,8 @@ module.exports = {
     // independent of WebRTC — we only need to relaunch ffmpeg.
     const spawnAudio = () => {
       if (!(localAudioRtpPort && audioPort && audioSrtpKey && audioSrtpSalt)) return;
-      audioSdpPath = writeAudioSdpFile(localAudioRtpPort);
+      audioSdpPath = writeAudioSdpFile(localAudioRtpPort, forwarder?.audioCodec ?? null);
+      const audioStartedAt = Date.now();
       const audioSrtpParams = Buffer.concat([audioSrtpKey, audioSrtpSalt]).toString("base64");
 
       audioFfmpeg = spawn(resolveFfmpegPath(), [
@@ -416,6 +520,13 @@ module.exports = {
         try { if (audioSdpPath) fs.unlinkSync(audioSdpPath); } catch (_) {}
         audioFfmpeg = null;
         audioSdpPath = null;
+        // A camera that negotiates audio but never sends any (microphone off in
+        // the Wyze app) isn't a failure to retry: carry on with video only.
+        // (A process that died almost at once failed for another reason: retry it.)
+        if (forwarder?.audioSeen && !forwarder.audioSeen() && Date.now() - audioStartedAt >= AUDIO_SILENCE_MIN_MS) {
+          log("debug", "[stream] camera sent no audio (microphone off?) — continuing video-only");
+          return;
+        }
         if (audioRetries < MAX_AUDIO_RETRIES) {
           audioRetries++;
           const delay = Math.min(1000 * audioRetries, 8000);
@@ -437,6 +548,13 @@ module.exports = {
         try { videoFfmpeg?.kill("SIGKILL"); } catch (_) {}
       };
 
+      // Fresh local ports for every attempt. The ones picked when HomeKit prepared
+      // the stream can have been taken since (several WebRTC sessions open sockets
+      // at once), and retrying on the same number would fail the same way every time.
+      localRtpPort = await pickFreeUdpPort();
+      if (localAudioRtpPort) localAudioRtpPort = await pickFreeUdpPort();
+      if (stopped) return;
+
       forwarder = await this.cameraStartRtpForwarding(
         deviceMac, deviceModel, localRtpPort,
         {
@@ -446,9 +564,16 @@ module.exports = {
         }
       );
 
+      // stop() may have been called while this (re)connect was negotiating: close
+      // the forwarder we just got instead of starting ffmpeg for a dead stream.
+      if (stopped) {
+        try { forwarder.stop(); } catch (_) {}
+        return;
+      }
+
       // Video stream — bake the camera's SPS/PPS into the SDP so FFmpeg can
       // decode the very first IDR slice without waiting for in-band params.
-      videoSdpPath = writeSdpFile(localRtpPort, forwarder.spropParameterSets);
+      videoSdpPath = writeSdpFile(localRtpPort, forwarder.spropParameterSets, forwarder.videoPayloadType);
       const videoSrtpParams = Buffer.concat([srtpKey, srtpSalt]).toString("base64");
 
       videoFfmpeg = spawn(resolveFfmpegPath(), [
@@ -497,21 +622,25 @@ module.exports = {
       // clock jumping forward in chunks.
       setTimeout(() => forwarder?.requestKeyframe?.(), 200);
 
+      // A connection that stays up for 30 seconds earns a fresh retry budget.
+      stableTimer = setTimeout(() => { retryBudget.retries = 0; }, 30_000);
+      stableTimer.unref?.();
+
       // Reconnect on unexpected video FFmpeg exit
       videoFfmpeg.once("close", async (code) => {
         if (stopped) return;
         log("warn", `[stream] FFmpeg/video exited (${code})`);
         cleanup();
-        if (retries < MAX_RETRIES) {
-          retries++;
-          const delay = Math.min(1000 * retries, 8000);
-          log("debug", `[stream] Reconnecting in ${delay}ms (attempt ${retries}/${MAX_RETRIES})`);
-          await new Promise((r) => setTimeout(r, delay));
-          if (!stopped) {
-            try { await attempt(); } catch (err) {
-              log("error", `[stream] Reconnect failed: ${err.message}`);
-            }
-          }
+        const reconnected = await this._streamReconnect({
+          budget: retryBudget,
+          max: MAX_RETRIES,
+          attempt,
+          isStopped: () => stopped,
+          log,
+        });
+        if (!reconnected && !stopped) {
+          dead = true;
+          log("warn", "[stream] Retry budget exhausted — video stream ended");
         }
       });
     };
@@ -523,6 +652,9 @@ module.exports = {
         stopped = true;
         cleanup();
       },
+      // False once stopped, or once reconnecting has given up: nothing is streaming
+      // any more, even if the caller never gets a stop request.
+      isAlive: () => !stopped && !dead,
     };
   },
 

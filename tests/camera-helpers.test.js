@@ -134,3 +134,66 @@ test("device-info accessors", async (t) => {
     );
   });
 });
+
+test("each stream (re)connect attempt uses fresh local ports, not the pre-picked ones", async () => {
+  const WyzeAPI = require("../src/index");
+  const w = Object.create(WyzeAPI.prototype);
+  w.log = { info: () => {}, debug: () => {}, warn: () => {}, error: () => {} };
+  const used = [];
+  w.cameraStartRtpForwarding = async (mac, model, rtpPort, options) => {
+    used.push([rtpPort, options.localAudioRtpPort]);
+    throw new Error("stop here"); // we only care which ports the attempt asked for
+  };
+  await assert.rejects(() => w.startCameraHKStream("MAC", "HL_DB2", {
+    localRtpPort: 1111,
+    localAudioRtpPort: 2222,
+    targetAddress: "127.0.0.1",
+    videoPort: 3333,
+    rtcpPort: 3334,
+    srtpKey: Buffer.alloc(16),
+    srtpSalt: Buffer.alloc(14),
+    videoSsrc: 1,
+  }), /stop here/);
+  assert.strictEqual(used.length, 1);
+  assert.notStrictEqual(used[0][0], 1111);
+  assert.notStrictEqual(used[0][1], 2222);
+  assert.ok(used[0][0] > 1024 && used[0][1] > 1024);
+  assert.ok(Math.abs(used[0][0] - used[0][1]) > 1, "video and audio ports must not be adjacent");
+});
+
+test("a failed reconnect is retried with a growing delay until one succeeds", async () => {
+  const WyzeAPI = require("../src/index");
+  const w = Object.create(WyzeAPI.prototype);
+  const budget = { retries: 0 };
+  const delays = [];
+  let calls = 0;
+  const ok = await w._streamReconnect({
+    budget, max: 4, isStopped: () => false,
+    sleep: async (ms) => { delays.push(ms); },
+    attempt: async () => { calls += 1; if (calls < 3) throw new Error("negotiation timed out"); },
+  });
+  assert.strictEqual(ok, true);
+  assert.strictEqual(calls, 3);
+  assert.deepStrictEqual(delays, [1000, 2000, 3000]);
+  assert.strictEqual(budget.retries, 3);
+});
+
+test("reconnecting gives up when the budget is spent, and stops when the stream is stopped", async () => {
+  const WyzeAPI = require("../src/index");
+  const w = Object.create(WyzeAPI.prototype);
+  let calls = 0;
+  const fail = async () => { calls += 1; throw new Error("no answer"); };
+  const spent = await w._streamReconnect({ budget: { retries: 0 }, max: 3, isStopped: () => false, sleep: async () => {}, attempt: fail });
+  assert.strictEqual(spent, false);
+  assert.strictEqual(calls, 3);
+
+  calls = 0;
+  let stopped = false;
+  const stoppedMidway = await w._streamReconnect({
+    budget: { retries: 0 }, max: 4, isStopped: () => stopped,
+    sleep: async () => { stopped = true; }, // the stream is stopped while we wait
+    attempt: fail,
+  });
+  assert.strictEqual(stoppedMidway, false);
+  assert.strictEqual(calls, 0, "must not start another session after a stop");
+});
