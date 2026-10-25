@@ -57,7 +57,7 @@ jobs:
       - name: Ensure NPM_TOKEN is configured
         run: |
           if [ -z "$NODE_AUTH_TOKEN" ]; then
-            echo "NPM_TOKEN secret is missing. Add a granular npm token with Bypass 2FA enabled."
+            echo "NPM_TOKEN secret is missing. Add a granular stage-only npm token for this package (npm token create --packages-and-scopes-permission read-write-stage-only); approve the staged release on npmjs.com."
             exit 1
           fi
         env:
