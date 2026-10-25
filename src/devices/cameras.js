@@ -211,7 +211,7 @@ module.exports = {
     const buffer = await cameraStreamCapture.captureStreamFrame({
       signalingUrl: conn.signalingUrl,
       iceServers: conn.iceServers,
-      logger: this.apiLogEnabled ? this.log : null,
+      logger: cameraStreamCapture.labelLogger(this.apiLogEnabled ? this.log : null, options.label || deviceMac),
       timeoutMs,
       sessionKey: deviceMac, // one WebRTC session per camera
     });

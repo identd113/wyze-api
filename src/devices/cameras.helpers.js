@@ -9,6 +9,7 @@ const {
   writeAudioSdpFile,
   resolveFfmpegPath,
   localIpAddress,
+  labelLogger,
 } = require("./cameraStreamCapture");
 const {
   propertyIds: PIDs,
@@ -392,7 +393,7 @@ module.exports = {
    * Returns `{ stop() }` — call stop() when the stream ends.
    */
   async cameraStartRtpForwarding(deviceMac, deviceModel, localRtpPort, options = {}) {
-    const { localAudioRtpPort, onVideoIdle, videoIdleMs, ...rest } = options;
+    const { localAudioRtpPort, onVideoIdle, videoIdleMs, label, ...rest } = options;
     const conn = await this.getCameraWebRTCConnectionInfo(deviceMac, deviceModel, {
       ...rest,
       noCache: true,
@@ -405,7 +406,7 @@ module.exports = {
       onVideoIdle,
       videoIdleMs,
       sessionKey: deviceMac, // one WebRTC session per camera
-      logger: this.apiLogEnabled ? this.log : null,
+      logger: labelLogger(this.apiLogEnabled ? this.log : null, label || deviceMac),
     });
   },
 
@@ -444,8 +445,10 @@ module.exports = {
     audioSrtpSalt = null,
     audioSsrc = null,
     bitrate = 300,
-    logger = null,
+    logger: rawLogger = null,
+    label = null,
   }) {
+    const logger = labelLogger(rawLogger, label || deviceMac);
     const log = (level, msg) => {
       if (logger && typeof logger[level] === "function") logger[level](msg);
     };
@@ -559,6 +562,7 @@ module.exports = {
         deviceMac, deviceModel, localRtpPort,
         {
           ...(localAudioRtpPort ? { localAudioRtpPort } : {}),
+          label: label || deviceMac,
           onVideoIdle,
           videoIdleMs: 10_000,
         }

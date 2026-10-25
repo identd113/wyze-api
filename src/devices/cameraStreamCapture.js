@@ -866,7 +866,28 @@ async function startRtpForwarding(params) {
   }
 }
 
+/**
+ * Wrap a logger so every line starts with the camera's name, e.g.
+ * `Garage: [stream] Reconnecting in 1000ms`. Returns the logger unchanged when there
+ * is no logger or no label.
+ */
+function labelLogger(logger, label) {
+  if (!logger || !label) return logger;
+  const wrap = (level) =>
+    typeof logger[level] === "function"
+      ? (msg, ...rest) => logger[level](`${label}: ${msg}`, ...rest)
+      : undefined;
+  return {
+    debug: wrap("debug"),
+    info: wrap("info"),
+    warn: wrap("warn"),
+    warning: wrap("warning"),
+    error: wrap("error"),
+  };
+}
+
 module.exports = {
+  labelLogger,
   captureStreamFrame,
   startRtpForwarding,
   closeAllSessions,
