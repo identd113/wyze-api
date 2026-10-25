@@ -6,6 +6,7 @@
 
 Consolidates the fork's post-beta.2 fixes onto the 2.0.0 line.
 
+- **Smoother camera audio on lossy links.** Audio packets that arrive late or out of order are put back in sequence, and packets that never arrive are replaced with silence for that 20 ms slot, so ffmpeg no longer sees holes ("RTP: missed N packets") that were heard as crackle. In-order audio is unchanged and adds no delay. Each stream logs a one-line audio summary (packets, reordered, filled, late) when it ends. In a lab test with 3% loss and 60 ms jitter, the "missed packets" warnings dropped from 15 to 0.
 - **Breaking:** the constructor now throws when `username` is empty (previously it failed later at login). Callers that build a client without credentials must handle the error.
 - **Requires Node.js 22 or newer** (`engines.node` is now `>=22`). `werift` is upgraded to `^0.25.1`, which needs Node 22 and clears the `ip` (SSRF) and `uuid` audit findings; `npm audit --omit=dev` is now clean. Homebridge 2.x already requires Node 22+.
 - **Wyze Cam Pan v4 (`HL_PAN4`) support**, ported from SecKatie/wyzeapy: uses the devicemgmt API for power, siren, spotlight and state. Also registered in the camera model lists.

@@ -18,7 +18,8 @@ const path = require("path");
 const nodeCrypto = require("crypto");
 const { spawn } = require("child_process");
 const WebSocket = require("ws");
-const { RTCPeerConnection, RTCRtpCodecParameters } = require("werift");
+const { RTCPeerConnection, RTCRtpCodecParameters, RtpHeader, RtpPacket } = require("werift");
+const { RtpReorderBuffer } = require("./rtpReorderBuffer");
 
 // Pin H.264 baseline 3.1 — Wyze rejects VP8/VP9 and werift's defaults include those.
 // Built fresh for every session: werift assigns payload types by mutating these
@@ -340,6 +341,8 @@ function _extractH264Nals(payload) {
 // up on them, and a cap on held packets.
 const FFMPEG_BIND_MS = 300;
 const SPROP_WAIT_MS = 5000;
+// How long a late audio packet is waited for before silence is played in its place.
+const AUDIO_REORDER_WAIT_MS = 80;
 const MAX_HELD_PACKETS = 5000;
 
 function _spawnFfmpeg(sdpPath) {
@@ -667,6 +670,29 @@ async function _startRtpForwarding({
   let audioPackets = 0;
   let videoPayloadType = 96; // replaced by what the camera negotiates
 
+  // Audio arrives with no jitter buffer, so late or lost packets reach ffmpeg as holes
+  // in the sequence (crackle). This puts them back in order and plays silence for any
+  // that never arrive. In-order audio passes straight through with no added delay.
+  const audioReorder = audioSock
+    ? new RtpReorderBuffer({
+        send: (p) => {
+          try { audioSock.send(p.serialize(), localAudioRtpPort, "127.0.0.1"); } catch (_) {}
+        },
+        makePacket: (template, seq, ts, payload) =>
+          new RtpPacket(
+            new RtpHeader({
+              payloadType: template.header.payloadType,
+              sequenceNumber: seq,
+              timestamp: ts,
+              ssrc: template.header.ssrc,
+            }),
+            payload
+          ),
+        maxWaitMs: AUDIO_REORDER_WAIT_MS,
+      })
+    : null;
+  let audioTick = null;
+
   // Everything this forwarder holds is closed through here, whether it stops
   // normally, fails to negotiate, or is preempted: peer connection first
   // (awaited), then signaling, then the local sockets.
@@ -678,6 +704,11 @@ async function _startRtpForwarding({
     timeoutCtl.abort(new Error("stream closed while starting"));
     if (pliTimer) { clearInterval(pliTimer); pliTimer = null; }
     if (idleWatchdog) { clearInterval(idleWatchdog); idleWatchdog = null; }
+    if (audioTick) { clearInterval(audioTick); audioTick = null; }
+    if (audioReorder && audioReorder.stats.received > 0) {
+      const a = audioReorder.stats;
+      log("debug", `audio: ${a.received} packets, ${a.reordered} arrived out of order, ${a.concealed} filled with silence, ${a.late} too late, ${a.duplicate} duplicate`);
+    }
     closing = _closePeer(pc, ws).finally(() => {
       try { videoSock.close(); } catch (_) {}
       try { audioSock?.close(); } catch (_) {}
@@ -735,7 +766,13 @@ async function _startRtpForwarding({
     } else if (track.kind === "audio" && audioSock) {
       track.onReceiveRtp.subscribe((rtp) => {
         audioPackets += 1;
-        try { audioSock.send(rtp.serialize(), localAudioRtpPort, "127.0.0.1"); } catch (_) {}
+        audioReorder.push(rtp, Date.now());
+        if (audioReorder.waiting && !audioTick) {
+          audioTick = setInterval(() => {
+            audioReorder.tick(Date.now());
+            if (!audioReorder.waiting) { clearInterval(audioTick); audioTick = null; }
+          }, 10);
+        }
       });
     }
   });
