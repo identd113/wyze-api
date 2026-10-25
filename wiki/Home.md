@@ -5,7 +5,7 @@ Full reference for [`wyze-api`](https://www.npmjs.com/package/wyze-api), an unof
 ## Start here
 
 - **[Getting Started](Getting-Started.md)** — install, the minimum viable example, constructor options
-- **[Authentication](Authentication.md)** — `keyId` / `apiKey`, MFA, token persistence, login debounce, refresh
+- **[Authentication](Authentication.md)** — `keyId` / `apiKey`, 2FA (`totpSecret` / `mfaCode`), token persistence, login debounce, refresh
 - **[Device Lookup](Device-Lookup.md)** — `getDeviceList`, lookups by mac/name/type/model, generic state accessors
 
 ## Device families

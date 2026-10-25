@@ -10,6 +10,10 @@ const util = require("./util");
 const types = require("./types");
 const { installRedirectGuard, WYZE_ALLOWED_HOSTNAMES } = require("./util/security");
 const httpsAgent = require("./httpsAgent");
+const {
+  generateTotp, msUntilNextWindow,
+  normalizeTotpSecret, isValidTotpSecret, normalizeMfaCode, isValidMfaCode,
+} = require("./util/totp");
 const axios = require("axios");
 
 // Pin the DigiCert roots Wyze's backend depends on into axios's shared
@@ -36,6 +40,14 @@ module.exports = class WyzeAPI {
   // line and color-codes the level tag, independently of whatever the
   // homebridge plugin layer does with its own log object.
   constructor(options /*, log [unused] */) {
+    if (typeof options.username !== "string" || !options.username) {
+      throw new Error(
+        "WyzeAPI requires a non-empty 'username' option (your Wyze account email) - " +
+        "this is needed even when logging in with apiKey/keyId, since it's used to " +
+        "namespace the persisted token cache file."
+      );
+    }
+
     // Resolve effective log level. apiLogEnabled is the legacy option —
     // honored for back-compat: true → debug, false/unset → info.
     const requestedLevel = options.logLevel
@@ -56,7 +68,11 @@ module.exports = class WyzeAPI {
     // User login parameters
     this.username = options.username;
     this.password = options.password;
-    this.mfaCode = options.mfaCode;
+    // Tidy copy/paste damage (spaces, newlines, quotes, otpauth:// URIs) up front.
+    // Validation happens at login time so a bad value is a clear login error,
+    // not a constructor crash.
+    this.mfaCode = normalizeMfaCode(options.mfaCode) || undefined;
+    this.totpSecret = normalizeTotpSecret(options.totpSecret) || undefined;
     this.apiKey = options.apiKey;
     this.keyId = options.keyId;
 
@@ -99,7 +115,20 @@ module.exports = class WyzeAPI {
 
     // Token is good for 216,000 seconds (60 hours) but 48 hours seems like a reasonable refresh interval 172800
     if (this.refreshTokenTimerEnabled === true) {
-      setInterval(this.refreshToken.bind(this), 172800);
+      this._refreshTokenInterval = setInterval(this.refreshToken.bind(this), 172800 * 1000);
+      // Don't keep a short-lived script (or a test) alive just for the refresh timer.
+      this._refreshTokenInterval.unref();
+    }
+  }
+
+  /**
+   * Stops the refresh-token timer started when refreshTokenTimerEnabled is true.
+   * Call this when done with the instance to let the process exit cleanly.
+   */
+  destroy() {
+    if (this._refreshTokenInterval) {
+      clearInterval(this._refreshTokenInterval);
+      this._refreshTokenInterval = null;
     }
   }
 
@@ -376,7 +405,18 @@ module.exports = class WyzeAPI {
 
   async _handleAccessTokenError(result, errorMessage, code, url, data) {
     this.access_token = "";
-    await this.refreshToken().catch((err) => {
+    await this.refreshToken().catch(async (err) => {
+      if (this._isTransientError(err)) {
+        // Network/server hiccup, not a verdict on the tokens: keep the
+        // persisted pair so the next call can retry the refresh. Wiping it
+        // here would force a full login (which a one-shot mfaCode can't do).
+        this.log.warn(`Token refresh failed transiently (${err.message}); keeping saved tokens.`);
+      } else {
+        // The refresh token is also dead - clear it and wipe the persisted
+        // file so the next maybeLogin() falls through to a real login instead
+        // of reloading this same broken pair from disk forever.
+        await this._clearPersistedTokens();
+      }
       throw new Error(
         `Refresh Token could not be used to get a new access token. ${err}`
       );
@@ -432,7 +472,14 @@ module.exports = class WyzeAPI {
         'KeyId Required, Please provide the "keyId" parameter in config.json'
       );
     } else {
-      const result = await this._performLoginRequest();
+      let result = await this._performLoginRequest();
+
+      // Wyze responds with no access_token and an mfa_details block when the
+      // account has 2FA enabled - complete the challenge with a follow-up request.
+      if (result.ok && !result.data.access_token && result.data.mfa_details) {
+        result = await this._performMfaLogin(result.data.mfa_details);
+      }
+
       if (!result.ok || !result.data.access_token) {
         throw new Error(
           `Invalid credentials, please check username/password, keyId/apiKey - ${JSON.stringify(
@@ -445,6 +492,92 @@ module.exports = class WyzeAPI {
       this.log.info("Successfully logged into Wyze API");
       await this._updateTokens(result.data);
     }
+  }
+
+  /**
+   * Completes a TOTP authenticator-app MFA challenge returned by the login endpoint.
+   * @param {object} mfaDetails - The `mfa_details` block from the login response.
+   * @returns {Promise<object>} - The result of the follow-up login request.
+   * @throws {Error} - Throws if no mfaCode was configured or the account uses an
+   *   unsupported MFA method (only TOTP authenticator apps are handled).
+   */
+  async _performMfaLogin(mfaDetails) {
+    const secret = normalizeTotpSecret(this.totpSecret);
+    const code = normalizeMfaCode(this.mfaCode);
+
+    if (!secret && !code) {
+      throw new Error(
+        'Your account has 2-factor auth enabled. Please provide the "totpSecret" (recommended) or "mfaCode" parameter in config.json.'
+      );
+    }
+    if (secret && !isValidTotpSecret(secret)) {
+      throw new Error(
+        'The "totpSecret" is not valid: it should be the base32 key shown next to the QR code (letters A-Z and digits 2-7 only).'
+      );
+    }
+    if (!secret && !isValidMfaCode(code)) {
+      throw new Error(
+        `The "mfaCode" must be the 6-digit code from your authenticator app (got ${code.length} characters after removing spaces).`
+      );
+    }
+
+    const totpApp = mfaDetails.totp_apps?.[0];
+    if (!totpApp) {
+      throw new Error(
+        `Unsupported MFA method - only TOTP authenticator apps are currently supported. Received: ${JSON.stringify(mfaDetails)}`
+      );
+    }
+
+    if (secret) {
+      return this._performTotpLogin(totpApp.app_id, secret);
+    }
+
+    return this._performLoginRequest({
+      mfa_type: "TotpVerificationCode",
+      verification_id: totpApp.app_id,
+      verification_code: code,
+    });
+  }
+
+  /**
+   * Logs in with a code generated from `totpSecret`. Never sends a code that is
+   * about to expire or was already used for a previous login (Wyze may treat a
+   * reused code as a replay), and retries once with the next window's code if
+   * Wyze answers without issuing a token. Network errors and API error codes
+   * throw and are not retried here, and neither is a throttled (ok: false)
+   * response.
+   */
+  async _performTotpLogin(verificationId, secret = normalizeTotpSecret(this.totpSecret)) {
+    const now = this._totpNow || (() => Date.now());
+    const sleep = this._totpSleep || ((ms) => new Promise((r) => setTimeout(r, ms)));
+    const SAFETY_MS = 3000;
+
+    let result;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      let t = now();
+      let window = Math.floor(t / 30000);
+      if (msUntilNextWindow(t) < SAFETY_MS || window === this._lastTotpWindow) {
+        await sleep(msUntilNextWindow(t) + 250);
+        t = now();
+        window = Math.floor(t / 30000);
+      }
+      this._lastTotpWindow = window;
+
+      result = await this._performLoginRequest({
+        mfa_type: "TotpVerificationCode",
+        verification_id: verificationId,
+        verification_code: generateTotp(secret, t),
+      });
+      if (result.ok && result.data?.access_token) return result;
+      // A throttled or otherwise failed request (ok: false) is not a rejected
+      // code: don't spend another code, let the caller's backoff handle it.
+      if (!result.ok) return result;
+    }
+
+    this.log.warn(
+      "Wyze rejected the generated TOTP code twice. Check that totpSecret is correct and that this host's clock is accurate (NTP)."
+    );
+    return result;
   }
 
   /**
@@ -556,9 +689,21 @@ module.exports = class WyzeAPI {
   /**
    * Refreshes the access token using the refresh token.
    * If successful, updates and persists the new tokens.
+   * Concurrent callers (e.g. several in-flight requests hitting an access-token
+   * error at once) share a single underlying refresh instead of racing each
+   * other with the same refresh token.
    * @throws {Error} - Throws an error if the refresh token request fails or if the response is invalid.
    */
-  async refreshToken() {
+  refreshToken() {
+    if (!this._refreshTokenPromise) {
+      this._refreshTokenPromise = this._doRefreshToken().finally(() => {
+        this._refreshTokenPromise = null;
+      });
+    }
+    return this._refreshTokenPromise;
+  }
+
+  async _doRefreshToken() {
     const data = {
       ...this.getRequestData(),
       refresh_token: this.refresh_token,
@@ -605,7 +750,7 @@ module.exports = class WyzeAPI {
             return;
           }
           this.log.error(`Error during token refresh: ${error.message}`);
-          throw new Error(`Token refresh failed: ${error.message}`);
+          throw new Error(`Token refresh failed: ${error.message}`, { cause: error });
         }
       }
     }
@@ -666,7 +811,8 @@ module.exports = class WyzeAPI {
         // its own /var/lib/hoobs/.../persist dir, so the first write
         // here was throwing ENOENT and the plugin never recovered.
         await fs.mkdir(path.dirname(tokenPath), { recursive: true });
-        await fs.writeFile(tokenPath, JSON.stringify(data)); // Write tokens to the file.
+        await fs.writeFile(tokenPath, JSON.stringify(data), { mode: 0o600 }); // Tokens are credentials: owner-only.
+        await fs.chmod(tokenPath, 0o600); // `mode` only applies to a newly created file; fix one saved by an older version.
         return; // Exit if successful.
       } catch (error) {
         attempt += 1;
@@ -683,6 +829,44 @@ module.exports = class WyzeAPI {
   }
 
   /**
+   * True for failures that say nothing about token validity: no HTTP response
+   * (DNS/connect/reset/timeout) or a 5xx from Wyze. Walks `cause` so wrapped
+   * errors are classified by the original failure.
+   */
+  _isTransientError(err) {
+    const TRANSIENT_CODES = new Set([
+      "ECONNRESET", "ECONNREFUSED", "ETIMEDOUT", "ECONNABORTED",
+      "ENOTFOUND", "EAI_AGAIN", "EPIPE", "EHOSTUNREACH", "ENETUNREACH",
+    ]);
+    for (let e = err, depth = 0; e && depth < 5; e = e.cause, depth += 1) {
+      if (e.code && TRANSIENT_CODES.has(e.code)) return true;
+      const status = e.response?.status;
+      if (status >= 500) return true;
+      if (e.isAxiosError && !e.response) return true;
+    }
+    return false;
+  }
+
+  /**
+  * Clears the in-memory tokens and deletes the persisted token file.
+  * Called once a refresh token is proven dead, so the next maybeLogin()
+  * finds nothing to reload and attempts a fresh login instead.
+  */
+  async _clearPersistedTokens() {
+    this.access_token = "";
+    this.refresh_token = "";
+
+    const tokenPath = this._tokenPersistPath();
+    try {
+      await fs.unlink(tokenPath);
+    } catch (error) {
+      if (error.code !== "ENOENT") {
+        this.log.error(`Error deleting persisted tokens: ${error.message}`);
+      }
+    }
+  }
+
+  /**
   * Loads persisted tokens from storage and updates the current tokens.
   * Logs a message if no tokens are found.
   * @throws {Error} - Throws an error if file reading or data parsing fails.
@@ -693,6 +877,8 @@ module.exports = class WyzeAPI {
     try {
       const data = await fs.readFile(tokenPath); // Read the token file.
       const parsedData = JSON.parse(data); // Parse the token data.
+      // A file saved by an older version may be readable by other users.
+      await fs.chmod(tokenPath, 0o600).catch(() => {});
 
       // Validate the token data structure.
       if (parsedData.access_token && parsedData.refresh_token) {
@@ -886,8 +1072,8 @@ module.exports = class WyzeAPI {
     );
   }
 
-  async setIotProp(deviceMac, product_model, propKey, value) {
-    const payload = payloadFactory.oliveCreatePostPayload(deviceMac, product_model, propKey, value);
+  async setIotProp(deviceMac, deviceModel, propKey, value) {
+    const payload = payloadFactory.oliveCreatePostPayload(deviceMac, deviceModel, propKey, value);
     return this._oliveSignedPost(
       `${constants.siriusBaseUrl}/plugin/sirius/set_iot_prop_by_topic`,
       payload,

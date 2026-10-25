@@ -6,7 +6,7 @@
 npm install wyze-api
 ```
 
-Node.js 18+ recommended. All deps install via `npm` — no system packages required.
+Node.js 22 or newer is required (`engines.node` is `>=22`; the WebRTC library `werift` needs it). All deps install via `npm` — no system packages required.
 
 ## Minimum viable example
 
@@ -37,7 +37,8 @@ const wyze = new Wyze({
 | `password` | — | Wyze password |
 | `keyId` | — | Developer key id |
 | `apiKey` | — | Developer api key |
-| `mfaCode` | — | TOTP code if your account has MFA enforced |
+| `totpSecret` | — | Base32 key from the authenticator-app QR setup (**recommended** for 2FA accounts): a fresh code is generated on every login. Wins over `mfaCode` if both are set. |
+| `mfaCode` | — | The current 6-digit authenticator code, for 2FA accounts without `totpSecret`. Expires after 30 seconds, so it only works for a login that happens right away. |
 | `persistPath` | — | Directory for cached auth tokens. **Recommended** — without this, every process restart triggers a fresh login. |
 | `logLevel` | `"info"` | Verbosity for the built-in `WyzeLogger`. One of `"error"` / `"warn"` / `"info"` / `"debug"`. Set to `"debug"` to log every request/response (replaces the legacy `apiLogEnabled` toggle). |
 | `apiLogEnabled` | `false` | Legacy boolean — `true` is now mapped to `logLevel: "debug"` for back-compat. |
@@ -60,6 +61,7 @@ USERNAME=you@example.com
 PASSWORD=...
 KEY_ID=...
 API_KEY=...
+TOTP_SECRET=...   # only if your account has 2FA
 PERSIST_PATH=./
 LOG_LEVEL=info
 API_LOG_ENABLED=false
