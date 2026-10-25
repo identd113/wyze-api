@@ -2,7 +2,7 @@
   "name": "wyze-api",
   "version": "2.0.0-beta.3",
   "description": "An unofficial API wrapper for Wyze products.",
-  "homepage": "https://github.com/jfarmer08/wyze-api",
+  "homepage": "https://github.com/identd113/wyze-api",
   "main": "./src/index.js",
   "bin": {
     "wyze-api-fetch-wyze-sdk": "scripts/fetch-wyze-sdk.js"
@@ -36,29 +36,15 @@
     "werift": "^0.25.1",
     "ws": "^8.20.0"
   },
-  "funding": [
-    {
-      "type": "paypal",
-      "url": "https://paypal.me/AllenFarmer"
-    },
-    {
-      "type": "venmo",
-      "url": "https://venmo.com/u/Allen-Farmer"
-    },
-    {
-      "type": "cashApp",
-      "url": "https://cash.app/$Jfamer08"
-    }
-  ],
   "directories": {
     "example": "example"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jfarmer08/wyze-api.git"
+    "url": "git+https://github.com/identd113/wyze-api.git"
   },
   "bugs": {
-    "url": "https://github.com/jfarmer08/wyze-api/issues"
+    "url": "https://github.com/identd113/wyze-api/issues"
   },
   "engines": {
     "node": ">=22"

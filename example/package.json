@@ -2,7 +2,7 @@
   "name": "example",
   "version": "1.0.0",
   "description": "An unoficial API wrapper for Wyze products.",
-  "homepage": "https://github.com/jfarmer08/wyze-api",
+  "homepage": "https://github.com/identd113/wyze-api",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",

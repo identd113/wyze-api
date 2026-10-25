@@ -5,7 +5,7 @@ A minimal HTTP server + browser UI that lists your cameras, plays live WebRTC st
 ## Run it
 
 ```bash
-git clone https://github.com/jfarmer08/wyze-api.git
+git clone https://github.com/identd113/wyze-api.git
 cd wyze-api/example
 npm install
 cp .env.example .env

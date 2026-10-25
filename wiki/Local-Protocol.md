@@ -83,7 +83,7 @@ npx wyze-api-fetch-wyze-sdk --type gutes --xapk /path/to/wyze.xapk
 ```
 
 Files land in `~/.homebridge/wyze-sdk/` by default. See
-[`scripts/README.md`](https://github.com/jfarmer08/wyze-api/blob/main/scripts/README.md)
+[`scripts/README.md`](https://github.com/identd113/wyze-api/blob/main/scripts/README.md)
 in the repo for full options.
 
 ## Deep-dive READMEs
