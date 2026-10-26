@@ -1,8 +1,5 @@
 blank_issues_enabled: false
 contact_links:
-  - name: Homebridge plugin issues
+  - name: Report a problem or ask for a device (homebridge-wyze-smart-home)
     url: https://github.com/identd113/homebridge-wyze-smart-home/issues/new/choose
-    about: Problems with the Homebridge plugin, or a Wyze device it does not support yet.
-  - name: Discussions
-    url: https://github.com/identd113/wyze-api/discussions
-    about: Open-ended questions, ideas and feedback. Not for bugs.
+    about: Issues for this library are tracked in the Homebridge plugin repository, including login, API, camera streaming and new devices.
