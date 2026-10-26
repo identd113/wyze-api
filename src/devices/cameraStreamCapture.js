@@ -241,6 +241,22 @@ function rtpStartsKeyframe(payload) {
   return false;
 }
 
+/** True when an H.264 RTP payload carries (a fragment of) an IDR slice. */
+function rtpContainsIdr(payload) {
+  if (!payload || payload.length < 1) return false;
+  const type = payload[0] & 0x1f;
+  if (type === 5) return true;
+  if (type === 24) {
+    let i = 1;
+    while (i + 3 <= payload.length) {
+      if ((payload[i + 2] & 0x1f) === 5) return true;
+      i += 2 + payload.readUInt16BE(i);
+    }
+    return false;
+  }
+  return type === 28 && payload.length >= 2 && (payload[1] & 0x1f) === 5;
+}
+
 /** True when an H.264 RTP payload carries an SPS (alone, or inside an aggregate). */
 function rtpHasParameterSets(payload) {
   if (!payload || payload.length < 1) return false;
@@ -405,6 +421,8 @@ function localIpAddress() {
 // picture. Wyze sends them only once, at the start, so a new live stream used to wait for
 // them before ffmpeg could start; with them remembered ffmpeg starts at once. They are
 // refreshed on every stream, and only change if the camera's video settings change.
+// A keyframe older than this is old for a picture: another one is asked for.
+const STALE_KEYFRAME_MS = 4000;
 const SPROP_CACHE_TTL_MS = 30 * 60_000;
 const spropCache = new Map();
 function rememberSprop(key, sprop) {
@@ -1015,7 +1033,7 @@ async function _startRtpForwarding({
           try { onFirstKeyframe?.(marks.firstKeyframeAt, marks.keyframeHadParameterSets); } catch (_) {}
         }
         const packet = rtp.serialize();
-        if (keyframes) keyframes.push(packet, rtp.header.timestamp, startsKeyframe);
+        if (keyframes) keyframes.push(packet, rtp.header.timestamp, startsKeyframe, rtpContainsIdr(rtp.payload));
         if (!attached) return;
         if (videoHold) videoHold.push(packet, startsKeyframe);
         else sendVideo(packet);
@@ -1179,6 +1197,7 @@ async function _startRtpForwarding({
     });
     videoHold = new VideoHold({ send: sendVideo, prefix: parameterSetPrefix });
     attached = true;
+    if (idleWatchdog) { clearInterval(idleWatchdog); idleWatchdog = null; } // the warm one belonged to the warm pool
     if (idleCallback) armIdleWatchdog(idleCallback, idleMs);
     requestKeyframe();
     let tries = 0;
@@ -1193,7 +1212,10 @@ async function _startRtpForwarding({
   const snapshot = async () => {
     const keyframe = keyframes?.latest;
     if (!keyframe) return null;
-    return { buffer: await decodeKeyframe({ packets: keyframe.packets, sprop: spropParameterSets }), ageMs: Date.now() - keyframe.at };
+    const ageMs = Date.now() - keyframe.at;
+    // The camera sends a keyframe every couple of seconds; if the latest is much older, ask for one.
+    if (ageMs > STALE_KEYFRAME_MS) requestKeyframe();
+    return { buffer: await decodeKeyframe({ packets: keyframe.packets, sprop: spropParameterSets }), ageMs };
   };
 
   return {
@@ -1255,6 +1277,7 @@ module.exports = {
   decodeKeyframe,
   annexBFromRtpPackets,
   rtpStartsKeyframe,
+  rtpContainsIdr,
   rtpHasParameterSets,
   buildParameterSetPacket,
   rtpPayload,

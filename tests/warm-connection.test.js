@@ -124,3 +124,40 @@ test("a connection that is still being made reports 'connecting' and has no pict
   assert.strictEqual(w.cameraWarmState("AA"), "connecting");
   assert.strictEqual(await w.cameraWarmSnapshot("AA"), null);
 });
+
+// ---- found in review -----------------------------------------------------------------
+
+test("a keyframe made only of parameter sets, under a timestamp of its own, is not kept", () => {
+  const k = new KeyframeTracker();
+  k.push(Buffer.from("idr-a"), 100, true, true);
+  k.push(Buffer.from("p"), 200, false, false);
+  assert.deepStrictEqual(k.latest.packets.map(String), ["idr-a"]);
+  k.push(Buffer.from("sps"), 300, true, false); // an SPS/PPS run with no IDR slice in it
+  k.push(Buffer.from("idr-b-1"), 310, true, true); // the IDR under its own timestamp
+  k.push(Buffer.from("idr-b-2"), 310, false, true);
+  k.push(Buffer.from("p"), 320, false, false);
+  assert.deepStrictEqual(k.latest.packets.map(String), ["idr-b-1", "idr-b-2"], "the IDR frame replaced it, not the parameter sets");
+  k.push(Buffer.from("sps2"), 400, true, false);
+  k.push(Buffer.from("p"), 410, false, false);
+  assert.deepStrictEqual(k.latest.packets.map(String), ["idr-b-1", "idr-b-2"], "a parameter-set-only run never replaces a real keyframe");
+});
+
+test("an open connection that was closed from outside is forgotten, not renewed for ever", async () => {
+  const handle = fakeHandle({ isAlive: () => false });
+  const { w } = withWarm(handle);
+  assert.strictEqual(w.cameraWarmState("AA"), null);
+  assert.strictEqual(w._warm.has("AA"), false);
+  const again = withWarm(fakeHandle({ isAlive: () => false }));
+  assert.strictEqual(await again.w.cameraWarmSnapshot("AA"), null);
+  assert.strictEqual(again.w._warm.has("AA"), false);
+});
+
+test("rtpContainsIdr finds an IDR slice whether or not it starts the fragment run", () => {
+  const cap = require("../src/devices/cameraStreamCapture");
+  const fu = (type, start) => Buffer.from([0x7c, (start ? 0x80 : 0) | type, 1]);
+  assert.strictEqual(cap.rtpContainsIdr(Buffer.from([0x65, 1])), true);
+  assert.strictEqual(cap.rtpContainsIdr(fu(5, false)), true, "a later fragment of an IDR");
+  assert.strictEqual(cap.rtpContainsIdr(fu(1, true)), false);
+  assert.strictEqual(cap.rtpContainsIdr(Buffer.from([0x67, 1])), false, "an SPS is not an IDR");
+  assert.strictEqual(cap.rtpContainsIdr(null), false);
+});

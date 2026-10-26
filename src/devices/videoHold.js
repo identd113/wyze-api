@@ -15,11 +15,11 @@ class VideoHold {
   /**
    * @param {object} opts
    * @param {(packet:Buffer)=>void} opts.send — called with each packet, in order
-   * @param {number} [opts.max=1500] — most packets held; at that point it releases itself
+   * @param {number} [opts.max=600] — most packets held (about 800 KB); at that point it releases itself
    * @param {(first:Buffer)=>(Buffer|null)} [opts.prefix] — given the first held packet, may return
    *        one more packet to send before it (the parameter sets a keyframe needs to be decoded)
    */
-  constructor({ send, max = 1500, prefix = null }) {
+  constructor({ send, max = 600, prefix = null }) {
     this.send = send;
     this.max = max;
     this.prefix = prefix;

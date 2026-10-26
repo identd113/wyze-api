@@ -11,6 +11,7 @@ const {
   localIpAddress,
   labelLogger,
   formatStartTiming,
+  forgetSprop,
 } = require("./cameraStreamCapture");
 const {
   propertyIds: PIDs,
@@ -402,7 +403,7 @@ module.exports = {
     const { localAudioRtpPort, onVideoIdle, videoIdleMs, label, holdVideo, startedAt = Date.now(), onFirstKeyframe, ...rest } = options;
     // A connection opened ahead of time (cameraWarmUp) is handed to this stream, which then
     // needs no connecting at all; if it failed or was closed, carry on with a new one.
-    const warm = this._warm?.get(deviceMac);
+    const warm = this._warmEntry(deviceMac);
     if (warm) {
       try {
         const handle = await warm.promise;
@@ -471,7 +472,7 @@ module.exports = {
    */
   cameraWarmUp(deviceMac, deviceModel, { label = null, ttlMs = WARM_DEFAULT_TTL_MS } = {}) {
     if (!this._warm) this._warm = new Map();
-    const existing = this._warm.get(deviceMac);
+    const existing = this._warmEntry(deviceMac);
     if (existing) {
       this._warmRenew(existing, ttlMs);
       return existing.promise.then(() => true, () => false);
@@ -493,7 +494,8 @@ module.exports = {
         connectionInfoAt: Date.now(),
         connectionInfoFrom: "asked just now",
         sessionKey: deviceMac,
-        onVideoIdle: () => this.cameraWarmDown(deviceMac),
+        // Only this connection's own stall closes it, not a newer one opened for the same camera.
+        onVideoIdle: () => { if (this._warm?.get(deviceMac) === entry) this.cameraWarmDown(deviceMac); },
         videoIdleMs: 10_000,
         logger: labelLogger(this.apiLogEnabled ? this.log : null, label || deviceMac),
       });
@@ -510,6 +512,19 @@ module.exports = {
       clearTimeout(entry.timer);
     });
     return entry.promise.then(() => true, () => false);
+  },
+
+  // The open connection for a camera, forgetting one that has since been closed from outside
+  // (a shutdown, a stream that replaced it): it would otherwise be renewed for ever.
+  _warmEntry(deviceMac) {
+    const entry = this._warm?.get(deviceMac);
+    if (!entry) return null;
+    if (entry.ready && !entry.handle?.isAlive()) {
+      this._warm.delete(deviceMac);
+      clearTimeout(entry.timer);
+      return null;
+    }
+    return entry;
   },
 
   _warmRenew(entry, ttlMs) {
@@ -529,15 +544,15 @@ module.exports = {
 
   /** "ready", "connecting", or null when no connection is open for this camera. */
   cameraWarmState(deviceMac) {
-    const entry = this._warm?.get(deviceMac);
+    const entry = this._warmEntry(deviceMac);
     if (!entry) return null;
-    return entry.ready && entry.handle?.isAlive() ? "ready" : "connecting";
+    return entry.ready ? "ready" : "connecting";
   },
 
   /** `{ buffer, ageMs }` — a picture from the open connection's latest keyframe — or null. */
   async cameraWarmSnapshot(deviceMac) {
-    const entry = this._warm?.get(deviceMac);
-    if (!entry?.ready || !entry.handle?.isAlive()) return null;
+    const entry = this._warmEntry(deviceMac);
+    if (!entry?.ready) return null;
     return entry.handle.snapshot();
   },
 
@@ -795,6 +810,9 @@ module.exports = {
       videoFfmpeg.once("close", async (code) => {
         if (stopped) return;
         log("warn", `[stream] FFmpeg/video exited (${code})`);
+        // The remembered SPS/PPS may be what it choked on (the camera's video settings changed):
+        // the reconnect waits for fresh ones.
+        forgetSprop(deviceMac);
         cleanup();
         const reconnected = await this._streamReconnect({
           budget: retryBudget,
