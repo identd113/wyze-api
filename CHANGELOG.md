@@ -2,15 +2,12 @@
 
 ## Releases
 
-### v2.0.0-beta.4
-
-- **Thermostat setpoints are whole degrees °F.** `setThermostatHeatingSetpoint` and `setThermostatCoolingSetpoint` documented and required tenths (`680` for 68 °F), but the Homebridge plugin has always read and written `heat_sp` / `cool_sp` as whole degrees, so a caller following the docs would send ten times the setpoint. The setters now take whole degrees and reject anything outside 40-100 °F with a message that says so, which also stops a value written in tenths. The wiki is corrected. Units of `temperature` and of Room Sensor (`CO_TH1`) readings are not re-checked; reports from thermostat owners are welcome.
-- **Login and token errors no longer carry raw Wyze responses.** The "Invalid credentials", "Failed to refresh access token", unsupported-MFA and bad-request errors put the response (and, for a bad request, the request body) into `err.message`, outside the logger's redaction. A caller that logged `err.message` could write tokens or an email address to its log. The text now goes through the same redaction as the log.
-
 ### v2.0.0-beta.3
 
 Consolidates the fork's post-beta.2 fixes onto the 2.0.0 line.
 
+- **Thermostat setpoints are whole degrees °F.** `setThermostatHeatingSetpoint` and `setThermostatCoolingSetpoint` documented and required tenths (`680` for 68 °F), but the Homebridge plugin has always read and written `heat_sp` / `cool_sp` as whole degrees, so a caller following the docs would send ten times the setpoint. The setters now take whole degrees and reject anything outside 40-100 °F with a message that says so, which also stops a value written in tenths. The wiki is corrected. Units of `temperature` and of Room Sensor (`CO_TH1`) readings are not re-checked; reports from thermostat owners are welcome.
+- **Login and token errors no longer carry raw Wyze responses.** The "Invalid credentials", "Failed to refresh access token", unsupported-MFA and bad-request errors put the response (and, for a bad request, the request body) into `err.message`, outside the logger's redaction. A caller that logged `err.message` could write tokens or an email address to its log. The text now goes through the same redaction as the log.
 - **A picture capture is tried once more** when ffmpeg loses a race for its local UDP port ("Address already in use"), with fresh connection details.
 - **Open connections (`cameraWarmUp`).** A WebRTC connection to a camera can be opened ahead of a stream and kept for a while; a live stream of that camera takes it over (nothing left to connect), and `cameraWarmSnapshot` makes a JPEG from its latest keyframe. Keyframe detection now sees fragmented IDR slices, and a keyframe handed to a stream gets the camera's SPS/PPS in front of it when it has none.
 - **Faster first picture on a live stream.** The camera's first keyframe is held until ffmpeg is running instead of being lost (which used to cost a second keyframe request), each camera's SPS/PPS are remembered so ffmpeg can start before the camera's first packets arrive, and `prefetchCameraConnection` lets the caller fetch the connection details ahead of time. A debug `timing:` line per live stream shows where the time went. `getCameraSnapshotImage` also accepts `deviceModel` to skip a device-list request, and `cameraGetEventsMulti` reads the event list for several cameras in one request.
