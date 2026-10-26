@@ -16,6 +16,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { VideoHold } = require("./videoHold");
+const { KeyframeTracker } = require("./keyframeTracker");
 const nodeCrypto = require("crypto");
 const { spawn } = require("child_process");
 const WebSocket = require("ws");
@@ -198,6 +199,156 @@ async function closeAllSessions() {
     try { await entry.close(); } catch (_) {}
     await Promise.race([entry.done, _sleep(PEER_CLOSE_TIMEOUT_MS + 1000)]);
   }));
+}
+
+/** The payload of a serialized RTP packet (past the header, any extension, and padding). */
+function rtpPayload(packet) {
+  if (!packet || packet.length < 12) return null;
+  let offset = 12 + (packet[0] & 0x0f) * 4; // fixed header + CSRC list
+  if (packet[0] & 0x10) { // header extension
+    if (packet.length < offset + 4) return null;
+    offset += 4 + packet.readUInt16BE(offset + 2) * 4;
+  }
+  let end = packet.length;
+  if (packet[0] & 0x20) end -= packet[packet.length - 1]; // padding
+  return offset < end ? packet.subarray(offset, end) : null;
+}
+
+/**
+ * True when an H.264 RTP payload starts a keyframe: an SPS or IDR slice, on its own, inside
+ * an aggregate (STAP-A), or as the first fragment (FU-A) of one. Keyframes are big, so the
+ * IDR slice is usually fragmented; looking only at whole NAL units would miss them.
+ */
+function rtpStartsKeyframe(payload) {
+  if (!payload || payload.length < 1) return false;
+  const type = payload[0] & 0x1f;
+  if (type === 5 || type === 7) return true;
+  if (type === 24) {
+    let i = 1;
+    while (i + 3 <= payload.length) {
+      const size = payload.readUInt16BE(i);
+      const nal = payload[i + 2] & 0x1f;
+      if (nal === 5 || nal === 7) return true;
+      i += 2 + size;
+    }
+    return false;
+  }
+  if (type === 28) {
+    if (payload.length < 2) return false;
+    const nal = payload[1] & 0x1f;
+    return !!(payload[1] & 0x80) && (nal === 5 || nal === 7);
+  }
+  return false;
+}
+
+/** True when an H.264 RTP payload carries an SPS (alone, or inside an aggregate). */
+function rtpHasParameterSets(payload) {
+  if (!payload || payload.length < 1) return false;
+  const type = payload[0] & 0x1f;
+  if (type === 7) return true;
+  if (type !== 24) return false;
+  let i = 1;
+  while (i + 3 <= payload.length) {
+    if ((payload[i + 2] & 0x1f) === 7) return true;
+    i += 2 + payload.readUInt16BE(i);
+  }
+  return false;
+}
+
+/**
+ * An RTP packet carrying the camera's SPS and PPS, sequenced just before `firstPacket` and
+ * stamped with its timestamp, so a decoder that joins at that keyframe has the parameter sets.
+ */
+function buildParameterSetPacket(firstPacket, sprop) {
+  const [sps, pps] = String(sprop).split(",").map((b64) => Buffer.from(b64, "base64"));
+  if (!sps?.length || !pps?.length) return null;
+  const header = Buffer.alloc(12);
+  header[0] = 0x80;
+  header[1] = firstPacket[1] & 0x7f; // payload type, marker clear
+  header.writeUInt16BE((firstPacket.readUInt16BE(2) - 1) & 0xffff, 2);
+  firstPacket.copy(header, 4, 4, 12); // same timestamp and ssrc
+  const sizes = Buffer.alloc(2);
+  const body = [Buffer.from([0x78])]; // STAP-A, reference idc 3
+  for (const nal of [sps, pps]) {
+    sizes.writeUInt16BE(nal.length, 0);
+    body.push(Buffer.from(sizes), nal);
+  }
+  return Buffer.concat([header, ...body]);
+}
+
+/** H.264 RTP packets (single NALs, STAP-A, FU-A) as one Annex B byte stream, parameter sets first. */
+function annexBFromRtpPackets(packets, sprop = null) {
+  const startCode = Buffer.from([0, 0, 0, 1]);
+  const parts = [];
+  if (sprop) for (const b64 of String(sprop).split(",")) parts.push(startCode, Buffer.from(b64, "base64"));
+  let fragments = null;
+  for (const packet of packets) {
+    const p = rtpPayload(packet);
+    if (!p || p.length < 1) continue;
+    const type = p[0] & 0x1f;
+    if (type >= 1 && type <= 23) {
+      parts.push(startCode, p);
+    } else if (type === 24) {
+      let i = 1;
+      while (i + 2 <= p.length) {
+        const size = p.readUInt16BE(i);
+        i += 2;
+        if (i + size > p.length) break;
+        parts.push(startCode, p.subarray(i, i + size));
+        i += size;
+      }
+    } else if (type === 28 && p.length >= 2) {
+      const header = p[1];
+      if (header & 0x80) fragments = [Buffer.from([(p[0] & 0xe0) | (header & 0x1f)])];
+      if (fragments) fragments.push(p.subarray(2));
+      if ((header & 0x40) && fragments) {
+        parts.push(startCode, Buffer.concat(fragments));
+        fragments = null;
+      }
+    }
+  }
+  return Buffer.concat(parts);
+}
+
+/**
+ * Turn the packets of one H.264 keyframe into a JPEG with ffmpeg, without a camera. The packets
+ * are unpacked into a plain H.264 stream and piped in, so there are no ports or timing to
+ * get right. `sprop` is the camera's `<sps>,<pps>` (a later keyframe carries no parameter sets).
+ */
+async function decodeKeyframe({ packets, sprop = null, timeoutMs = 6000 }) {
+  if (!packets?.length) throw new Error("no keyframe to decode");
+  const stream = annexBFromRtpPackets(packets, sprop);
+  if (stream.length === 0) throw new Error("no keyframe to decode");
+  const ffmpeg = spawn(resolveFfmpegPath(), [
+    "-loglevel", "error",
+    "-f", "h264",
+    "-i", "pipe:0",
+    "-frames:v", "1",
+    "-f", "image2",
+    "-c:v", "mjpeg",
+    "-q:v", "2",
+    "pipe:1",
+  ], { stdio: ["pipe", "pipe", "pipe"] });
+  const chunks = [];
+  const errors = [];
+  ffmpeg.stdout.on("data", (c) => chunks.push(c));
+  ffmpeg.stderr.on("data", (c) => errors.push(c));
+  ffmpeg.stdin.on("error", () => {}); // ffmpeg may stop reading once it has its one picture
+  const done = new Promise((resolve, reject) => {
+    ffmpeg.once("error", reject);
+    ffmpeg.once("close", () => resolve());
+  });
+  const timer = setTimeout(() => { try { ffmpeg.kill("SIGKILL"); } catch (_) {} }, timeoutMs);
+  try {
+    ffmpeg.stdin.end(stream);
+    await done;
+  } finally {
+    clearTimeout(timer);
+    try { ffmpeg.kill("SIGKILL"); } catch (_) {}
+  }
+  const buffer = Buffer.concat(chunks);
+  if (buffer.length === 0) throw new Error(`ffmpeg produced no picture: ${Buffer.concat(errors).toString().trim().slice(0, 200)}`);
+  return buffer;
 }
 
 function writeSdpFile(rtpPort, spropParameterSets = null, payloadType = 96) {
@@ -706,6 +857,7 @@ async function _startRtpForwarding({
   connectionInfoAt = null,
   connectionInfoFrom = null,
   onFirstKeyframe = null,
+  warm = false,
 }, session) {
   const log = (level, msg) => {
     if (!logger) return;
@@ -723,7 +875,18 @@ async function _startRtpForwarding({
   // With `holdVideo`, video is kept from the first keyframe until the caller has ffmpeg
   // running and calls releaseVideo(); without it, packets go straight to the port.
   const sendVideo = (packet) => { try { videoSock.send(packet, localRtpPort, "127.0.0.1"); } catch (_) {} };
-  const videoHold = holdVideo ? new VideoHold({ send: sendVideo }) : null;
+  // A held keyframe may carry no parameter sets of its own (they are sent once, at the start
+  // of a stream), so when it does not, the camera's SPS/PPS are put in front of it.
+  const parameterSetPrefix = (first) => {
+    if (!spropParameterSets || rtpHasParameterSets(rtpPayload(first))) return null;
+    return buildParameterSetPacket(first, spropParameterSets);
+  };
+  let videoHold = holdVideo ? new VideoHold({ send: sendVideo, prefix: parameterSetPrefix }) : null;
+  // A warm session is connected before any stream wants it: it drops video and audio, but keeps
+  // the latest keyframe (for pictures), until attach() points it at a stream's ports.
+  let spropParameterSets = null; // set once negotiated; read when a held keyframe is released
+  let attached = !warm;
+  const keyframes = warm ? new KeyframeTracker() : null;
 
   // Until the full closer exists below, closing must still release the sockets
   // (the peer connection constructor can throw).
@@ -757,6 +920,7 @@ async function _startRtpForwarding({
   const audioReorder = audioSock
     ? new RtpReorderBuffer({
         send: (p) => {
+          if (!attached || !localAudioRtpPort) return;
           try { audioSock.send(p.serialize(), localAudioRtpPort, "127.0.0.1"); } catch (_) {}
         },
         makePacket: (template, seq, ts, payload) =>
@@ -829,31 +993,35 @@ async function _startRtpForwarding({
       }, 500);
       track.onReceiveRtp.subscribe((rtp) => {
         lastVideoRtpAt = Date.now();
+        // Note keyframes (an SPS or an IDR slice, including a fragmented one): for the timing
+        // line, the hold buffer and the warm session's latest-keyframe memory.
+        const startsKeyframe = videoHold || keyframes || !marks.firstKeyframeAt ? rtpStartsKeyframe(rtp.payload) : false;
         // Watch for SPS/PPS NAL units so we can build sprop-parameter-sets
-        // ourselves when the camera doesn't advertise them in the SDP, and note
-        // the first keyframe (SPS or IDR) for the timing line and the hold buffer.
-        let startsKeyframe = false;
-        if (!capturedSps || !capturedPps || !marks.firstKeyframeAt) {
+        // ourselves when the camera doesn't advertise them in the SDP.
+        if (!capturedSps || !capturedPps) {
           for (const nal of _extractH264Nals(rtp.payload)) {
             const t = nal[0] & 0x1f;
             if (t === 7 && !capturedSps) capturedSps = nal;
             else if (t === 8 && !capturedPps) capturedPps = nal;
-            if (t === 5 || t === 7) startsKeyframe = true;
-          }
-          if (startsKeyframe && !marks.firstKeyframeAt) {
-            marks.firstKeyframeAt = Date.now();
-            try { onFirstKeyframe?.(marks.firstKeyframeAt); } catch (_) {}
           }
           if (capturedSps && capturedPps) {
             const sprop = `${capturedSps.toString("base64")},${capturedPps.toString("base64")}`;
             resolveSpropFromRtp(sprop);
           }
         }
-        if (videoHold) videoHold.push(rtp.serialize(), startsKeyframe);
-        else sendVideo(rtp.serialize());
+        if (startsKeyframe && !marks.firstKeyframeAt) {
+          marks.firstKeyframeAt = Date.now();
+          try { onFirstKeyframe?.(marks.firstKeyframeAt); } catch (_) {}
+        }
+        const packet = rtp.serialize();
+        if (keyframes) keyframes.push(packet, rtp.header.timestamp, startsKeyframe);
+        if (!attached) return;
+        if (videoHold) videoHold.push(packet, startsKeyframe);
+        else sendVideo(packet);
       });
     } else if (track.kind === "audio" && audioSock) {
       track.onReceiveRtp.subscribe((rtp) => {
+        if (!attached) return;
         audioPackets += 1;
         audioReorder.push(rtp, Date.now());
         if (audioReorder.waiting && !audioTick) {
@@ -922,7 +1090,7 @@ async function _startRtpForwarding({
   // 2) Fall back to capturing them from the live RTP stream — Wyze cameras
   //    in particular often omit them from SDP, so this is the path that
   //    actually works for their hardware.
-  let spropParameterSets = extractSpropParameterSets(pc.remoteDescription?.sdp ?? null);
+  spropParameterSets = extractSpropParameterSets(pc.remoteDescription?.sdp ?? null);
   if (spropParameterSets) {
     log("debug", "extracted sprop-parameter-sets from answer SDP");
     marks.parametersFrom = "answer";
@@ -964,18 +1132,21 @@ async function _startRtpForwarding({
   // Silent-stall watchdog: WebRTC sometimes stops delivering RTP without
   // closing the peer connection. If we go too long with no video packets,
   // notify the caller so it can rebuild the stream.
-  if (onVideoIdle) {
+  const armIdleWatchdog = (callback, idleMs) => {
+    if (idleWatchdog) clearInterval(idleWatchdog);
+    idleFired = false;
     lastVideoRtpAt = Date.now();
     idleWatchdog = setInterval(() => {
       if (idleFired) return;
       const gap = Date.now() - lastVideoRtpAt;
-      if (gap >= videoIdleMs) {
+      if (gap >= idleMs) {
         idleFired = true;
         log("warning", `no video RTP for ${gap}ms — signaling stall`);
-        try { onVideoIdle(); } catch (_) {}
+        try { callback(); } catch (_) {}
       }
-    }, Math.min(2000, videoIdleMs)).unref();
-  }
+    }, Math.min(2000, idleMs)).unref();
+  };
+  if (onVideoIdle) armIdleWatchdog(onVideoIdle, videoIdleMs);
 
   const stop = () => closeEverything();
 
@@ -991,7 +1162,44 @@ async function _startRtpForwarding({
   // audioSeen() is false for a camera that negotiates audio but sends none (microphone off).
   // releaseVideo() hands over the video held while ffmpeg started (see `holdVideo`).
   const releaseVideo = () => (videoHold ? videoHold.release() : { hadKeyframe: true });
-  return { stop, spropParameterSets, requestKeyframe, releaseVideo, marks, audioCodec, videoPayloadType, audioSeen: () => audioPackets > 0 };
+
+  // A warm session is handed to a stream here: video and audio now go to that stream's ports,
+  // starting with a keyframe, which the camera is asked for until one arrives.
+  const attach = ({ localRtpPort: videoPort, localAudioRtpPort: audioPort = null, onVideoIdle: idleCallback = null, videoIdleMs: idleMs = 10_000, onFirstKeyframe: keyframeCallback = null } = {}) => {
+    if (closing) throw new Error("the open connection has already been closed");
+    localRtpPort = videoPort;
+    localAudioRtpPort = audioPort;
+    onFirstKeyframe = keyframeCallback;
+    audioPackets = 0;
+    const now = Date.now();
+    Object.assign(marks, {
+      startedAt: now, connectionInfoAt: now, connectionInfoFrom: "already open", signalingOpenAt: now,
+      negotiatedAt: now, parametersAt: now, parametersFrom: "already open", firstKeyframeAt: null,
+    });
+    videoHold = new VideoHold({ send: sendVideo, prefix: parameterSetPrefix });
+    attached = true;
+    if (idleCallback) armIdleWatchdog(idleCallback, idleMs);
+    requestKeyframe();
+    let tries = 0;
+    const asking = setInterval(() => {
+      if (marks.firstKeyframeAt || closing || ++tries > 8) clearInterval(asking);
+      else requestKeyframe();
+    }, 500);
+    asking.unref?.();
+  };
+
+  // A picture from the latest keyframe of a warm session, without asking the camera for anything.
+  const snapshot = async () => {
+    const keyframe = keyframes?.latest;
+    if (!keyframe) return null;
+    return { buffer: await decodeKeyframe({ packets: keyframe.packets, sprop: spropParameterSets }), ageMs: Date.now() - keyframe.at };
+  };
+
+  return {
+    stop, spropParameterSets, requestKeyframe, releaseVideo, marks, audioCodec, videoPayloadType,
+    audioSeen: () => audioPackets > 0,
+    attach, snapshot, isAlive: () => !closing,
+  };
 }
 
 /**
@@ -1043,6 +1251,12 @@ module.exports = {
   closeAllSessions,
   extractAudioCodec,
   summarizeAudioSection,
+  decodeKeyframe,
+  annexBFromRtpPackets,
+  rtpStartsKeyframe,
+  rtpHasParameterSets,
+  buildParameterSetPacket,
+  rtpPayload,
   rememberSprop,
   recallSprop,
   forgetSprop,

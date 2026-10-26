@@ -26,6 +26,8 @@ const {
  */
 // How long connection details fetched ahead of a stream stay usable.
 const PREFETCH_MAX_AGE_MS = 30_000;
+// How long an open connection waits for someone to watch before it is closed.
+const WARM_DEFAULT_TTL_MS = 45_000;
 
 module.exports = {
   // ---- Model-branching controls --------------------------------------------
@@ -398,6 +400,20 @@ module.exports = {
    */
   async cameraStartRtpForwarding(deviceMac, deviceModel, localRtpPort, options = {}) {
     const { localAudioRtpPort, onVideoIdle, videoIdleMs, label, holdVideo, startedAt = Date.now(), onFirstKeyframe, ...rest } = options;
+    // A connection opened ahead of time (cameraWarmUp) is handed to this stream, which then
+    // needs no connecting at all; if it failed or was closed, carry on with a new one.
+    const warm = this._warm?.get(deviceMac);
+    if (warm) {
+      try {
+        const handle = await warm.promise;
+        if (this._warm.get(deviceMac) === warm && handle.isAlive()) {
+          this._warm.delete(deviceMac);
+          clearTimeout(warm.timer);
+          handle.attach({ localRtpPort, localAudioRtpPort: localAudioRtpPort ?? null, onVideoIdle, videoIdleMs, onFirstKeyframe });
+          return handle;
+        }
+      } catch (_) { /* fall back to a fresh connection */ }
+    }
     // Credentials fetched ahead of time (see prefetchCameraConnection) are used once;
     // otherwise, or if that fetch failed, ask the cloud now.
     let conn = null;
@@ -444,6 +460,85 @@ module.exports = {
     const promise = this.getCameraWebRTCConnectionInfo(deviceMac, deviceModel, { noCache: true });
     promise.catch(() => {}); // an unused failure is not an error
     this._prefetchedConn.set(`${deviceMac}:${deviceModel}`, { promise, at: Date.now() });
+  },
+
+  /**
+   * Open a connection to a camera before anyone asks to watch it, and keep it for `ttlMs`
+   * (renewed by calling this again). A live stream of that camera takes the open connection
+   * over and starts almost at once; a picture can be made from it with cameraWarmSnapshot.
+   * A camera serves one viewer at a time, so while this is open the Wyze app cannot watch
+   * that camera. Resolves true once the connection is ready, false if it could not be made.
+   */
+  cameraWarmUp(deviceMac, deviceModel, { label = null, ttlMs = WARM_DEFAULT_TTL_MS } = {}) {
+    if (!this._warm) this._warm = new Map();
+    const existing = this._warm.get(deviceMac);
+    if (existing) {
+      this._warmRenew(existing, ttlMs);
+      return existing.promise.then(() => true, () => false);
+    }
+    const entry = { mac: deviceMac, timer: null, handle: null, ready: false };
+    this._warm.set(deviceMac, entry);
+    this._warmRenew(entry, ttlMs);
+    entry.promise = (async () => {
+      const startedAt = Date.now();
+      const conn = await this.getCameraWebRTCConnectionInfo(deviceMac, deviceModel, { noCache: true });
+      // Placeholder ports: nothing is sent to them until a stream takes the connection over.
+      const handle = await startRtpForwarding({
+        signalingUrl: conn.signalingUrl,
+        iceServers: conn.iceServers,
+        localRtpPort: 9,
+        localAudioRtpPort: 9,
+        warm: true,
+        startedAt,
+        connectionInfoAt: Date.now(),
+        connectionInfoFrom: "asked just now",
+        sessionKey: deviceMac,
+        onVideoIdle: () => this.cameraWarmDown(deviceMac),
+        videoIdleMs: 10_000,
+        logger: labelLogger(this.apiLogEnabled ? this.log : null, label || deviceMac),
+      });
+      if (this._warm.get(deviceMac) !== entry) {
+        await handle.stop().catch(() => {}); // closed while it was connecting
+        throw new Error("the open connection was no longer wanted");
+      }
+      entry.handle = handle;
+      entry.ready = true;
+      return handle;
+    })();
+    entry.promise.catch(() => {
+      if (this._warm.get(deviceMac) === entry) this._warm.delete(deviceMac);
+      clearTimeout(entry.timer);
+    });
+    return entry.promise.then(() => true, () => false);
+  },
+
+  _warmRenew(entry, ttlMs) {
+    clearTimeout(entry.timer);
+    entry.timer = setTimeout(() => this.cameraWarmDown(entry.mac), ttlMs);
+    entry.timer.unref?.();
+  },
+
+  /** Close the connection opened by cameraWarmUp, if any. */
+  async cameraWarmDown(deviceMac) {
+    const entry = this._warm?.get(deviceMac);
+    if (!entry) return;
+    this._warm.delete(deviceMac);
+    clearTimeout(entry.timer);
+    if (entry.handle) await entry.handle.stop().catch(() => {});
+  },
+
+  /** "ready", "connecting", or null when no connection is open for this camera. */
+  cameraWarmState(deviceMac) {
+    const entry = this._warm?.get(deviceMac);
+    if (!entry) return null;
+    return entry.ready && entry.handle?.isAlive() ? "ready" : "connecting";
+  },
+
+  /** `{ buffer, ageMs }` — a picture from the open connection's latest keyframe — or null. */
+  async cameraWarmSnapshot(deviceMac) {
+    const entry = this._warm?.get(deviceMac);
+    if (!entry?.ready || !entry.handle?.isAlive()) return null;
+    return entry.handle.snapshot();
   },
 
   _takePrefetchedConnection(deviceMac, deviceModel) {
