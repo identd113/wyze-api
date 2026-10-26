@@ -15,6 +15,20 @@ const THERMOSTAT_DEVICE_INFO_KEYS = [
 
 const ROOM_SENSOR_PROP_KEYS = ["temperature", "humidity", "battery", "rssi", "iot_state"];
 
+// Setpoints are whole degrees °F. The range is wider than the thermostat's own
+// 50–90 °F limit; it only exists to reject a value written in tenths (680).
+const SETPOINT_MIN_F = 40;
+const SETPOINT_MAX_F = 100;
+
+function assertSetpoint(label, value) {
+  if (!Number.isInteger(value)) {
+    throw new Error(`${label}: value must be an integer (whole °F)`);
+  }
+  if (value < SETPOINT_MIN_F || value > SETPOINT_MAX_F) {
+    throw new Error(`${label}: ${value} is outside ${SETPOINT_MIN_F}-${SETPOINT_MAX_F} °F; setpoints are whole degrees, not tenths`);
+  }
+}
+
 function validateOneOf(value, allowed, label) {
   const list = Object.values(allowed);
   if (!list.includes(value)) {
@@ -122,23 +136,21 @@ module.exports = {
   },
 
   /**
-   * Set the heating setpoint. Tenths-of-°F regardless of display unit
-   * (e.g. 680 = 68.0°F).
+   * Set the heating setpoint in whole degrees Fahrenheit (e.g. 68), the unit
+   * the thermostat reports `heat_sp` in. Values outside 40–100 are rejected so
+   * a value written in tenths (680) cannot reach the device.
    */
   async setThermostatHeatingSetpoint(deviceMac, deviceModel, value) {
-    if (!Number.isInteger(value)) {
-      throw new Error("setThermostatHeatingSetpoint: value must be an integer (tenths of °F)");
-    }
+    assertSetpoint("setThermostatHeatingSetpoint", value);
     return this.thermostatSetIotProp(deviceMac, deviceModel, "heat_sp", value);
   },
 
   /**
-   * Set the cooling setpoint (tenths-of-°F).
+   * Set the cooling setpoint in whole degrees Fahrenheit (e.g. 74). Same
+   * range as the heating setpoint.
    */
   async setThermostatCoolingSetpoint(deviceMac, deviceModel, value) {
-    if (!Number.isInteger(value)) {
-      throw new Error("setThermostatCoolingSetpoint: value must be an integer (tenths of °F)");
-    }
+    assertSetpoint("setThermostatCoolingSetpoint", value);
     return this.thermostatSetIotProp(deviceMac, deviceModel, "cool_sp", value);
   },
 

@@ -110,3 +110,25 @@ test("login surfaces the mfaCode-required error via the top-level Invalid creden
 
   await assert.rejects(() => w.login(), /Please provide the "totpSecret"/);
 });
+
+test("a rejected login does not put tokens or the email into the error message", async () => {
+  const w = stub();
+  w._performLoginRequest = async () => ({
+    ok: false,
+    data: {
+      code: "1001",
+      access_token: "AAAA.BBBB.example-access-token",
+      email: "person@example.com",
+    },
+  });
+
+  await assert.rejects(
+    () => w.login(),
+    (err) => {
+      assert.match(err.message, /Invalid credentials/);
+      assert.doesNotMatch(err.message, /example-access-token/);
+      assert.doesNotMatch(err.message, /person@example\.com/);
+      return true;
+    }
+  );
+});

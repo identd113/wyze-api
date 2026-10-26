@@ -32,7 +32,7 @@ query_schedule
 
 ```js
 await wyze.thermostatSetIotProp(t.mac, t.product_model, "mode_sys", "auto");
-await wyze.thermostatSetIotProp(t.mac, t.product_model, "heat_sp", 680); // tenths of °F
+await wyze.thermostatSetIotProp(t.mac, t.product_model, "heat_sp", 68); // whole °F
 await wyze.thermostatSetIotProp(t.mac, t.product_model, "fan_mode", "on");
 ```
 
@@ -46,16 +46,16 @@ await wyze.thermostatSetIotProp(t.mac, t.product_model, "fan_mode", "on");
 |---|---|---|
 | `mode_sys` | string | `"auto"`, `"heat"`, `"cool"`, `"off"` |
 | `fan_mode` | string | `"auto"`, `"on"`, `"cycle"` |
-| `heat_sp` | number | Heat setpoint in tenths of °F (e.g. `680` = 68.0°F) |
-| `cool_sp` | number | Cool setpoint in tenths of °F |
-| `temperature` | number | Current temp in tenths of °F |
+| `heat_sp` | number | Heat setpoint in whole °F (e.g. `68`) |
+| `cool_sp` | number | Cool setpoint in whole °F (e.g. `74`) |
+| `temperature` | number | Current temp in whole °F |
 | `humidity` | number | Current relative humidity (%) |
 | `temp_unit` | string | `"F"` or `"C"` |
 | `working_state` | string | `"idle"`, `"heating"`, `"cooling"` |
 | `dev_hold` | bool/string | Whether the thermostat is on a manual hold |
 | `kid_lock` | bool | Child lock toggle |
 
-Setpoints are **tenths of a degree** in `°F` regardless of `temp_unit`. To set 70°F, send `700`.
+Setpoints are **whole degrees** in `°F` regardless of `temp_unit`. To set 70°F, send `70`. (Earlier versions of this page said tenths; the Homebridge plugin has always used whole degrees. The `temperature` reading and the Room Sensor (`CO_TH1`) readings have not been re-checked, so treat their units as unconfirmed and report what you see.)
 
 ## HomeKit value mapping (helpers)
 
@@ -79,12 +79,12 @@ const t = await wyze.getDeviceByName("Hallway Thermostat");
 const { data: { props } } = await wyze.thermostatGetIotProp(t.mac);
 
 console.log({
-  temp: props.temperature / 10 + "°F",
+  temp: props.temperature + "°F",
   humidity: props.humidity + "%",
   mode: props.mode_sys,
   fan: props.fan_mode,
-  heatSp: props.heat_sp / 10 + "°F",
-  coolSp: props.cool_sp / 10 + "°F",
+  heatSp: props.heat_sp + "°F",
+  coolSp: props.cool_sp + "°F",
   doing: props.working_state,
 });
 ```

@@ -8,7 +8,7 @@ const crypto = require("./utils/crypto");
 const constants = require("./constants");
 const util = require("./util");
 const types = require("./types");
-const { installRedirectGuard, WYZE_ALLOWED_HOSTNAMES } = require("./util/security");
+const { installRedirectGuard, WYZE_ALLOWED_HOSTNAMES, sanitizeLogMessage } = require("./util/security");
 const httpsAgent = require("./httpsAgent");
 const {
   generateTotp, msUntilNextWindow,
@@ -351,9 +351,9 @@ module.exports = class WyzeAPI {
 
       if (this._isBadRequestError(code)) {
         throw new Error(
-          `Wyze API Bad Request: Check your request parameters - ${JSON.stringify(
+          `Wyze API Bad Request: Check your request parameters - ${sanitizeLogMessage(JSON.stringify(
             { code, message: errorMessage, url, requestBody: data }
-          )}`
+          ))}`
         );
       }
 
@@ -482,9 +482,9 @@ module.exports = class WyzeAPI {
 
       if (!result.ok || !result.data.access_token) {
         throw new Error(
-          `Invalid credentials, please check username/password, keyId/apiKey - ${JSON.stringify(
+          `Invalid credentials, please check username/password, keyId/apiKey - ${sanitizeLogMessage(JSON.stringify(
             result
-          )}`
+          ))}`
         );
       }
       // Login is a noteworthy lifecycle event — surface at info so users
@@ -524,7 +524,7 @@ module.exports = class WyzeAPI {
     const totpApp = mfaDetails.totp_apps?.[0];
     if (!totpApp) {
       throw new Error(
-        `Unsupported MFA method - only TOTP authenticator apps are currently supported. Received: ${JSON.stringify(mfaDetails)}`
+        `Unsupported MFA method - only TOTP authenticator apps are currently supported. Received: ${sanitizeLogMessage(JSON.stringify(mfaDetails))}`
       );
     }
 
@@ -724,7 +724,7 @@ module.exports = class WyzeAPI {
           return; // Exit if successful.
         } else {
           throw new Error(
-            `Failed to refresh access token - ${JSON.stringify(result)}`
+            `Failed to refresh access token - ${sanitizeLogMessage(JSON.stringify(result))}`
           );
         }
       } catch (error) {
