@@ -15,6 +15,7 @@ const dgram = require("dgram");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+const { VideoHold } = require("./videoHold");
 const nodeCrypto = require("crypto");
 const { spawn } = require("child_process");
 const WebSocket = require("ws");
@@ -247,6 +248,43 @@ function localIpAddress() {
     }
   }
   return "0.0.0.0";
+}
+
+// The H.264 parameter sets (SPS/PPS) of each camera, remembered from the last stream or
+// picture. Wyze sends them only once, at the start, so a new live stream used to wait for
+// them before ffmpeg could start; with them remembered ffmpeg starts at once. They are
+// refreshed on every stream, and only change if the camera's video settings change.
+const SPROP_CACHE_TTL_MS = 30 * 60_000;
+const spropCache = new Map();
+function rememberSprop(key, sprop) {
+  if (key && sprop) spropCache.set(key, { sprop, at: Date.now() });
+}
+function recallSprop(key) {
+  const entry = key ? spropCache.get(key) : null;
+  if (!entry) return null;
+  if (Date.now() - entry.at > SPROP_CACHE_TTL_MS) { spropCache.delete(key); return null; }
+  return entry.sprop;
+}
+function forgetSprop(key) {
+  spropCache.delete(key);
+}
+
+/**
+ * One line saying where the time went before the first picture of a live stream.
+ * All times are milliseconds after `marks.startedAt`; a step that never happened shows "-".
+ */
+function formatStartTiming(marks, extra = {}) {
+  const at = (t) => (t ? `${t - marks.startedAt} ms` : "-");
+  const parts = [
+    `connection info ${at(marks.connectionInfoAt)}${marks.connectionInfoFrom ? ` (${marks.connectionInfoFrom})` : ""}`,
+    `signaling open ${at(marks.signalingOpenAt)}`,
+    `negotiated ${at(marks.negotiatedAt)}`,
+    `parameters ${at(marks.parametersAt)}${marks.parametersFrom ? ` (${marks.parametersFrom})` : ""}`,
+    `first keyframe ${at(marks.firstKeyframeAt)}`,
+  ];
+  if (extra.ffmpegStartedAt) parts.push(`ffmpeg started ${at(extra.ffmpegStartedAt)}`);
+  if (extra.releasedAt) parts.push(`first frame handed over ${at(extra.releasedAt)}${extra.hadKeyframe ? "" : " (asked the camera for a new keyframe)"}`);
+  return `timing: ${parts.join(", ")}`;
 }
 
 /**
@@ -566,7 +604,9 @@ async function captureStreamFrame({
           }
           if (capturedSps && capturedPps) {
             log("debug", "captured SPS/PPS from RTP");
-            startFfmpeg(`${capturedSps.toString("base64")},${capturedPps.toString("base64")}`);
+            const sprop = `${capturedSps.toString("base64")},${capturedPps.toString("base64")}`;
+            rememberSprop(sessionKey, sprop);
+            startFfmpeg(sprop);
           }
         }
       });
@@ -660,17 +700,29 @@ async function _startRtpForwarding({
   timeoutMs = 15_000,
   onVideoIdle = null,
   videoIdleMs = 10_000,
+  sessionKey = null,
+  holdVideo = false,
+  startedAt = Date.now(),
+  connectionInfoAt = null,
+  connectionInfoFrom = null,
 }, session) {
   const log = (level, msg) => {
     if (!logger) return;
     if (typeof logger[level] === "function") logger[level](`[stream] ${msg}`);
   };
+  // When each step of the start happened, for the "timing:" line.
+  const marks = { startedAt, connectionInfoAt, connectionInfoFrom, signalingOpenAt: null, negotiatedAt: null, parametersAt: null, parametersFrom: null, firstKeyframeAt: null };
 
   const videoSock = dgram.createSocket("udp4");
   videoSock.bind(0, "127.0.0.1");
 
   const audioSock = localAudioRtpPort ? dgram.createSocket("udp4") : null;
   if (audioSock) audioSock.bind(0, "127.0.0.1");
+
+  // With `holdVideo`, video is kept from the first keyframe until the caller has ffmpeg
+  // running and calls releaseVideo(); without it, packets go straight to the port.
+  const sendVideo = (packet) => { try { videoSock.send(packet, localRtpPort, "127.0.0.1"); } catch (_) {} };
+  const videoHold = holdVideo ? new VideoHold({ send: sendVideo }) : null;
 
   // Until the full closer exists below, closing must still release the sockets
   // (the peer connection constructor can throw).
@@ -777,19 +829,24 @@ async function _startRtpForwarding({
       track.onReceiveRtp.subscribe((rtp) => {
         lastVideoRtpAt = Date.now();
         // Watch for SPS/PPS NAL units so we can build sprop-parameter-sets
-        // ourselves when the camera doesn't advertise them in the SDP.
-        if (!capturedSps || !capturedPps) {
+        // ourselves when the camera doesn't advertise them in the SDP, and note
+        // the first keyframe (SPS or IDR) for the timing line and the hold buffer.
+        let startsKeyframe = false;
+        if (!capturedSps || !capturedPps || !marks.firstKeyframeAt) {
           for (const nal of _extractH264Nals(rtp.payload)) {
             const t = nal[0] & 0x1f;
             if (t === 7 && !capturedSps) capturedSps = nal;
             else if (t === 8 && !capturedPps) capturedPps = nal;
+            if (t === 5 || t === 7) startsKeyframe = true;
           }
+          if (startsKeyframe && !marks.firstKeyframeAt) marks.firstKeyframeAt = Date.now();
           if (capturedSps && capturedPps) {
             const sprop = `${capturedSps.toString("base64")},${capturedPps.toString("base64")}`;
             resolveSpropFromRtp(sprop);
           }
         }
-        try { videoSock.send(rtp.serialize(), localRtpPort, "127.0.0.1"); } catch (_) {}
+        if (videoHold) videoHold.push(rtp.serialize(), startsKeyframe);
+        else sendVideo(rtp.serialize());
       });
     } else if (track.kind === "audio" && audioSock) {
       track.onReceiveRtp.subscribe((rtp) => {
@@ -842,6 +899,7 @@ async function _startRtpForwarding({
   ]);
 
   log("debug", "signaling open, sending offer");
+  marks.signalingOpenAt = Date.now();
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
   _sendSignal(ws, "SDP_OFFER", { type: "offer", sdp: pc.localDescription.sdp });
@@ -852,6 +910,7 @@ async function _startRtpForwarding({
 
   await Promise.race([negotiated, timeout]);
   timeoutCtl.clear();
+  marks.negotiatedAt = Date.now();
   log("debug", "WebRTC negotiation complete — forwarding RTP");
 
   // Get SPS/PPS for FFmpeg's H.264 decoder.
@@ -862,13 +921,31 @@ async function _startRtpForwarding({
   let spropParameterSets = extractSpropParameterSets(pc.remoteDescription?.sdp ?? null);
   if (spropParameterSets) {
     log("debug", "extracted sprop-parameter-sets from answer SDP");
+    marks.parametersFrom = "answer";
   } else {
-    log("debug", "no sprop in SDP — capturing SPS/PPS from RTP stream");
-    const rtpTimeout = new Promise((res) => setTimeout(() => res(null), 8000));
-    spropParameterSets = await Promise.race([spropFromRtpPromise, rtpTimeout]);
-    if (spropParameterSets) log("debug", "captured SPS/PPS from RTP");
-    else log("warning", "timed out waiting for SPS/PPS — H.264 may not decode");
+    const remembered = recallSprop(sessionKey);
+    if (remembered) {
+      // Start ffmpeg now, without waiting for the camera's first keyframe. The ones
+      // that arrive replace the remembered ones, and are carried in the video anyway.
+      spropParameterSets = remembered;
+      marks.parametersFrom = "remembered";
+      log("debug", "using the SPS/PPS remembered for this camera");
+      spropFromRtpPromise.then((fresh) => {
+        if (fresh !== remembered) log("debug", "the camera's SPS/PPS changed since last time (updated)");
+        rememberSprop(sessionKey, fresh);
+      });
+    } else {
+      log("debug", "no sprop in SDP — capturing SPS/PPS from RTP stream");
+      const rtpTimeout = new Promise((res) => setTimeout(() => res(null), 8000));
+      spropParameterSets = await Promise.race([spropFromRtpPromise, rtpTimeout]);
+      marks.parametersFrom = "from the stream";
+      if (spropParameterSets) {
+        log("debug", "captured SPS/PPS from RTP");
+        rememberSprop(sessionKey, spropParameterSets);
+      } else log("warning", "timed out waiting for SPS/PPS — H.264 may not decode");
+    }
   }
+  marks.parametersAt = Date.now();
   if (closing) throw new Error("stream closed while starting");
 
   // After ffmpeg comes up, the caller can call requestKeyframe() to force
@@ -908,7 +985,9 @@ async function _startRtpForwarding({
   }
 
   // audioSeen() is false for a camera that negotiates audio but sends none (microphone off).
-  return { stop, spropParameterSets, requestKeyframe, audioCodec, videoPayloadType, audioSeen: () => audioPackets > 0 };
+  // releaseVideo() hands over the video held while ffmpeg started (see `holdVideo`).
+  const releaseVideo = () => (videoHold ? videoHold.release() : { hadKeyframe: true });
+  return { stop, spropParameterSets, requestKeyframe, releaseVideo, marks, audioCodec, videoPayloadType, audioSeen: () => audioPackets > 0 };
 }
 
 /**
@@ -960,6 +1039,10 @@ module.exports = {
   closeAllSessions,
   extractAudioCodec,
   summarizeAudioSection,
+  rememberSprop,
+  recallSprop,
+  forgetSprop,
+  formatStartTiming,
   _claimSession, // exported for tests
   _closePeer, // exported for tests
   _makeTimeout, // exported for tests

@@ -10,6 +10,7 @@ const {
   resolveFfmpegPath,
   localIpAddress,
   labelLogger,
+  formatStartTiming,
 } = require("./cameraStreamCapture");
 const {
   propertyIds: PIDs,
@@ -23,6 +24,9 @@ const {
  * stream utility functions, and thin-wrapper controls. None of the functions
  * here contain branching logic or direct API calls (those live in cameras.js).
  */
+// How long connection details fetched ahead of a stream stay usable.
+const PREFETCH_MAX_AGE_MS = 30_000;
+
 module.exports = {
   // ---- Model-branching controls --------------------------------------------
 
@@ -393,11 +397,25 @@ module.exports = {
    * Returns `{ stop() }` — call stop() when the stream ends.
    */
   async cameraStartRtpForwarding(deviceMac, deviceModel, localRtpPort, options = {}) {
-    const { localAudioRtpPort, onVideoIdle, videoIdleMs, label, ...rest } = options;
-    const conn = await this.getCameraWebRTCConnectionInfo(deviceMac, deviceModel, {
-      ...rest,
-      noCache: true,
-    });
+    const { localAudioRtpPort, onVideoIdle, videoIdleMs, label, holdVideo, startedAt = Date.now(), ...rest } = options;
+    // Credentials fetched ahead of time (see prefetchCameraConnection) are used once;
+    // otherwise, or if that fetch failed, ask the cloud now.
+    let conn = null;
+    let connectionInfoFrom = null;
+    const prefetched = this._takePrefetchedConnection(deviceMac, deviceModel);
+    if (prefetched) {
+      try {
+        conn = await prefetched;
+        connectionInfoFrom = "fetched ahead";
+      } catch (_) { /* fall through to a fresh request */ }
+    }
+    if (!conn) {
+      conn = await this.getCameraWebRTCConnectionInfo(deviceMac, deviceModel, {
+        ...rest,
+        noCache: true,
+      });
+      connectionInfoFrom = "asked just now";
+    }
     return startRtpForwarding({
       signalingUrl: conn.signalingUrl,
       iceServers: conn.iceServers,
@@ -405,9 +423,34 @@ module.exports = {
       localAudioRtpPort,
       onVideoIdle,
       videoIdleMs,
+      holdVideo,
+      startedAt,
+      connectionInfoAt: Date.now(),
+      connectionInfoFrom,
       sessionKey: deviceMac, // one WebRTC session per camera
       logger: labelLogger(this.apiLogEnabled ? this.log : null, label || deviceMac),
     });
+  },
+
+  /**
+   * Ask the cloud for a camera's connection details now, so a live stream that starts a
+   * moment later (HomeKit prepares a stream just before it starts it) does not wait for
+   * the round trip. They are fresh credentials, used once by the next stream of that
+   * camera within 30 seconds, and dropped otherwise. Never throws.
+   */
+  prefetchCameraConnection(deviceMac, deviceModel) {
+    if (!this._prefetchedConn) this._prefetchedConn = new Map();
+    const promise = this.getCameraWebRTCConnectionInfo(deviceMac, deviceModel, { noCache: true });
+    promise.catch(() => {}); // an unused failure is not an error
+    this._prefetchedConn.set(`${deviceMac}:${deviceModel}`, { promise, at: Date.now() });
+  },
+
+  _takePrefetchedConnection(deviceMac, deviceModel) {
+    const key = `${deviceMac}:${deviceModel}`;
+    const entry = this._prefetchedConn?.get(key);
+    if (!entry) return null;
+    this._prefetchedConn.delete(key);
+    return Date.now() - entry.at <= PREFETCH_MAX_AGE_MS ? entry.promise : null;
   },
 
   /**
@@ -558,6 +601,7 @@ module.exports = {
       if (localAudioRtpPort) localAudioRtpPort = await pickFreeUdpPort();
       if (stopped) return;
 
+      const startedAt = Date.now();
       forwarder = await this.cameraStartRtpForwarding(
         deviceMac, deviceModel, localRtpPort,
         {
@@ -565,6 +609,8 @@ module.exports = {
           label: label || deviceMac,
           onVideoIdle,
           videoIdleMs: 10_000,
+          holdVideo: true,
+          startedAt,
         }
       );
 
@@ -624,7 +670,18 @@ module.exports = {
       // short interval — each PLI causes the camera to reset its encoder
       // and drop intermediate frames, which shows up as the playback
       // clock jumping forward in chunks.
-      setTimeout(() => forwarder?.requestKeyframe?.(), 200);
+      const ffmpegStartedAt = Date.now();
+      const thisForwarder = forwarder;
+      setTimeout(() => {
+        if (forwarder !== thisForwarder) return; // torn down or replaced meanwhile
+        // ffmpeg is up: hand it the video held since the camera's first keyframe. Only when
+        // that was missed (nothing held) is a fresh keyframe worth asking for.
+        const { hadKeyframe } = thisForwarder.releaseVideo?.() ?? { hadKeyframe: false };
+        if (!hadKeyframe) thisForwarder.requestKeyframe?.();
+        if (thisForwarder.marks) {
+          log("debug", `[stream] ${formatStartTiming(thisForwarder.marks, { ffmpegStartedAt, releasedAt: Date.now(), hadKeyframe })}`);
+        }
+      }, 200);
 
       // A connection that stays up for 30 seconds earns a fresh retry budget.
       stableTimer = setTimeout(() => { retryBudget.retries = 0; }, 30_000);
