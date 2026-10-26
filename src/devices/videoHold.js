@@ -7,7 +7,9 @@
  * is before ffmpeg has started and bound its port, so the first keyframe used to be lost
  * and a second one had to be requested. This holds everything from the first keyframe on,
  * and `release()` hands it over in order, then lets packets pass straight through.
- * Packets before the first keyframe are dropped: no decoder can use them.
+ * Packets before the first keyframe are dropped: no decoder can use them. That also holds
+ * after `release()` when no keyframe had arrived by then: nothing is passed on until one
+ * does, and then the parameter sets (see `prefix`) go in front of it.
  */
 class VideoHold {
   /**
@@ -24,10 +26,19 @@ class VideoHold {
     this.held = [];
     this.holding = true;
     this.started = false; // a keyframe has been seen
+    this.waitForKeyframe = false; // released before any keyframe: pass on nothing until one arrives
   }
 
   push(packet, startsKeyframe) {
-    if (!this.holding) return this.send(packet);
+    if (!this.holding) {
+      if (this.waitForKeyframe) {
+        if (!startsKeyframe) return;
+        this.waitForKeyframe = false;
+        const extra = this.prefix ? this.prefix(packet) : null;
+        if (extra) this.send(extra);
+      }
+      return this.send(packet);
+    }
     if (!this.started) {
       if (!startsKeyframe) return;
       this.started = true;
@@ -48,6 +59,7 @@ class VideoHold {
         if (extra) this.send(extra);
       }
       for (const packet of held) this.send(packet);
+      this.waitForKeyframe = !hadKeyframe;
     }
     return { hadKeyframe };
   }

@@ -1011,7 +1011,8 @@ async function _startRtpForwarding({
         }
         if (startsKeyframe && !marks.firstKeyframeAt) {
           marks.firstKeyframeAt = Date.now();
-          try { onFirstKeyframe?.(marks.firstKeyframeAt); } catch (_) {}
+          marks.keyframeHadParameterSets = rtpHasParameterSets(rtp.payload);
+          try { onFirstKeyframe?.(marks.firstKeyframeAt, marks.keyframeHadParameterSets); } catch (_) {}
         }
         const packet = rtp.serialize();
         if (keyframes) keyframes.push(packet, rtp.header.timestamp, startsKeyframe);
@@ -1174,7 +1175,7 @@ async function _startRtpForwarding({
     const now = Date.now();
     Object.assign(marks, {
       startedAt: now, connectionInfoAt: now, connectionInfoFrom: "already open", signalingOpenAt: now,
-      negotiatedAt: now, parametersAt: now, parametersFrom: "already open", firstKeyframeAt: null,
+      negotiatedAt: now, parametersAt: now, parametersFrom: "already open", firstKeyframeAt: null, keyframeHadParameterSets: null,
     });
     videoHold = new VideoHold({ send: sendVideo, prefix: parameterSetPrefix });
     attached = true;

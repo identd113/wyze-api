@@ -710,8 +710,8 @@ module.exports = {
           holdVideo: true,
           startedAt,
           // The keyframe often arrives after the summary line: say when it did.
-          onFirstKeyframe: (at) => {
-            if (timingLogged) log("debug", `[stream] timing: the camera's first keyframe arrived ${at - startedAt} ms after the start (${at - ffmpegStartedAt} ms after ffmpeg started)`);
+          onFirstKeyframe: (at, hadParameterSets) => {
+            if (timingLogged) log("debug", `[stream] timing: the camera's first keyframe arrived ${at - startedAt} ms after the start (${at - ffmpegStartedAt} ms after ffmpeg started), ${hadParameterSets ? "with" : "without"} its own SPS/PPS`);
           },
         }
       );
