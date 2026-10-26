@@ -248,7 +248,8 @@ module.exports = {
   },
 
   /**
-   * Cloud thumbnail first, fall back to live capture.
+   * Cloud thumbnail first, fall back to live capture. Pass `options.deviceModel` to skip
+   * the device-list lookup that finds the camera's model.
    */
   async getCameraSnapshotImage(mac, options = {}) {
     if (!options.skipCloud) {
@@ -263,9 +264,15 @@ module.exports = {
       }
     }
 
-    const camera = await this.getCamera(mac);
-    if (!camera) throw new Error(`Camera not found: ${mac}`);
-    const buffer = await this.cameraCaptureSnapshot(camera.mac, camera.product_model, options);
+    // A caller that already knows the model (the plugin does) saves a whole device-list
+    // request per capture; otherwise look the camera up.
+    let model = options.deviceModel;
+    if (!model) {
+      const camera = await this.getCamera(mac);
+      if (!camera) throw new Error(`Camera not found: ${mac}`);
+      model = camera.product_model;
+    }
+    const buffer = await this.cameraCaptureSnapshot(mac, model, options);
     return { buffer, source: "capture" };
   },
 
