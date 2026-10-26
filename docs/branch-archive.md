@@ -31,9 +31,13 @@ It was never wired into the library. The working version of this idea is in `src
 
 `src/payload/venus.js` shows the request bodies for the vacuum ("venus") API: `createGetDeviceInfoPayload`, `createSetCurrentMapPayload`, `createSweepRecordsPayload` (`purpose: "history_map"`), `setIotActionSetPayload` (`cmd`, `is_sub_device: 0`) and `createEventPayload`. The room-selection logic is left as a commented-out port of wyze-sdk's `rooms_id` handling. The current `src/devices/vacuum.js` covers the same calls.
 
-## Fixes on `2.0.0-merge-main` that `2.x` does not have
+## Fixes on `2.0.0-merge-main`
 
-Checked against `2.x` on 2026-10-26. None of these is a regression from beta.2, but they are real bugs.
+Checked against `2.x` on 2026-10-26. None was a regression from beta.2. Status:
+
+- 1 (`getHmsID`): **not ported.** The wiki documents it as a wrapper around `getPlanBindingListByUser()`, so changing it would change documented behaviour.
+- 2 (setpoint units): **ported in 2.0.0-beta.4**, with a 40-100 °F range check, and the wiki corrected. The unit is inferred from how the plugin reads the values; thermostat owners are asked for confirmation.
+- 3 (error redaction): **ported in 2.0.0-beta.4**, with a test.
 
 1. **`getHmsID()` returns the raw plan list** (`src/devices/hms.helpers.js`), not an id string. The branch version walks the plans and returns the `hms_id` of the first plan that has a device bound to it. The plugin has its own copy of this logic, so only direct callers of the library are affected.
 2. **`setThermostatHeatingSetpoint` and `setThermostatCoolingSetpoint` assume tenths of a degree** (680 = 68.0 °F). The rest of the codebase, and the plugin, treat `heat_sp` and `cool_sp` as whole degrees Fahrenheit. A caller using these two wrappers would send ten times the intended value. The branch fixes the setters, their docs and the test.
