@@ -225,18 +225,30 @@ module.exports = {
       if (entry && entry.expiresAt > Date.now()) return entry.buffer;
     }
 
-    const conn = await this.getCameraWebRTCConnectionInfo(deviceMac, deviceModel, {
-      noCache: true,
-      includeClientId: false,
-    });
-
-    const buffer = await cameraStreamCapture.captureStreamFrame({
-      signalingUrl: conn.signalingUrl,
-      iceServers: conn.iceServers,
-      logger: cameraStreamCapture.labelLogger(this.apiLogEnabled ? this.log : null, options.label || deviceMac),
-      timeoutMs,
-      sessionKey: deviceMac, // one WebRTC session per camera
-    });
+    const logger = cameraStreamCapture.labelLogger(this.apiLogEnabled ? this.log : null, options.label || deviceMac);
+    let buffer;
+    for (let attempt = 1; ; attempt += 1) {
+      const conn = await this.getCameraWebRTCConnectionInfo(deviceMac, deviceModel, {
+        noCache: true,
+        includeClientId: false,
+      });
+      try {
+        buffer = await cameraStreamCapture.captureStreamFrame({
+          signalingUrl: conn.signalingUrl,
+          iceServers: conn.iceServers,
+          logger,
+          timeoutMs,
+          sessionKey: deviceMac, // one WebRTC session per camera
+        });
+        break;
+      } catch (err) {
+        // ffmpeg occasionally loses a race for its local UDP port (another process takes
+        // it between choosing it and opening it). Nothing is wrong with the camera: go
+        // again once, with fresh connection details.
+        if (attempt >= 2 || !/address already in use/i.test(err.message)) throw err;
+        logger?.debug?.("[capture] ffmpeg could not use its local port; trying once more");
+      }
+    }
 
     if (!noCache) {
       this._snapshotCaptureCache.set(deviceMac, {
