@@ -58,3 +58,32 @@ test("the Doorbell v2 is a doorbell; other cameras are not", () => {
   assert.strictEqual(w.cameraIsDoorbell("WYZE_CAKP2JFUS"), false);
   assert.ok(EventAlarmType.DOORBELL_RANG.includes(10));
 });
+
+test("cameraGetEventsMulti asks once for several cameras and groups the events by camera", async () => {
+  const calls = [];
+  const w = stub([
+    { event_id: "b2", device_mac: "B", event_ts: "30", event_value: "13" },
+    { event_id: "a1", device_mac: "A", event_ts: "20", event_value: "13" },
+    { event_id: "b1", device_mac: "B", event_ts: "10", event_value: "2" },
+    { event_id: "zz", device_mac: "NOT_ASKED", event_ts: "5", event_value: "13" },
+  ], calls);
+  const grouped = await w.cameraGetEventsMulti(["A", "B", "C", "A"]);
+  assert.strictEqual(calls.length, 1, "one request for all the cameras");
+  assert.deepStrictEqual(calls[0][1].device_mac_list, ["A", "B", "C"], "duplicates removed");
+  assert.deepStrictEqual(Object.keys(grouped), ["A", "B", "C"]);
+  assert.deepStrictEqual(grouped.A.map((e) => e.id), ["a1"]);
+  assert.deepStrictEqual(grouped.B.map((e) => e.id), ["b2", "b1"], "newest first, as returned");
+  assert.deepStrictEqual(grouped.C, [], "a camera with no events is present and empty");
+});
+
+test("cameraGetEventsMulti with no cameras makes no request", async () => {
+  const calls = [];
+  const w = stub([], calls);
+  assert.deepStrictEqual(await w.cameraGetEventsMulti([]), {});
+  assert.strictEqual(calls.length, 0);
+});
+
+test("an event with no camera on it is ignored when several cameras were asked for", async () => {
+  const w = stub([{ event_id: "x", event_ts: "1", event_value: "13" }]);
+  assert.deepStrictEqual(await w.cameraGetEventsMulti(["A", "B"]), { A: [], B: [] });
+});

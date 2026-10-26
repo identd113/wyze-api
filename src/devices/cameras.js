@@ -161,9 +161,27 @@ module.exports = {
    * @param {{ sinceMs?: number, count?: number }} [options] look-back window (default 5 min) and max events (1-20)
    */
   async cameraGetEvents(deviceMac, { sinceMs = 5 * 60_000, count = 20 } = {}) {
+    const byMac = await this.cameraGetEventsMulti([deviceMac], { sinceMs, count });
+    return byMac[deviceMac] ?? [];
+  },
+
+  /**
+   * Recent events for several cameras in ONE request (the cloud call takes a list of
+   * cameras), grouped by camera: `{ [mac]: events[] }`, each list newest first. Every
+   * camera in `deviceMacs` is present, with an empty list when it has no events.
+   * `count` (1-20) is the most events returned in total, across all the cameras, newest
+   * first, so one busy camera can crowd out the others' older events but never their
+   * newest ones. Read-only.
+   * @param {string[]} deviceMacs
+   * @param {{ sinceMs?: number, count?: number }} [options]
+   */
+  async cameraGetEventsMulti(deviceMacs, { sinceMs = 5 * 60_000, count = 20 } = {}) {
+    const macs = [...new Set(deviceMacs)];
+    const grouped = Object.fromEntries(macs.map((mac) => [mac, []]));
+    if (macs.length === 0) return grouped;
     const now = Date.now();
     const result = await this.request("app/v2/device/get_event_list", {
-      device_mac_list: [deviceMac],
+      device_mac_list: macs,
       event_value_list: [],
       event_tag_list: [],
       event_type: "1",
@@ -174,18 +192,22 @@ module.exports = {
       sv: SV_GET_EVENT_LIST,
     });
     const events = result?.data?.data?.event_list ?? [];
-    return events.map((e) => {
+    for (const e of events) {
+      // A single-camera request may omit the camera on each event; it can only be that camera.
+      const mac = e.device_mac ?? (macs.length === 1 ? macs[0] : null);
+      if (!mac || !grouped[mac]) continue;
       const value = Number(e.event_value);
       const type = Object.keys(EventAlarmType).find((name) => EventAlarmType[name].includes(value)) ?? null;
-      return {
+      grouped[mac].push({
         id: e.event_id,
         time: Number(e.event_ts),
         value,
         type,
         tags: Array.isArray(e.tag_list) ? e.tag_list : [],
         params: e.event_params ?? {},
-      };
-    });
+      });
+    }
+    return grouped;
   },
 
   // ---- Snapshot capture (headless WebRTC) ---------------------------------
