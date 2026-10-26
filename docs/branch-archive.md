@@ -14,7 +14,7 @@ Old branches that were cleaned out of the repository, what each one held, and wh
 | `patch-1` | `cbf09d728` | 2024-02-05 | A README edit | Nothing to keep |
 | `fix/runtime-bugs-and-logging-consistency` | `5e2eb1ed3` | 2026-04-24 | Replaces an unimported `moment().valueOf()` in `localBulbCommand` with `Date.now()`, plus logging cleanups | The `Date.now()` change is in `2.x` since 2.0.0-beta.2 (CHANGELOG). The logging cleanups were not compared |
 | `dependabot/...-9d02389744`, `...-security-group-8cb6623c4d` | `bcc650f8c`, `6054dc7e8` | 2025-01, 2024-03 | Dependency bumps | Out of date; `npm audit` is clean on `2.x` |
-| `2.0.0-merge-main` | `3c8e325a3` | 2026-08-06 | A parallel reconciliation of `main` into the 2.0.0 line, with a correctness and security audit | Mostly superseded by `2.x`; three fixes were **not** carried over (below) |
+| `2.0.0-merge-main` | `3c8e325a3` | 2026-08-06 | A parallel reconciliation of `main` into the 2.0.0 line, with a correctness and security audit | Mostly superseded by `2.x`; two of its three fixes were ported in 2.0.0-beta.4 and one was left out (below) |
 | `UpdateLoggin`, `fix_issue9`, `fix_issue9-2`, `fix-main`, `pr/merge-main-into-2.0.0` | n/a | n/a | Nothing that `2.x` does not already have | Deleted without a tag |
 
 ## The `cameraStream` branch, as research
