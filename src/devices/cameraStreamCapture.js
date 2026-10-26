@@ -1122,7 +1122,9 @@ async function _startRtpForwarding({
       marks.parametersFrom = "remembered";
       log("debug", "using the SPS/PPS remembered for this camera");
       spropFromRtpPromise.then((fresh) => {
+        if (!fresh) return;
         if (fresh !== remembered) log("debug", "the camera's SPS/PPS changed since last time (updated)");
+        spropParameterSets = fresh; // this session's pictures and a stream that takes it over use the new ones
         rememberSprop(sessionKey, fresh);
       });
     } else {
@@ -1219,7 +1221,8 @@ async function _startRtpForwarding({
   };
 
   return {
-    stop, spropParameterSets, requestKeyframe, releaseVideo, marks, audioCodec, videoPayloadType,
+    stop, requestKeyframe, releaseVideo, marks, audioCodec, videoPayloadType,
+    get spropParameterSets() { return spropParameterSets; },
     audioSeen: () => audioPackets > 0,
     attach, snapshot, isAlive: () => !closing,
   };
@@ -1240,7 +1243,12 @@ async function startRtpForwarding(params) {
   release = await _claimSession(params.sessionKey, "stream", closeAndRelease);
   try {
     const handle = await _startRtpForwarding(params, session);
-    return { ...handle, stop: closeAndRelease };
+    // The copy must keep following the session's SPS/PPS, which can be replaced after it starts.
+    return Object.defineProperty({ ...handle, stop: closeAndRelease }, "spropParameterSets", {
+      get: () => handle.spropParameterSets,
+      enumerable: true,
+      configurable: true,
+    });
   } catch (err) {
     await closeAndRelease().catch(() => {});
     throw err;
