@@ -95,10 +95,17 @@ so it would not run on the Mac test bridge. It is not used by the plugin today.
 - **Night vision (Auto / Off / On) in the cloud list.** Cycled Auto, Off, On, Auto on the Back
   Yard Cam while watching every property and parameter: nothing changed. This matches the above:
   the camera keeps it, and the cloud list does not carry it.
-- **Microphone on/off for live view.** The Wyze app plays the Back Yard Cam's sound, but over
-  our WebRTC connection the camera sends none. `P1048`, `P1002` and `audio_alarm_switch` were
-  tried and are not it. The Garage (same model) does send audio.
+- **Why the Back Yard Cam sends no audio over live view (unresolved).** The Wyze app plays this
+  camera's sound, and its WebRTC answer says it will send audio (`port=9 direction=sendrecv`,
+  with an `ssrc`), identical to the Garage's answer, yet in nearly every stream since 17:53 on
+  2026-10-25 no audio packets arrived. The Garage (same model) delivers about 26 packets a
+  second every time. Tried without effect: `P1048` 0 to 1 (write accepted), matching `P1002` and
+  `audio_alarm_switch` to the Garage, a camera reboot. One exception: a single 10-second stream
+  right after the reboot delivered 87 packets (about a third of the Garage's rate) and nothing
+  after that. It followed a snapshot capture that was cut short by the live stream, which may or
+  may not matter. Parked; see the log below.
 
 ## Log
 
+- 2026-10-25 (evening): Back Yard Cam audio parked as unresolved (see above). Night vision, IR light and the status light live on the camera, reached over TUTK (Linux only), not in this list.
 - 2026-10-25: first version, from the Doorbell, Back Yard Cam and Garage; added what wyze-sdk, wyzeapy and docker-wyze-bridge say, including where night vision lives.
