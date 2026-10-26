@@ -283,7 +283,7 @@ function formatStartTiming(marks, extra = {}) {
     `first keyframe ${at(marks.firstKeyframeAt)}`,
   ];
   if (extra.ffmpegStartedAt) parts.push(`ffmpeg started ${at(extra.ffmpegStartedAt)}`);
-  if (extra.releasedAt) parts.push(`first frame handed over ${at(extra.releasedAt)}${extra.hadKeyframe ? "" : " (asked the camera for a new keyframe)"}`);
+  if (extra.releasedAt) parts.push(`first frame handed over ${at(extra.releasedAt)}${extra.hadKeyframe ? "" : " (keyframe not there yet)"}`);
   return `timing: ${parts.join(", ")}`;
 }
 
@@ -705,6 +705,7 @@ async function _startRtpForwarding({
   startedAt = Date.now(),
   connectionInfoAt = null,
   connectionInfoFrom = null,
+  onFirstKeyframe = null,
 }, session) {
   const log = (level, msg) => {
     if (!logger) return;
@@ -839,7 +840,10 @@ async function _startRtpForwarding({
             else if (t === 8 && !capturedPps) capturedPps = nal;
             if (t === 5 || t === 7) startsKeyframe = true;
           }
-          if (startsKeyframe && !marks.firstKeyframeAt) marks.firstKeyframeAt = Date.now();
+          if (startsKeyframe && !marks.firstKeyframeAt) {
+            marks.firstKeyframeAt = Date.now();
+            try { onFirstKeyframe?.(marks.firstKeyframeAt); } catch (_) {}
+          }
           if (capturedSps && capturedPps) {
             const sprop = `${capturedSps.toString("base64")},${capturedPps.toString("base64")}`;
             resolveSpropFromRtp(sprop);

@@ -47,7 +47,7 @@ test("a step that did not happen shows a dash, and a missed keyframe is said so"
   const t = 5000;
   const line = formatStartTiming({ startedAt: t, connectionInfoAt: t + 10, signalingOpenAt: t + 20, negotiatedAt: t + 30, parametersAt: t + 40 }, { releasedAt: t + 500, hadKeyframe: false });
   assert.match(line, /first keyframe -,/);
-  assert.match(line, /first frame handed over 500 ms \(asked the camera for a new keyframe\)$/);
+  assert.match(line, /first frame handed over 500 ms \(keyframe not there yet\)$/);
 });
 
 test("connection details fetched ahead are used once, and only while fresh", async () => {

@@ -397,7 +397,7 @@ module.exports = {
    * Returns `{ stop() }` — call stop() when the stream ends.
    */
   async cameraStartRtpForwarding(deviceMac, deviceModel, localRtpPort, options = {}) {
-    const { localAudioRtpPort, onVideoIdle, videoIdleMs, label, holdVideo, startedAt = Date.now(), ...rest } = options;
+    const { localAudioRtpPort, onVideoIdle, videoIdleMs, label, holdVideo, startedAt = Date.now(), onFirstKeyframe, ...rest } = options;
     // Credentials fetched ahead of time (see prefetchCameraConnection) are used once;
     // otherwise, or if that fetch failed, ask the cloud now.
     let conn = null;
@@ -425,6 +425,7 @@ module.exports = {
       videoIdleMs,
       holdVideo,
       startedAt,
+      onFirstKeyframe,
       connectionInfoAt: Date.now(),
       connectionInfoFrom,
       sessionKey: deviceMac, // one WebRTC session per camera
@@ -602,6 +603,8 @@ module.exports = {
       if (stopped) return;
 
       const startedAt = Date.now();
+      let ffmpegStartedAt = 0;
+      let timingLogged = false;
       forwarder = await this.cameraStartRtpForwarding(
         deviceMac, deviceModel, localRtpPort,
         {
@@ -611,6 +614,10 @@ module.exports = {
           videoIdleMs: 10_000,
           holdVideo: true,
           startedAt,
+          // The keyframe often arrives after the summary line: say when it did.
+          onFirstKeyframe: (at) => {
+            if (timingLogged) log("debug", `[stream] timing: the camera's first keyframe arrived ${at - startedAt} ms after the start (${at - ffmpegStartedAt} ms after ffmpeg started)`);
+          },
         }
       );
 
@@ -670,16 +677,18 @@ module.exports = {
       // short interval — each PLI causes the camera to reset its encoder
       // and drop intermediate frames, which shows up as the playback
       // clock jumping forward in chunks.
-      const ffmpegStartedAt = Date.now();
+      ffmpegStartedAt = Date.now();
       const thisForwarder = forwarder;
       setTimeout(() => {
         if (forwarder !== thisForwarder) return; // torn down or replaced meanwhile
-        // ffmpeg is up: hand it the video held since the camera's first keyframe. Only when
-        // that was missed (nothing held) is a fresh keyframe worth asking for.
+        // ffmpeg is up: hand it the video held since the camera's first keyframe. If the
+        // keyframe has not arrived yet, nothing is asked for: the forwarder already asks
+        // the camera every half second until it has one, and an extra request can make the
+        // camera reset its encoder.
         const { hadKeyframe } = thisForwarder.releaseVideo?.() ?? { hadKeyframe: false };
-        if (!hadKeyframe) thisForwarder.requestKeyframe?.();
         if (thisForwarder.marks) {
           log("debug", `[stream] ${formatStartTiming(thisForwarder.marks, { ffmpegStartedAt, releasedAt: Date.now(), hadKeyframe })}`);
+          timingLogged = true;
         }
       }, 200);
 
