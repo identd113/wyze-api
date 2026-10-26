@@ -74,6 +74,7 @@ jobs:
             exit 1
           fi
           echo "Publishing wyze-api@$VERSION to latest"
-      - run: npm publish --access public --tag latest
+      - name: Stage the release (approve it on npmjs.com to publish)
+        run: npm install -g npm@^11.15.0 && npm stage publish --access public --tag latest
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
