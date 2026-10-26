@@ -249,6 +249,34 @@ function localIpAddress() {
   return "0.0.0.0";
 }
 
+/**
+ * A one-line, credential-free description of the audio section of an SDP answer:
+ * the m= port (0 means the camera rejected audio), the direction attribute, and the
+ * names of the other attributes. Used to tell "camera refused audio" from "camera
+ * accepted it but sent nothing".
+ */
+function summarizeAudioSection(sdp) {
+  if (!sdp) return null;
+  let inAudio = false;
+  let found = false;
+  let port = null;
+  let direction = "none";
+  const attrs = new Set();
+  for (const raw of String(sdp).split(/\r?\n/)) {
+    const line = raw.trim();
+    if (line.startsWith("m=")) {
+      inAudio = line.startsWith("m=audio");
+      if (inAudio) { found = true; port = line.split(/\s+/)[1]; }
+      continue;
+    }
+    if (!inAudio) continue;
+    if (/^a=(sendrecv|sendonly|recvonly|inactive)$/.test(line)) direction = line.slice(2);
+    else if (line.startsWith("a=")) attrs.add(line.slice(2).split(/[:\s]/)[0]);
+  }
+  if (!found) return null;
+  return `port=${port} direction=${direction} attributes=${[...attrs].join(",")}`;
+}
+
 // Audio SDP accepts both PCMU (PT 0) and Opus (PT 111) so FFmpeg handles either codec.
 /**
  * The audio codec the camera negotiated, from its SDP answer:
@@ -875,6 +903,8 @@ async function _startRtpForwarding({
     log("debug", audioCodec
       ? `audio: ${audioCodec.name}/${audioCodec.clockRate} on payload type ${audioCodec.payloadType}`
       : "audio: no codec found in the SDP answer");
+    const audioSection = summarizeAudioSection(pc.remoteDescription?.sdp ?? null);
+    if (audioSection) log("debug", `audio section of the camera's answer: ${audioSection}`);
   }
 
   // audioSeen() is false for a camera that negotiates audio but sends none (microphone off).
@@ -929,6 +959,7 @@ module.exports = {
   startRtpForwarding,
   closeAllSessions,
   extractAudioCodec,
+  summarizeAudioSection,
   _claimSession, // exported for tests
   _closePeer, // exported for tests
   _makeTimeout, // exported for tests
