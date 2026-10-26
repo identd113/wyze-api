@@ -7,7 +7,7 @@ they mean. This page records what we know, how we know it, and what we have only
 **Status key**
 
 - **Confirmed**: we changed it (or watched it change) and saw what happened.
-- **Library**: the name comes from this library or from [SecKatie/wyzeapy](https://github.com/SecKatie/wyzeapy); we have not tested it on our cameras.
+- **Library**: the name comes from this library or from another project (listed under "What other projects say"); we have not tested it on our cameras.
 - **Unknown**: only the values we have seen.
 
 Observed values below were read on 2026-10-25 from a Cam Doorbell v2 (`HL_DB2`, "Doorbell") and
@@ -28,22 +28,24 @@ changes on its own.
 
 | Property | Meaning | Status | Evidence / notes | Doorbell | Back Yard | Garage |
 |---|---|---|---|---|---|---|
-| `P1` | Notifications | Library | | 1 | 1 | 1 |
+| `P1` | Notifications | Library | wyzeapy, wyze-sdk | 1 | 1 | 1 |
 | `P3` | Camera on (0 = privacy / off) | Library | The Doorbell cannot be switched off through the API. | 1 | 1 | 1 |
 | `P5` | Online | Library | | 1 | 1 | 1 |
-| `P1001` | Motion detection on | Library | | 1 | 1 | 1 |
-| `P1047` | Motion event recording | Library | | 1 | 1 | 1 |
-| `P1048` | Sound event recording (library name: sound alarm enable) | Library | Set 0 to 1 on the Back Yard Cam: the write was accepted and read back as 1. It did **not** make the camera send audio over a live stream (two 20-second streams). | 1 | 0 to 1 | 1 |
+| `P1001` | Motion detection on (the toggle; `P1047` holds the state) | Library | wyzeapy | 1 | 1 | 1 |
+| `P1047` | Motion event recording ("event recording motion record enabled") | Library | wyze-sdk, wyzeapy | 1 | 1 | 1 |
+| `P1048` | Sound event recording ("event recording sound record enabled") | Library | wyze-sdk. Set 0 to 1 on the Back Yard Cam: the write was accepted and read back as 1. It did **not** make the camera send audio over a live stream (two 20-second streams). | 1 | 0 to 1 | 1 |
 | `P1049` | Siren (1 = on, 2 = off) | Library | | 2 | 2 | 2 |
-| `P1056` | Floodlight / spotlight (1 = on, 2 = off) | **Confirmed** | On the Back Yard Cam it flipped to 1 whenever the motion light came on and back to 2 when it went out (six changes, 18:49 to 19:11), together with `dongle_switch`. The cloud list updates within seconds. | - | 2 | 2 |
-| `P1301` | Garage door | Library | | - | 0 | 0 |
+| `P1056` | Floodlight / spotlight / accessory state (1 = on, 2 = off) | **Confirmed** | wyzeapy calls it the state of camera accessories (garage doors, light sockets, floodlights). On the Back Yard Cam it flipped to 1 whenever the motion light came on and back to 2 when it went out (six changes, 18:49 to 19:11), together with `dongle_switch`. The cloud list updates within seconds. | - | 2 | 2 |
+| `P1301` | Contact state (used for a garage door accessory) | Library | wyzeapy: contact state. Its sibling `P1302` is a motion state. | - | 0 | 0 |
 | `P1002` | Unknown. Changed 0 to 1 on the Back Yard Cam at the same time as `audio_alarm_switch` after a setting was changed in the Wyze app (which one was not recorded). | Unknown | The Garage has both at 1. Making them match did not bring audio. | 0 | 1 | 1 |
 | `P1013` | Wi-Fi signal strength | Library | Doorbell only: 56 (weak). The Cam v3 reports none. | 56 | - | - |
 | `P1050` | Looks like a Unix time (seconds) | Unknown | Changes on its own. | 1792911873 | 1792735385 | 1792472060 |
-| `P1003` `P1004` `P1005` | Unknown | Unknown | | 0 / 0 / 1 | 1 / 1 / 1 | 1 / 1 / 1 |
+| `P4` | Event switch | Library | wyze-sdk (`event_switch`) | 1 | 1 | 1 |
+| `P1021` | Dongle (accessory) light switch | Library | wyze-sdk (`dongle_light_switch`). Not yet tested: the Back Yard Cam has a floodlight dongle and reads 1. | - | 1 | 1 |
+| `P1003` `P1004` `P1005` | Unknown | Unknown | wyze-sdk lists them as "not used" (they exist in Wyze's app but nothing uses them). | 0 / 0 / 1 | 1 / 1 / 1 | 1 / 1 / 1 |
 | `P1006` to `P1008`, `P1010`, `P1014`, `P1015`, `P1017` to `P1022`, `P1033`, `P1035` | Unknown | Unknown | Same values on both Cam v3s (`P1015` is 1 on the Doorbell, 0 on the Cam v3s). | | | |
 | `P1306` to `P1312`, `P3000`, `P1901` | Unknown | Unknown | `P1310` is 300 on both Cam v3s. | - | | |
-| `P18` `P19` `P20` `P30` `P2` `P4` | Unknown | Unknown | | | | |
+| `P18` `P19` `P20` `P30` `P2` | Unknown | Unknown | | | | |
 | `P1054` to `P1079`, `P1622`, `P1623` | Unknown | Unknown | Doorbell only. | | - | - |
 
 ## Device parameters (from the device list)
@@ -60,15 +62,43 @@ changes on its own.
 | `ai_notification_v2` | AI (person, vehicle, ...) notifications | Unknown | 0 on the Doorbell, 1 on the Cam v3s. | 0 | 1 | 1 |
 | `spotlight_status`, `accessory_switch`, `power_saving_mode_switch`, `device_setting_channel`, `dtls`, `main_device_dtls`, `comfort_standard_level`, `power_source`, `is_link_toy_car`, `is_temperature_humidity`, `temp_humi_room_type`, `temperature`, `humidity`, `electricity`, `battery_charging_status` | Unknown | Unknown | | | | |
 
+## What other projects say
+
+- **[shauntarves/wyze-sdk](https://github.com/shauntarves/wyze-sdk)** (Python, cloud API) lists camera property names taken from the Wyze app's own code: `P4` event switch, `P1021` dongle light switch, `P1047` motion record, `P1048` sound record. It marks most of the rest (`P1001` to `P1020`, `P1301` to `P1329`, `P1501` to `P1506`) as "not used".
+- **[SecKatie/wyzeapy](https://github.com/SecKatie/wyzeapy)** (Python, Home Assistant) uses `P1049` siren, `P1056` accessory state (garage door, light socket, floodlight), `P1301` contact state, `P1302` motion state, `P1001` / `P1047` motion detection, `P1029` for the outdoor cam.
+- **[mrlt8/docker-wyze-bridge](https://github.com/mrlt8/docker-wyze-bridge)** controls the settings that are **not** in the cloud list, over the camera's own connection (TUTK / IOTC), not the Wyze cloud. That is where night vision lives.
+
+## Settings the camera keeps itself (not in the cloud property list)
+
+These are read and set with TUTK commands sent to the camera. Command numbers and values come
+from docker-wyze-bridge. None is tested here yet.
+
+| Setting | Get / set command | Values |
+|---|---|---|
+| Night vision | `K10040` / `K10042` | 1 = on, 2 = off, 3 = auto |
+| IR LED | `K10044` / `K10046` | brightness-style number |
+| Status light | `K10030` / `K10032` | on / off |
+| Night mode switching type | `K10624` / `K10626` | |
+| Time stamp / logo overlay | `K10070` / `K10072`, `K10074` / `K10076` | |
+| Motion tagging | `K10290` / `K10292` | |
+| Floodlight / white light / spotlight | `K10788`, `K10820` / `K12060`, `K10646` | |
+| Flip (horizontal / vertical) | `K10052` | |
+| Pan / tilt, cruise, motion tracking (Pan cams) | `K11000` to `K11022` | |
+| RTSP on/off | `K10604` / `K10600` | |
+
+`wyze-api` already carries a port of this protocol in `src/tutk/` (including
+`K10042SetNightVisionStatus`), but it needs Wyze's native IOTC library and only loads on Linux,
+so it would not run on the Mac test bridge. It is not used by the plugin today.
+
 ## Things we looked for and did not find
 
-- **Night vision (Auto / Off / On).** Cycled Auto, Off, On, Auto on the Back Yard Cam while
-  watching every property and parameter: nothing changed. It is not in these lists, so it is
-  stored or sent some other way that this library does not read.
+- **Night vision (Auto / Off / On) in the cloud list.** Cycled Auto, Off, On, Auto on the Back
+  Yard Cam while watching every property and parameter: nothing changed. This matches the above:
+  the camera keeps it, and the cloud list does not carry it.
 - **Microphone on/off for live view.** The Wyze app plays the Back Yard Cam's sound, but over
   our WebRTC connection the camera sends none. `P1048`, `P1002` and `audio_alarm_switch` were
   tried and are not it. The Garage (same model) does send audio.
 
 ## Log
 
-- 2026-10-25: first version, from the Doorbell, Back Yard Cam and Garage.
+- 2026-10-25: first version, from the Doorbell, Back Yard Cam and Garage; added what wyze-sdk, wyzeapy and docker-wyze-bridge say, including where night vision lives.
