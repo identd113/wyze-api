@@ -316,9 +316,9 @@ module.exports = class WyzeAPI {
         );
         await this.sleepMilliSecounds(resetsIn);
       } else if (rateLimitRemaining !== undefined) {
-        // Normal remaining-count — info-level so users can see it without
-        // enabling debug. Filtered out at warn / error if log volume matters.
-        this.log.info(
+        // Normal remaining-count: one line per request, so debug only. The
+        // critical case above is always a warning.
+        this.log.debug(
           `API rate limit remaining: ${rateLimitRemaining}. Expires in ${rateLimitResetBy - Date.now()}ms`
         );
       }

@@ -772,7 +772,7 @@ module.exports = {
 
       if (logger) {
         videoFfmpeg.stderr.on("data", (chunk) =>
-          log("warn", `[stream] [ffmpeg/video] ${chunk.toString().trimEnd()}`)
+          log("debug", `[stream] [ffmpeg/video] ${chunk.toString().trimEnd()}`)
         );
       }
 
