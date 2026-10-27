@@ -7,7 +7,7 @@
 
 This is an unofficial Wyze API. This library uses the internal APIs from the Wyze mobile app. A list of all Wyze devices can be retrieved to check the status of Cameras, Senors, Bulbs, Plugs, Locks and more. This API can turn on and off cameras, lightbulbs and plugs and more.
 
-**Problems and new devices:** this library's issues are tracked in the [homebridge-wyze-smart-home](https://github.com/identd113/homebridge-wyze-smart-home/issues/new/choose) repository. Please report library problems, and Wyze devices that are not supported yet, there.
+**Problems and new devices:** this library's issues are tracked in the [homebridge-wyze-smart-home](https://github.com/identd113/homebridge-wyze-smart-home/issues/new/choose) repository. Please report library problems, and Wyze devices that are not supported yet, there, and ask questions in its [discussions](https://github.com/identd113/homebridge-wyze-smart-home/discussions).
 
 ## Setup
 `npm install wyze-api --save`

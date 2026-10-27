@@ -3,3 +3,6 @@ contact_links:
   - name: Report a problem or ask for a device (homebridge-wyze-smart-home)
     url: https://github.com/identd113/homebridge-wyze-smart-home/issues/new/choose
     about: Issues for this library are tracked in the Homebridge plugin repository, including login, API, camera streaming and new devices.
+  - name: Ask a question or start a discussion (homebridge-wyze-smart-home)
+    url: https://github.com/identd113/homebridge-wyze-smart-home/discussions
+    about: Questions, ideas and general discussion for this library are held in the Homebridge plugin's Discussions.
