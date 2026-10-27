@@ -461,7 +461,7 @@ test("setBulbColor on plain mesh color bulb (WLPA19C) writes only P1507", async 
 
 test("DeviceModels includes the new camera categories", () => {
   const types = require("../src/types");
-  assert.deepStrictEqual(types.DeviceModels.CAMERA_DEVICEMGMT, ["LD_CFP", "AN_RSCW", "GW_GC1", "HL_PAN4"]);
+  assert.deepStrictEqual(types.DeviceModels.CAMERA_DEVICEMGMT, ["LD_CFP", "AN_RSCW", "GW_GC1", "GW_GC2", "HL_PAN4"]);
   assert.deepStrictEqual(types.DeviceModels.CAMERA_OUTDOOR_V2, ["HL_WCO2"]);
   assert.ok(types.DeviceModels.CAMERA.includes("LD_CFP"));
   assert.ok(types.DeviceModels.CAMERA.includes("HL_WCO2"));

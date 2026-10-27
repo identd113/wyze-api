@@ -6,7 +6,7 @@
  * (src/wyzeapy/payload_factory.py). Keep in sync with that file when Wyze adds
  * properties; the server answers with the capabilities requested here.
  */
-module.exports = Object.freeze({
+const PROPS = {
   "LD_CFP": [
     {
       "iid": 2,
@@ -547,4 +547,11 @@ module.exports = Object.freeze({
       ]
     }
   ]
-});
+};
+
+// The Cam OG Telephoto 3x (GW_GC2) is the OG's sibling and is listed beside it in
+// mrlt8/docker-wyze-bridge and SecKatie/ha-wyzeapi, but wyzeapy has no property list for it.
+// It uses the OG's until someone with one reports what Wyze actually answers.
+PROPS.GW_GC2 = PROPS.GW_GC1;
+
+module.exports = Object.freeze(PROPS);

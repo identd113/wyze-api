@@ -2,6 +2,10 @@
 
 ## Releases
 
+### Unreleased
+
+- **The Cam OG Telephoto 3x is `GW_GC2`, not `GW_GC`.** Wyze reports `GW_GC2` (docker-wyze-bridge, ha-wyzeapi and Wyze's own community table agree), so a real Telephoto camera was never matched. It is now a camera on the devicemgmt API like the OG, using the OG's property list until it has been checked on hardware.
+
 ### v2.0.0-beta.3
 
 Consolidates the fork's post-beta.2 fixes onto the 2.0.0 line.

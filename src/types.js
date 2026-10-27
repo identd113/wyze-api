@@ -99,7 +99,7 @@ const DeviceModels = Object.freeze({
   // Cameras that use the new devicemgmt-service-beta API (Floodlight Pro,
   // Battery Cam Pro, OG cam, Pan v4) and don't respond to the standard run_action
   // endpoint. Cameras in this list need the DeviceMgmt code paths.
-  CAMERA_DEVICEMGMT: ["LD_CFP", "AN_RSCW", "GW_GC1", "HL_PAN4"],
+  CAMERA_DEVICEMGMT: ["LD_CFP", "AN_RSCW", "GW_GC1", "GW_GC2", "HL_PAN4"],
   // Of those, the models whose integrated light is a "spotlight" capability
   // (the rest use "floodlight"). Mirrors SecKatie/wyzeapy.
   CAMERA_DEVICEMGMT_SPOTLIGHT: ["AN_RSCW", "HL_PAN4"],
@@ -112,7 +112,7 @@ const DeviceModels = Object.freeze({
   // with result 3, and acknowledges the devicemgmt "sleep" without doing anything (checked
   // on a Doorbell v2: it kept streaming).
   CAMERA_NO_POWER_CONTROL: ["HL_DB2"],
-  CAMERA: [..._CAMERA_V1, ..._CAMERA_V2, ..._CAMERA_V3, ..._CAMERA_OUTDOOR, "HL_WCO2", "LD_CFP", "AN_RSCW", "GW_GC1", "HL_PAN4", "HL_BC", "HL_CFL2", "HL_DB2"],
+  CAMERA: [..._CAMERA_V1, ..._CAMERA_V2, ..._CAMERA_V3, ..._CAMERA_OUTDOOR, "HL_WCO2", "LD_CFP", "AN_RSCW", "GW_GC1", "GW_GC2", "HL_PAN4", "HL_BC", "HL_CFL2", "HL_DB2"],
 
   LOCK: ["YD.LO1"],
   LOCK_GATEWAY: ["YD.GW1"],
@@ -710,7 +710,7 @@ const WyzeAccessoryModels = Object.freeze({
     WyzeCamDoorbellV2:     "HL_DB2",
     WyzeBatteryCamPro:     "AN_RSCW",
     WyzeCamOG:             "GW_GC1",
-    WyzeCamOGTelephoto3x:  "GW_GC",
+    WyzeCamOGTelephoto3x:  "GW_GC2",
   }),
   OutdoorPlugModels:           Object.freeze({ WLPPOSUB: "WLPPO-SUB" }),
   PlugModels:                  Object.freeze({ WLPP1: "WLPP1", WLPP1CFH: "WLPP1CFH" }),
