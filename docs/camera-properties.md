@@ -10,8 +10,8 @@ they mean. This page records what we know, how we know it, and what we have only
 - **Library**: the name comes from this library or from another project (listed under "What other projects say"); we have not tested it on our cameras.
 - **Unknown**: only the values we have seen.
 
-Observed values below were read on 2026-10-25 from a Cam Doorbell v2 (`HL_DB2`, "Doorbell") and
-two Cam v3 (`WYZE_CAKP2JFUS`, "Back Yard" with a floodlight accessory, "Garage").
+Observed values below were read on 2026-10-25 from a Cam Doorbell v2 (`HL_DB2`) and
+two Cam v3 (`WYZE_CAKP2JFUS`), one with a floodlight accessory and one without.
 A dash means the camera does not report that property.
 
 ## How to find out what a setting does
@@ -26,22 +26,22 @@ changes on its own.
 
 ## Properties (`get_property_list`)
 
-| Property | Meaning | Status | Evidence / notes | Doorbell | Back Yard | Garage |
+| Property | Meaning | Status | Evidence / notes | Doorbell v2 | Cam v3 + floodlight | Cam v3 |
 |---|---|---|---|---|---|---|
 | `P1` | Notifications | Library | wyzeapy, wyze-sdk | 1 | 1 | 1 |
 | `P3` | Camera on (0 = privacy / off) | Library | The Doorbell cannot be switched off through the API. | 1 | 1 | 1 |
 | `P5` | Online | Library | | 1 | 1 | 1 |
 | `P1001` | Motion detection on (the toggle; `P1047` holds the state) | Library | wyzeapy | 1 | 1 | 1 |
 | `P1047` | Motion event recording ("event recording motion record enabled") | Library | wyze-sdk, wyzeapy | 1 | 1 | 1 |
-| `P1048` | Sound event recording ("event recording sound record enabled") | Library | wyze-sdk. Set 0 to 1 on the Back Yard Cam: the write was accepted and read back as 1. It did **not** make the camera send audio over a live stream (two 20-second streams). | 1 | 0 to 1 | 1 |
+| `P1048` | Sound event recording ("event recording sound record enabled") | Library | wyze-sdk. Set 0 to 1 on the Cam v3 with the floodlight: the write was accepted and read back as 1. It did **not** make the camera send audio over a live stream (two 20-second streams). | 1 | 0 to 1 | 1 |
 | `P1049` | Siren (1 = on, 2 = off) | Library | | 2 | 2 | 2 |
-| `P1056` | Floodlight / spotlight / accessory state (1 = on, 2 = off) | **Confirmed** | wyzeapy calls it the state of camera accessories (garage doors, light sockets, floodlights). On the Back Yard Cam it flipped to 1 whenever the motion light came on and back to 2 when it went out (six changes, 18:49 to 19:11), together with `dongle_switch`. The cloud list updates within seconds. | - | 2 | 2 |
+| `P1056` | Floodlight / spotlight / accessory state (1 = on, 2 = off) | **Confirmed** | wyzeapy calls it the state of camera accessories (garage doors, light sockets, floodlights). On the Cam v3 with the floodlight it flipped to 1 whenever the motion light came on and back to 2 when it went out (six changes, 18:49 to 19:11), together with `dongle_switch`. The cloud list updates within seconds. | - | 2 | 2 |
 | `P1301` | Contact state (used for a garage door accessory) | Library | wyzeapy: contact state. Its sibling `P1302` is a motion state. | - | 0 | 0 |
-| `P1002` | Unknown. Changed 0 to 1 on the Back Yard Cam at the same time as `audio_alarm_switch` after a setting was changed in the Wyze app (which one was not recorded). | Unknown | The Garage has both at 1. Making them match did not bring audio. | 0 | 1 | 1 |
+| `P1002` | Unknown. Changed 0 to 1 on the Cam v3 with the floodlight at the same time as `audio_alarm_switch` after a setting was changed in the Wyze app (which one was not recorded). | Unknown | The Cam v3 without the floodlight has both at 1. Making them match did not bring audio. | 0 | 1 | 1 |
 | `P1013` | Wi-Fi signal strength | Library | Doorbell only: 56 (weak). The Cam v3 reports none. | 56 | - | - |
 | `P1050` | Looks like a Unix time (seconds) | Unknown | Changes on its own. | 1792911873 | 1792735385 | 1792472060 |
 | `P4` | Event switch | Library | wyze-sdk (`event_switch`) | 1 | 1 | 1 |
-| `P1021` | Dongle (accessory) light switch | Library | wyze-sdk (`dongle_light_switch`). Not yet tested: the Back Yard Cam has a floodlight dongle and reads 1. | - | 1 | 1 |
+| `P1021` | Dongle (accessory) light switch | Library | wyze-sdk (`dongle_light_switch`). Not yet tested: the Cam v3 with the floodlight has a dongle and reads 1. | - | 1 | 1 |
 | `P1003` `P1004` `P1005` | Unknown | Unknown | wyze-sdk lists them as "not used" (they exist in Wyze's app but nothing uses them). | 0 / 0 / 1 | 1 / 1 / 1 | 1 / 1 / 1 |
 | `P1006` to `P1008`, `P1010`, `P1014`, `P1015`, `P1017` to `P1022`, `P1033`, `P1035` | Unknown | Unknown | Same values on both Cam v3s (`P1015` is 1 on the Doorbell, 0 on the Cam v3s). | | | |
 | `P1306` to `P1312`, `P3000`, `P1901` | Unknown | Unknown | `P1310` is 300 on both Cam v3s. | - | | |
@@ -50,14 +50,14 @@ changes on its own.
 
 ## Device parameters (from the device list)
 
-| Parameter | Meaning | Status | Evidence / notes | Doorbell | Back Yard | Garage |
+| Parameter | Meaning | Status | Evidence / notes | Doorbell v2 | Cam v3 + floodlight | Cam v3 |
 |---|---|---|---|---|---|---|
 | `power_switch` | Camera on | Library | | 1 | 1 | 1 |
 | `motion_alarm_switch` | Motion alarm on | Library | | 1 | 1 | 1 |
 | `records_event_switch` | Event recording on | Library | | 1 | 1 | 1 |
-| `dongle_product_model` | The accessory plugged into the camera | **Confirmed** | `HL_CFL` is the floodlight on the Back Yard Cam. Blank on the Garage. | "" | HL_CFL | "" |
+| `dongle_product_model` | The accessory plugged into the camera | **Confirmed** | `HL_CFL` is the floodlight on the Cam v3 with the floodlight. Blank on the Cam v3 without it. | "" | HL_CFL | "" |
 | `dongle_switch` | Accessory light on (1 = on, 2 = off) | **Confirmed** | Moves with `P1056`. | 0 | 2 | 2 |
-| `audio_alarm_switch` | Unknown (a sound-related alarm flag) | Unknown | Changed 0 to 1 together with `P1002` on the Back Yard Cam; no effect on live audio. | 0 | 1 | 1 |
+| `audio_alarm_switch` | Unknown (a sound-related alarm flag) | Unknown | Changed 0 to 1 together with `P1002` on the Cam v3 with the floodlight; no effect on live audio. | 0 | 1 | 1 |
 | `smoke_alarm_switch`, `co_alarm_switch` | Smoke / CO alarm listening | Unknown | Both 1 on the Cam v3s, 0 on the Doorbell. | 0 / 0 | 1 / 1 | 1 / 1 |
 | `ai_notification_v2` | AI (person, vehicle, ...) notifications | Unknown | 0 on the Doorbell, 1 on the Cam v3s. | 0 | 1 | 1 |
 | `spotlight_status`, `accessory_switch`, `power_saving_mode_switch`, `device_setting_channel`, `dtls`, `main_device_dtls`, `comfort_standard_level`, `power_source`, `is_link_toy_car`, `is_temperature_humidity`, `temp_humi_room_type`, `temperature`, `humidity`, `electricity`, `battery_charging_status` | Unknown | Unknown | | | | |
@@ -95,17 +95,17 @@ so it would not run on the Mac test bridge. It is not used by the plugin today.
 - **Night vision (Auto / Off / On) in the cloud list.** Cycled Auto, Off, On, Auto on the Back
   Yard Cam while watching every property and parameter: nothing changed. This matches the above:
   the camera keeps it, and the cloud list does not carry it.
-- **Why the Back Yard Cam sends no audio over live view (unresolved).** The Wyze app plays this
+- **Why the Cam v3 with the floodlight sends no audio over live view (unresolved).** The Wyze app plays this
   camera's sound, and its WebRTC answer says it will send audio (`port=9 direction=sendrecv`,
-  with an `ssrc`), identical to the Garage's answer, yet in nearly every stream since 17:53 on
-  2026-10-25 no audio packets arrived. The Garage (same model) delivers about 26 packets a
+  with an `ssrc`), identical to the other Cam v3's answer, yet in nearly every stream since 17:53 on
+  2026-10-25 no audio packets arrived. The other Cam v3 delivers about 26 packets a
   second every time. Tried without effect: `P1048` 0 to 1 (write accepted), matching `P1002` and
-  `audio_alarm_switch` to the Garage, a camera reboot. One exception: a single 10-second stream
-  right after the reboot delivered 87 packets (about a third of the Garage's rate) and nothing
+  `audio_alarm_switch` to the other Cam v3, a camera reboot. One exception: a single 10-second stream
+  right after the reboot delivered 87 packets (about a third of the other Cam v3's rate) and nothing
   after that. It followed a snapshot capture that was cut short by the live stream, which may or
   may not matter. Parked; see the log below.
 
 ## Log
 
-- 2026-10-25 (evening): Back Yard Cam audio parked as unresolved (see above). Night vision, IR light and the status light live on the camera, reached over TUTK (Linux only), not in this list.
-- 2026-10-25: first version, from the Doorbell, Back Yard Cam and Garage; added what wyze-sdk, wyzeapy and docker-wyze-bridge say, including where night vision lives.
+- 2026-10-25 (evening): Cam v3 (floodlight) audio parked as unresolved (see above). Night vision, IR light and the status light live on the camera, reached over TUTK (Linux only), not in this list.
+- 2026-10-25: first version, from the Doorbell v2 and two Cam v3; added what wyze-sdk, wyzeapy and docker-wyze-bridge say, including where night vision lives.
