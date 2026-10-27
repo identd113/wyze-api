@@ -1,0 +1,53 @@
+# Runs the test suite on every pull request and on pushes to 2.x.
+#
+# Uses the plain `pull_request` trigger on purpose: a pull request from a fork runs with a
+# read-only token and no secrets (so no NPM_TOKEN). Do not switch this to `pull_request_target`.
+# GitHub holds a first-time contributor's run until a maintainer clicks "Approve and run".
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [2.x]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: npm ci
+      - run: npm test
+
+  package:
+    # The published package must not pick up repository-only files.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci
+      - name: Check the package contents
+        run: |
+          npm pack --dry-run --json > pack.json
+          node -e "
+            const files = JSON.parse(require('fs').readFileSync('pack.json'))[0].files.map((f) => f.path);
+            const bad = files.filter((p) => /^(\\.github|tests|\\.claude)\\/|^node_modules\\//.test(p));
+            console.log(files.length + ' files in the package');
+            if (bad.length) { console.error('Files that should not be published:\n' + bad.join('\n')); process.exit(1); }
+          "
