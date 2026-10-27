@@ -7,6 +7,8 @@
 
 # Funding   [![Donate](https://img.shields.io/badge/Donate-PayPal-blue.svg?style=flat-square&maxAge=2592000)](https://www.paypal.com/paypalme/AllenFarmer) [![Donate](https://img.shields.io/badge/Donate-Venmo-blue.svg?style=flat-square&maxAge=2592000)](https://venmo.com/u/Allen-Farmer) [![Donate](https://img.shields.io/badge/Donate-Cash_App-blue.svg?style=flat-square&maxAge=2592000)](https://cash.app/$Jfamer08)
 
+> **Issues and discussion:** this library is developed alongside [homebridge-wyze-smart-home](https://github.com/identd113/homebridge-wyze-smart-home). Please report bugs and request devices in the plugin's [issues](https://github.com/identd113/homebridge-wyze-smart-home/issues), and ask questions in its [discussions](https://github.com/identd113/homebridge-wyze-smart-home/discussions).
+
 This is an unofficial Wyze API. This library uses the internal APIs from the Wyze mobile app. A list of all Wyze devices can be retrieved to check the status of Cameras, Senors, Bulbs, Plugs, Locks and more. This API can turn on and off cameras, lightbulbs and plugs and more.
 
 ## Setup
