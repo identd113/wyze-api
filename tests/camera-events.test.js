@@ -87,3 +87,39 @@ test("an event with no camera on it is ignored when several cameras were asked f
   const w = stub([{ event_id: "x", event_ts: "1", event_value: "13" }]);
   assert.deepStrictEqual(await w.cameraGetEventsMulti(["A", "B"]), { A: [], B: [] });
 });
+
+test("each event carries its age by Wyze's own clock, not this host's", async () => {
+  const w = Object.create(WyzeAPI.prototype);
+  // Wyze says it is 1_000_050; the event happened at 1_000_000, so it is 50 ms old, whatever Date.now() says.
+  w.request = async () => ({
+    ok: true,
+    data: { code: 1, ts: 1_000_050, data: { event_list: [{ event_id: "e", event_ts: "1000000", event_value: "2" }] } },
+  });
+  const [event] = await w.cameraGetEvents("MAC");
+  assert.strictEqual(event.ageMs, 50);
+  assert.strictEqual(event.time, 1_000_000);
+});
+
+test("without Wyze's time on the reply the age falls back to this host's clock", async () => {
+  const w = Object.create(WyzeAPI.prototype);
+  const before = Date.now();
+  w.request = async () => ({
+    ok: true,
+    data: { code: 1, data: { event_list: [{ event_id: "e", event_ts: String(before - 5_000), event_value: "2" }] } },
+  });
+  const [event] = await w.cameraGetEvents("MAC");
+  assert.ok(event.ageMs >= 5_000 && event.ageMs < 6_000, `age ${event.ageMs}`);
+});
+
+test("types asks Wyze for only those event types, by name; none asks for every type", async () => {
+  const calls = [];
+  const w = stub([], calls);
+  await w.cameraGetEvents("MAC", { types: ["SOUND"] });
+  await w.cameraGetEvents("MAC", { types: ["SOUND", "MOTION"] });
+  await w.cameraGetEvents("MAC");
+  await w.cameraGetEvents("MAC", { types: ["NOT_A_TYPE"] });
+  assert.deepStrictEqual(calls[0][1].event_value_list, [2]);
+  assert.deepStrictEqual(calls[1][1].event_value_list, [2, 1, 6, 7, 13]);
+  assert.deepStrictEqual(calls[2][1].event_value_list, []);
+  assert.deepStrictEqual(calls[3][1].event_value_list, []);
+});

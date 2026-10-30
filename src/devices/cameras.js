@@ -153,15 +153,18 @@ module.exports = {
 
   /**
    * Recent events for a camera from the cloud event list, newest first:
-   * `{ id, time, value, type, tags, params }`. `type` is the EventAlarmType name
-   * ("MOTION", "DOORBELL_RANG", ...). Events change after they appear (a doorbell
-   * press starts as MOTION and is flipped to DOORBELL_RANG, AI tags arrive a few
-   * seconds late), so compare by `id` on every call. Read-only.
+   * `{ id, time, ageMs, value, type, tags, params }`. `type` is the EventAlarmType name
+   * ("MOTION", "DOORBELL_RANG", ...). `ageMs` is how old the event is by Wyze's own clock (the
+   * time Wyze put on the reply, minus the event's time), so it is right even when this host's
+   * clock is off. Events change after they appear (a doorbell press starts as MOTION and is
+   * flipped to DOORBELL_RANG, AI tags arrive a few seconds late), so compare by `id` on every
+   * call. Read-only.
    * @param {string} deviceMac
-   * @param {{ sinceMs?: number, count?: number }} [options] look-back window (default 5 min) and max events (1-20)
+   * @param {{ sinceMs?: number, count?: number, types?: string[] }} [options] look-back window (default 5 min),
+   *   max events (1-20), and event types to ask for by EventAlarmType name (default: every type)
    */
-  async cameraGetEvents(deviceMac, { sinceMs = 5 * 60_000, count = 20 } = {}) {
-    const byMac = await this.cameraGetEventsMulti([deviceMac], { sinceMs, count });
+  async cameraGetEvents(deviceMac, { sinceMs = 5 * 60_000, count = 20, types = [] } = {}) {
+    const byMac = await this.cameraGetEventsMulti([deviceMac], { sinceMs, count, types });
     return byMac[deviceMac] ?? [];
   },
 
@@ -173,16 +176,17 @@ module.exports = {
    * first, so one busy camera can crowd out the others' older events but never their
    * newest ones. Read-only.
    * @param {string[]} deviceMacs
-   * @param {{ sinceMs?: number, count?: number }} [options]
+   * @param {{ sinceMs?: number, count?: number, types?: string[] }} [options] `types` are EventAlarmType
+   *   names ("SOUND", ...); with none, every event type comes back
    */
-  async cameraGetEventsMulti(deviceMacs, { sinceMs = 5 * 60_000, count = 20 } = {}) {
+  async cameraGetEventsMulti(deviceMacs, { sinceMs = 5 * 60_000, count = 20, types = [] } = {}) {
     const macs = [...new Set(deviceMacs)];
     const grouped = Object.fromEntries(macs.map((mac) => [mac, []]));
     if (macs.length === 0) return grouped;
     const now = Date.now();
     const result = await this.request("app/v2/device/get_event_list", {
       device_mac_list: macs,
-      event_value_list: [],
+      event_value_list: types.flatMap((name) => EventAlarmType[name] ?? []),
       event_tag_list: [],
       event_type: "1",
       order_by: 2,
@@ -192,6 +196,9 @@ module.exports = {
       sv: SV_GET_EVENT_LIST,
     });
     const events = result?.data?.data?.event_list ?? [];
+    // Wyze's clock when it answered; the event times are on the same clock.
+    const wyzeNow = Number(result?.data?.ts);
+    const reference = Number.isFinite(wyzeNow) && wyzeNow > 0 ? wyzeNow : now;
     for (const e of events) {
       // A single-camera request may omit the camera on each event; it can only be that camera.
       const mac = e.device_mac ?? (macs.length === 1 ? macs[0] : null);
@@ -201,6 +208,7 @@ module.exports = {
       grouped[mac].push({
         id: e.event_id,
         time: Number(e.event_ts),
+        ageMs: reference - Number(e.event_ts),
         value,
         type,
         tags: Array.isArray(e.tag_list) ? e.tag_list : [],
