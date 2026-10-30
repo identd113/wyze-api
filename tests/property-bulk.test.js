@@ -23,10 +23,13 @@ const devices = [{ mac: "AAA" }, { mac: "BBB" }];
 test("getPropertyListForDevices sends one request and matches rows by position", async () => {
   const w = stub({
     data: {
-      device_list: [
-        { device_property_list: [{ pid: "P3", value: "1", ts: 10 }] },
-        { device_property_list: [{ pid: "P3", value: "0", ts: 20 }] },
-      ],
+      code: "1",
+      data: {
+        device_list: [
+          { device_property_list: [{ pid: "P3", value: "1", ts: 10 }] },
+          { device_property_list: [{ pid: "P3", value: "0", ts: 20 }] },
+        ],
+      },
     },
   });
   const out = await w.getPropertyListForDevices(devices, ["P3"]);
@@ -54,7 +57,7 @@ test("getPropertyListForDevices rejects empty devices without a request", async 
 });
 
 test("getPropertyListForDevices throws on a row-count mismatch", async () => {
-  const w = stub({ data: { device_list: [{ device_property_list: [] }] } });
+  const w = stub({ data: { code: "1", data: { device_list: [{ device_property_list: [] }] } } });
   await assert.rejects(() => w.getPropertyListForDevices(devices, ["P3"]), /expected 2 rows, got 1/);
 });
 
@@ -64,7 +67,7 @@ test("getPropertyListForDevices propagates request errors for fallback", async (
 });
 
 test("getDevicePID is unchanged and still reads one device", async () => {
-  const w = stub({ data: { property_list: [] } });
+  const w = stub({ data: { code: "1", data: { property_list: [] } } });
   await w.getDevicePID("AAA", "WYZEC1-JZ");
   assert.strictEqual(w.calls[0].url, "app/v2/device/get_property_list");
   assert.deepStrictEqual(w.calls[0].data, { device_mac: "AAA", device_model: "WYZEC1-JZ" });

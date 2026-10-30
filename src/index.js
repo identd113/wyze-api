@@ -1207,7 +1207,8 @@ module.exports = class WyzeAPI {
       target_pid_list: pids,
     });
 
-    const rows = (result.data && result.data.device_list) || [];
+    // request() returns the HTTP response; Wyze's envelope is result.data.
+    const rows = (result.data && result.data.data && result.data.data.device_list) || [];
     if (rows.length !== devices.length) {
       throw new Error(
         `getPropertyListForDevices: expected ${devices.length} rows, got ${rows.length}`
