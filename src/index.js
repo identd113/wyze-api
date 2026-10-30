@@ -1184,6 +1184,44 @@ module.exports = class WyzeAPI {
   }
 
   /**
+   * Read properties for several devices in one call. Wraps
+   * `app/v2/device_list/get_property_list`. The endpoint rejects an empty
+   * `target_pid_list`, so `pids` is required. Rows come back in request
+   * order with no usable MAC, so they are matched to `devices` by position.
+   * Throws on a non-SUCCESS code or a row-count mismatch; callers should
+   * fall back to `getDevicePID` per device.
+   * @param {Array<{mac: string}>} devices
+   * @param {string[]} pids
+   * @returns {Promise<Map<string, Array<{pid: string, value: string, ts: number}>>>}
+   */
+  async getPropertyListForDevices(devices, pids) {
+    if (!Array.isArray(devices) || devices.length === 0) {
+      throw new Error("getPropertyListForDevices: devices must be a non-empty array");
+    }
+    if (!Array.isArray(pids) || pids.length === 0) {
+      throw new Error("getPropertyListForDevices: pids must be a non-empty array");
+    }
+
+    const result = await this.request("app/v2/device_list/get_property_list", {
+      device_list: devices.map((d) => d.mac),
+      target_pid_list: pids,
+    });
+
+    const rows = (result.data && result.data.device_list) || [];
+    if (rows.length !== devices.length) {
+      throw new Error(
+        `getPropertyListForDevices: expected ${devices.length} rows, got ${rows.length}`
+      );
+    }
+
+    const byMac = new Map();
+    devices.forEach((d, i) => {
+      byMac.set(d.mac, rows[i].device_property_list || []);
+    });
+    return byMac;
+  }
+
+  /**
    * Generic device-info read — wraps `app/v2/device/get_device_Info`. Returns
    * the device's per-model settings and current state. Useful for any
    * family that doesn't have a dedicated info-reader.
