@@ -123,3 +123,16 @@ test("types asks Wyze for only those event types, by name; none asks for every t
   assert.deepStrictEqual(calls[2][1].event_value_list, []);
   assert.deepStrictEqual(calls[3][1].event_value_list, []);
 });
+
+test("tags asks Wyze only for events carrying those AI tags, by name; unknown names are ignored", async () => {
+  const calls = [];
+  const w = stub([], calls);
+  await w.cameraGetEvents("MAC", { tags: ["PACKAGE"] });
+  await w.cameraGetEvents("MAC", { tags: ["PERSON", "PET"] });
+  await w.cameraGetEvents("MAC");
+  await w.cameraGetEvents("MAC", { tags: ["NOT_A_TAG"] });
+  assert.deepStrictEqual(calls[0][1].event_tag_list, [AiEventTag.PACKAGE]);
+  assert.deepStrictEqual(calls[1][1].event_tag_list, [AiEventTag.PERSON, AiEventTag.PET]);
+  assert.deepStrictEqual(calls[2][1].event_tag_list, []);
+  assert.deepStrictEqual(calls[3][1].event_tag_list, []);
+});

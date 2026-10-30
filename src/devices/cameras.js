@@ -2,7 +2,7 @@ const axios = require("axios");
 const crypto = require("../utils/crypto");
 const constants = require("../constants");
 const cameraStreamCapture = require("./cameraStreamCapture");
-const { EventAlarmType } = require("../types");
+const { EventAlarmType, AiEventTag } = require("../types");
 
 // `sv` the Wyze app sends with app/v2/device/get_event_list (from wyze-sdk).
 const SV_GET_EVENT_LIST = "bdcb412e230049c0be0916e75022d3f3";
@@ -160,11 +160,12 @@ module.exports = {
    * flipped to DOORBELL_RANG, AI tags arrive a few seconds late), so compare by `id` on every
    * call. Read-only.
    * @param {string} deviceMac
-   * @param {{ sinceMs?: number, count?: number, types?: string[] }} [options] look-back window (default 5 min),
-   *   max events (1-20), and event types to ask for by EventAlarmType name (default: every type)
+   * @param {{ sinceMs?: number, count?: number, types?: string[], tags?: string[] }} [options] look-back window
+   *   (default 5 min), max events (1-20), event types to ask for by EventAlarmType name (default: every type),
+   *   and AI tags by AiEventTag name ("PERSON", "PACKAGE", ...) to ask only for events that carry one
    */
-  async cameraGetEvents(deviceMac, { sinceMs = 5 * 60_000, count = 20, types = [] } = {}) {
-    const byMac = await this.cameraGetEventsMulti([deviceMac], { sinceMs, count, types });
+  async cameraGetEvents(deviceMac, { sinceMs = 5 * 60_000, count = 20, types = [], tags = [] } = {}) {
+    const byMac = await this.cameraGetEventsMulti([deviceMac], { sinceMs, count, types, tags });
     return byMac[deviceMac] ?? [];
   },
 
@@ -176,10 +177,11 @@ module.exports = {
    * first, so one busy camera can crowd out the others' older events but never their
    * newest ones. Read-only.
    * @param {string[]} deviceMacs
-   * @param {{ sinceMs?: number, count?: number, types?: string[] }} [options] `types` are EventAlarmType
-   *   names ("SOUND", ...); with none, every event type comes back
+   * @param {{ sinceMs?: number, count?: number, types?: string[], tags?: string[] }} [options] `types` are
+   *   EventAlarmType names ("SOUND", ...); with none, every event type comes back. `tags` are AiEventTag
+   *   names ("PERSON", "PACKAGE", ...): only events carrying one of them come back
    */
-  async cameraGetEventsMulti(deviceMacs, { sinceMs = 5 * 60_000, count = 20, types = [] } = {}) {
+  async cameraGetEventsMulti(deviceMacs, { sinceMs = 5 * 60_000, count = 20, types = [], tags = [] } = {}) {
     const macs = [...new Set(deviceMacs)];
     const grouped = Object.fromEntries(macs.map((mac) => [mac, []]));
     if (macs.length === 0) return grouped;
@@ -187,7 +189,7 @@ module.exports = {
     const result = await this.request("app/v2/device/get_event_list", {
       device_mac_list: macs,
       event_value_list: types.flatMap((name) => EventAlarmType[name] ?? []),
-      event_tag_list: [],
+      event_tag_list: tags.map((name) => AiEventTag[name]).filter((value) => value !== undefined),
       event_type: "1",
       order_by: 2,
       count: Math.min(Math.max(count, 1), 20),
