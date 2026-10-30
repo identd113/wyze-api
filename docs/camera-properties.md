@@ -46,7 +46,9 @@ changes on its own.
 | `P1006` to `P1008`, `P1010`, `P1014`, `P1015`, `P1017` to `P1022`, `P1033`, `P1035` | Unknown | Unknown | Same values on both Cam v3s (`P1015` is 1 on the Doorbell, 0 on the Cam v3s). | | | |
 | `P1306` to `P1312`, `P3000`, `P1901` | Unknown | Unknown | `P1310` is 300 on both Cam v3s. | - | | |
 | `P18` `P19` `P20` `P30` `P2` | Unknown | Unknown | | | | |
-| `P1054` to `P1079`, `P1622`, `P1623` | Unknown | Unknown | Doorbell only. | | - | - |
+| `P1078` | Quiet hours (the user's reading of the value; not yet tested) | User-reported | Doorbell only. The value is a JSON schedule: `{"always":1,"startTime":"21:00:00","startTimeType":"CUSTOM","endTime":"06:00:00",…}`. | (object) | - | - |
+| `P1054`, `P1055`, `P1058` to `P1061`, `P1064`, `P1075` to `P1077`, `P1079`, `P1622`, `P1623` | Unknown | Unknown | Doorbell only. `P1622` and `P1623` are 0.0 there. | | - | - |
+| `P1073`, `P1074` | Unknown | Unknown | Cam v3s only. `P1073` is `T` on both; `P1074` is empty on both. The WYZEC1-JZ reports neither. | - | `T` | `T` |
 
 ## Device parameters (from the device list)
 
