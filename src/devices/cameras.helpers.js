@@ -598,7 +598,6 @@ module.exports = {
     audioSrtpKey = null,
     audioSrtpSalt = null,
     audioSsrc = null,
-    bitrate = 300,
     logger: rawLogger = null,
     label = null,
   }) {

@@ -4,7 +4,6 @@ const fs = require("fs").promises;
 const path = require("path");
 const getUuid = require("uuid-by-string");
 const payloadFactory = require("./utils/payloadFactory");
-const crypto = require("./utils/crypto");
 const constants = require("./constants");
 const util = require("./util");
 const types = require("./types");
