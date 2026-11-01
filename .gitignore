@@ -15,3 +15,6 @@ example/scratch/*
 
 # local working documents (never pushed)
 testing/
+# agent instruction files stay local
+CLAUDE.md
+AGENTS.md
