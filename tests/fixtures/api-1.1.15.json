@@ -1,0 +1,1262 @@
+{
+ "source": "wyze-api 1.1.15 (branch main, commit d91eab4)",
+ "note": "The public method names, with their parameter names in order, and the module exports of 1.1.15. tests/compat-1x.test.js checks 2.x still has them.",
+ "exports": [
+  "StreamStatus",
+  "VacuumControlType",
+  "VacuumControlTypeDescription",
+  "VacuumControlValue",
+  "VacuumDeviceInfoKeys",
+  "VacuumFaultCode",
+  "VacuumIotPropKeys",
+  "VacuumModeCodes",
+  "VacuumPreferenceType",
+  "VacuumStatus",
+  "VacuumSuctionLevel",
+  "VenusDotArg1",
+  "VenusDotArg2",
+  "VenusDotArg3",
+  "parseVacuumMode"
+ ],
+ "methods": {
+  "authenticateAndFetchData": [],
+  "cameraCaptureSnapshot": [
+   "deviceMac",
+   "deviceModel",
+   "options"
+  ],
+  "cameraFloodLight": [
+   "deviceMac",
+   "deviceModel",
+   "value"
+  ],
+  "cameraFloodLightOff": [
+   "deviceMac",
+   "deviceModel"
+  ],
+  "cameraFloodLightOn": [
+   "deviceMac",
+   "deviceModel"
+  ],
+  "cameraGetFirmware": [
+   "device"
+  ],
+  "cameraGetIceServers": [
+   "deviceMac",
+   "deviceModel",
+   "options"
+  ],
+  "cameraGetIp": [
+   "device"
+  ],
+  "cameraGetLastSeen": [
+   "device"
+  ],
+  "cameraGetSignalStrength": [
+   "device"
+  ],
+  "cameraGetSignalingUrl": [
+   "deviceMac",
+   "deviceModel",
+   "options"
+  ],
+  "cameraGetSnapshot": [
+   "device"
+  ],
+  "cameraGetStreamInfo": [
+   "deviceMac",
+   "deviceModel",
+   "options"
+  ],
+  "cameraGetThumbnail": [
+   "device"
+  ],
+  "cameraGetTimezone": [
+   "device"
+  ],
+  "cameraIsOnline": [
+   "device"
+  ],
+  "cameraMotionOff": [
+   "deviceMac",
+   "deviceModel"
+  ],
+  "cameraMotionOn": [
+   "deviceMac",
+   "deviceModel"
+  ],
+  "cameraMotionRecording": [
+   "deviceMac",
+   "deviceModel",
+   "value"
+  ],
+  "cameraMotionRecordingOff": [
+   "deviceMac",
+   "deviceModel"
+  ],
+  "cameraMotionRecordingOn": [
+   "deviceMac",
+   "deviceModel"
+  ],
+  "cameraNotifications": [
+   "deviceMac",
+   "deviceModel",
+   "value"
+  ],
+  "cameraNotificationsOff": [
+   "deviceMac",
+   "deviceModel"
+  ],
+  "cameraNotificationsOn": [
+   "deviceMac",
+   "deviceModel"
+  ],
+  "cameraPrivacy": [
+   "deviceMac",
+   "deviceModel",
+   "value"
+  ],
+  "cameraSiren": [
+   "deviceMac",
+   "deviceModel",
+   "value"
+  ],
+  "cameraSirenOff": [
+   "deviceMac",
+   "deviceModel"
+  ],
+  "cameraSirenOn": [
+   "deviceMac",
+   "deviceModel"
+  ],
+  "cameraSoundNotificationOff": [
+   "deviceMac",
+   "deviceModel"
+  ],
+  "cameraSoundNotificationOn": [
+   "deviceMac",
+   "deviceModel"
+  ],
+  "cameraSpotLight": [
+   "deviceMac",
+   "deviceModel",
+   "value"
+  ],
+  "cameraSpotLightOff": [
+   "deviceMac",
+   "deviceModel"
+  ],
+  "cameraSpotLightOn": [
+   "deviceMac",
+   "deviceModel"
+  ],
+  "cameraStreamWithReconnect": [
+   "fn",
+   "{ maxAttempts",
+   "baseDelayMs",
+   "onRetry }"
+  ],
+  "cameraToSummary": [
+   "device"
+  ],
+  "cameraTurnOff": [
+   "deviceMac",
+   "deviceModel"
+  ],
+  "cameraTurnOn": [
+   "deviceMac",
+   "deviceModel"
+  ],
+  "celsius2fahrenheit": [
+   "celsius"
+  ],
+  "checkBatteryVoltage": [
+   "value"
+  ],
+  "checkBrightnessValue": [
+   "value"
+  ],
+  "checkColorTemp": [
+   "color"
+  ],
+  "checkLowBattery": [
+   "batteryVolts"
+  ],
+  "clamp": [
+   "number",
+   "min",
+   "max"
+  ],
+  "clearCameraStreamCache": [
+   "deviceMac"
+  ],
+  "controlLock": [
+   "deviceMac",
+   "deviceModel",
+   "action"
+  ],
+  "createCameraStreamClientId": [
+   "deviceOrMac",
+   "prefix"
+  ],
+  "disableRemeAlarm": [
+   "hms_id"
+  ],
+  "fahrenheit2celsius": [
+   "fahrenheit"
+  ],
+  "floatToRange": [
+   "value",
+   "min",
+   "max"
+  ],
+  "garageDoor": [
+   "deviceMac",
+   "deviceModel"
+  ],
+  "getCamera": [
+   "mac"
+  ],
+  "getCameraByName": [
+   "nickname"
+  ],
+  "getCameraSnapshot": [
+   "mac"
+  ],
+  "getCameraSnapshotImage": [
+   "mac",
+   "options"
+  ],
+  "getCameraSnapshotUrl": [
+   "mac"
+  ],
+  "getCameraSummaries": [],
+  "getCameraWebRTCConnectionInfo": [
+   "deviceMac",
+   "deviceModel",
+   "options"
+  ],
+  "getCameraWebRTCConnectionInfoWithReconnect": [
+   "deviceMac",
+   "deviceModel",
+   "options",
+   "retryOptions"
+  ],
+  "getCameras": [],
+  "getDeviceByMac": [
+   "mac"
+  ],
+  "getDeviceByName": [
+   "nickname"
+  ],
+  "getDeviceGroupsList": [],
+  "getDeviceList": [],
+  "getDevicePID": [
+   "deviceMac",
+   "deviceModel"
+  ],
+  "getDeviceSortList": [],
+  "getDeviceState": [
+   "device"
+  ],
+  "getDeviceStatePID": [
+   "deviceMac",
+   "deviceModel",
+   "pid"
+  ],
+  "getDeviceStatus": [
+   "device"
+  ],
+  "getDevicesByModel": [
+   "model"
+  ],
+  "getDevicesByType": [
+   "type"
+  ],
+  "getHmsID": [],
+  "getHmsUpdate": [
+   "hms_id"
+  ],
+  "getIotProp": [
+   "deviceMac"
+  ],
+  "getLeakSensorState": [
+   "deviceState"
+  ],
+  "getLockDoorState": [
+   "deviceState"
+  ],
+  "getLockInfo": [
+   "deviceMac",
+   "deviceModel"
+  ],
+  "getLockState": [
+   "deviceState"
+  ],
+  "getObjectList": [],
+  "getObjectListSafe": [],
+  "getOfflineCameras": [],
+  "getOnlineCameras": [],
+  "getPlanBindingListByUser": [],
+  "getPropertyList": [
+   "deviceMac",
+   "deviceModel"
+  ],
+  "getRequestData": [
+   "data"
+  ],
+  "getUserProfile": [],
+  "getUuid": [
+   "deviceMac",
+   "deviceModel"
+  ],
+  "getVacuum": [
+   "mac"
+  ],
+  "getVacuumCurrentMap": [
+   "mac"
+  ],
+  "getVacuumCurrentPosition": [
+   "mac"
+  ],
+  "getVacuumDeviceInfo": [
+   "mac",
+   "keys"
+  ],
+  "getVacuumDeviceList": [],
+  "getVacuumInfo": [
+   "mac"
+  ],
+  "getVacuumIotProp": [
+   "mac",
+   "keys"
+  ],
+  "getVacuumMaps": [
+   "mac"
+  ],
+  "getVacuumStatus": [
+   "mac"
+  ],
+  "getVacuumSweepRecords": [
+   "mac",
+   "options"
+  ],
+  "iot3GetProperties": [
+   "deviceMac",
+   "deviceModel",
+   "props"
+  ],
+  "iot3RunAction": [
+   "deviceMac",
+   "deviceModel",
+   "action"
+  ],
+  "irrigationGetDeviceInfo": [
+   "deviceMac"
+  ],
+  "irrigationGetIotProp": [
+   "deviceMac"
+  ],
+  "irrigationGetScheduleRuns": [
+   "deviceMac",
+   "limit"
+  ],
+  "irrigationGetZones": [
+   "deviceMac"
+  ],
+  "irrigationQuickRun": [
+   "deviceMac",
+   "zoneNumber",
+   "duration"
+  ],
+  "irrigationStop": [
+   "deviceMac"
+  ],
+  "isDebounceCleared": [
+   "now"
+  ],
+  "kelvinToMired": [
+   "value"
+  ],
+  "lightMeshOff": [
+   "deviceMac",
+   "deviceModel"
+  ],
+  "lightMeshOn": [
+   "deviceMac",
+   "deviceModel"
+  ],
+  "lightMeshPower": [
+   "deviceMac",
+   "deviceModel",
+   "value"
+  ],
+  "lightPower": [
+   "deviceMac",
+   "deviceModel",
+   "value"
+  ],
+  "lightTurnOff": [
+   "deviceMac",
+   "deviceModel"
+  ],
+  "lightTurnOn": [
+   "deviceMac",
+   "deviceModel"
+  ],
+  "localBulbCommand": [
+   "deviceMac",
+   "deviceModel",
+   "deviceEnr",
+   "deviceIp",
+   "propertyId",
+   "propertyValue",
+   "actionKey"
+  ],
+  "lockBoltV2GetProperties": [
+   "deviceMac",
+   "deviceModel"
+  ],
+  "lockBoltV2Lock": [
+   "deviceMac",
+   "deviceModel"
+  ],
+  "lockBoltV2Unlock": [
+   "deviceMac",
+   "deviceModel"
+  ],
+  "lockInfo": [
+   "device"
+  ],
+  "lockLock": [
+   "device"
+  ],
+  "logDebounceInfo": [
+   "now"
+  ],
+  "login": [],
+  "maybeLogin": [],
+  "monitoringProfileActive": [
+   "hms_id",
+   "home",
+   "away"
+  ],
+  "monitoringProfileStateStatus": [
+   "hms_id"
+  ],
+  "normalizeCameraSignalingUrl": [
+   "signalingUrl"
+  ],
+  "palmLockGetProperties": [
+   "deviceMac",
+   "deviceModel"
+  ],
+  "parseCameraStatus": [
+   "streamInfoResponse"
+  ],
+  "plugPower": [
+   "deviceMac",
+   "deviceModel",
+   "value"
+  ],
+  "plugTurnOff": [
+   "deviceMac",
+   "deviceModel"
+  ],
+  "plugTurnOn": [
+   "deviceMac",
+   "deviceModel"
+  ],
+  "rangeToFloat": [
+   "value",
+   "min",
+   "max"
+  ],
+  "refreshToken": [],
+  "request": [
+   "url",
+   "data"
+  ],
+  "resetDebounceIfNeeded": [
+   "now"
+  ],
+  "runAction": [
+   "deviceMac",
+   "deviceModel",
+   "actionKey"
+  ],
+  "runActionList": [
+   "deviceMac",
+   "deviceModel",
+   "propertyId",
+   "propertyValue",
+   "actionKey"
+  ],
+  "sanitizeCameraIceServers": [
+   "iceServers"
+  ],
+  "setBrightness": [
+   "deviceMac",
+   "deviceModel",
+   "value"
+  ],
+  "setColorTemperature": [
+   "deviceMac",
+   "deviceModel",
+   "value"
+  ],
+  "setHMSState": [
+   "hms_id",
+   "mode"
+  ],
+  "setIotProp": [
+   "deviceMac",
+   "product_model",
+   "propKey",
+   "value"
+  ],
+  "setMeshBrightness": [
+   "deviceMac",
+   "deviceModel",
+   "value"
+  ],
+  "setMeshColorTemperature": [
+   "deviceMac",
+   "deviceModel",
+   "value"
+  ],
+  "setMeshHue": [
+   "deviceMac",
+   "deviceModel",
+   "value"
+  ],
+  "setMeshSaturation": [
+   "deviceMac",
+   "deviceModel",
+   "value"
+  ],
+  "setProperty": [
+   "deviceMac",
+   "deviceModel",
+   "propertyId",
+   "propertyValue"
+  ],
+  "setVacuumCurrentMap": [
+   "mac",
+   "mapId"
+  ],
+  "sleepMilliSecounds": [
+   "ms"
+  ],
+  "sleepSeconds": [
+   "seconds"
+  ],
+  "thermostatGetIotProp": [
+   "deviceMac"
+  ],
+  "thermostatSetIotProp": [
+   "deviceMac",
+   "deviceModel",
+   "propKey",
+   "value"
+  ],
+  "tryLogin": [
+   "now"
+  ],
+  "turnMeshOff": [
+   "deviceMac",
+   "deviceModel"
+  ],
+  "turnMeshOn": [
+   "deviceMac",
+   "deviceModel"
+  ],
+  "unlockLock": [
+   "device"
+  ],
+  "updateDebounceAndLogin": [
+   "now"
+  ],
+  "vacuumCancel": [
+   "mac"
+  ],
+  "vacuumClean": [
+   "mac"
+  ],
+  "vacuumCleanRooms": [
+   "device",
+   "roomIds"
+  ],
+  "vacuumControl": [
+   "mac",
+   "type",
+   "value",
+   "extras"
+  ],
+  "vacuumDock": [
+   "mac"
+  ],
+  "vacuumEventTracking": [
+   "mac",
+   "typeCode",
+   "valueCode",
+   "args"
+  ],
+  "vacuumGetBattery": [
+   "info"
+  ],
+  "vacuumGetFault": [
+   "info"
+  ],
+  "vacuumGetMode": [
+   "info"
+  ],
+  "vacuumInfo": [
+   "device"
+  ],
+  "vacuumIsCharging": [
+   "info"
+  ],
+  "vacuumIsCleaning": [
+   "info"
+  ],
+  "vacuumIsDocked": [
+   "info"
+  ],
+  "vacuumPause": [
+   "mac"
+  ],
+  "vacuumPauseCleaning": [
+   "device"
+  ],
+  "vacuumQuiet": [
+   "device"
+  ],
+  "vacuumReturnToDock": [
+   "device"
+  ],
+  "vacuumSetSuctionLevel": [
+   "mac",
+   "model",
+   "level"
+  ],
+  "vacuumStandard": [
+   "device"
+  ],
+  "vacuumStartCleaning": [
+   "device"
+  ],
+  "vacuumStop": [
+   "mac"
+  ],
+  "vacuumStrong": [
+   "device"
+  ],
+  "vacuumSweepRooms": [
+   "mac",
+   "roomIds"
+  ],
+  "waitForDebounceClearance": [
+   "now"
+  ],
+  "wallSwitchIot": [
+   "deviceMac",
+   "deviceModel",
+   "value"
+  ],
+  "wallSwitchIotOff": [
+   "deviceMac",
+   "deviceModel"
+  ],
+  "wallSwitchIotOn": [
+   "deviceMac",
+   "deviceModel"
+  ],
+  "wallSwitchLedStateOff": [
+   "deviceMac",
+   "deviceModel"
+  ],
+  "wallSwitchLedStateOn": [
+   "deviceMac",
+   "deviceModel"
+  ],
+  "wallSwitchPower": [
+   "deviceMac",
+   "deviceModel",
+   "value"
+  ],
+  "wallSwitchPowerOff": [
+   "deviceMac",
+   "deviceModel"
+  ],
+  "wallSwitchPowerOn": [
+   "deviceMac",
+   "deviceModel"
+  ],
+  "wallSwitchVacationModeOff": [
+   "deviceMac",
+   "deviceModel"
+  ],
+  "wallSwitchVacationModeOn": [
+   "deviceMac",
+   "deviceModel"
+  ]
+ },
+ "behavior": {
+  "cameraGetFirmware": [
+   {
+    "args": [
+     0
+    ],
+    "result": null
+   }
+  ],
+  "cameraGetIp": [
+   {
+    "args": [
+     0
+    ],
+    "result": null
+   }
+  ],
+  "cameraGetLastSeen": [
+   {
+    "args": [
+     0
+    ],
+    "result": null
+   }
+  ],
+  "cameraGetSignalStrength": [
+   {
+    "args": [
+     0
+    ],
+    "result": null
+   }
+  ],
+  "cameraGetSnapshot": [
+   {
+    "args": [
+     0
+    ],
+    "result": null
+   }
+  ],
+  "cameraGetThumbnail": [
+   {
+    "args": [
+     0
+    ],
+    "result": null
+   }
+  ],
+  "cameraGetTimezone": [
+   {
+    "args": [
+     0
+    ],
+    "result": null
+   }
+  ],
+  "cameraIsOnline": [
+   {
+    "args": [
+     0
+    ],
+    "result": false
+   }
+  ],
+  "cameraToSummary": [
+   {
+    "args": [
+     0
+    ],
+    "result": {
+     "online": false,
+     "thumbnail": null
+    }
+   }
+  ],
+  "celsius2fahrenheit": [
+   {
+    "args": [
+     0
+    ],
+    "result": 32
+   },
+   {
+    "args": [
+     1
+    ],
+    "result": 33.8
+   },
+   {
+    "args": [
+     2
+    ],
+    "result": 35.6
+   },
+   {
+    "args": [
+     50
+    ],
+    "result": 122
+   },
+   {
+    "args": [
+     100
+    ],
+    "result": 212
+   }
+  ],
+  "checkBatteryVoltage": [
+   {
+    "args": [
+     0
+    ],
+    "result": 0
+   },
+   {
+    "args": [
+     1
+    ],
+    "result": 1
+   },
+   {
+    "args": [
+     2
+    ],
+    "result": 2
+   },
+   {
+    "args": [
+     50
+    ],
+    "result": 50
+   },
+   {
+    "args": [
+     100
+    ],
+    "result": 100
+   }
+  ],
+  "checkBrightnessValue": [
+   {
+    "args": [
+     1
+    ],
+    "result": 1
+   },
+   {
+    "args": [
+     2
+    ],
+    "result": 2
+   },
+   {
+    "args": [
+     50
+    ],
+    "result": 50
+   },
+   {
+    "args": [
+     100
+    ],
+    "result": 100
+   },
+   {
+    "args": [
+     72
+    ],
+    "result": 72
+   }
+  ],
+  "checkLowBattery": [
+   {
+    "args": [
+     0
+    ],
+    "result": 1
+   },
+   {
+    "args": [
+     50
+    ],
+    "result": 0
+   }
+  ],
+  "clamp": [
+   {
+    "args": [
+     0
+    ],
+    "result": null
+   },
+   {
+    "args": [
+     0,
+     0,
+     100
+    ],
+    "result": 0
+   },
+   {
+    "args": [
+     50,
+     0,
+     100
+    ],
+    "result": 50
+   },
+   {
+    "args": [
+     25,
+     0,
+     50
+    ],
+    "result": 25
+   },
+   {
+    "args": [
+     0.5,
+     0,
+     100
+    ],
+    "result": 0.5
+   }
+  ],
+  "fahrenheit2celsius": [
+   {
+    "args": [
+     0
+    ],
+    "result": -17.77777777777778
+   },
+   {
+    "args": [
+     1
+    ],
+    "result": -17.22222222222222
+   },
+   {
+    "args": [
+     2
+    ],
+    "result": -16.666666666666668
+   },
+   {
+    "args": [
+     50
+    ],
+    "result": 10
+   },
+   {
+    "args": [
+     100
+    ],
+    "result": 37.77777777777778
+   }
+  ],
+  "floatToRange": [
+   {
+    "args": [
+     0
+    ],
+    "result": null
+   },
+   {
+    "args": [
+     0,
+     0,
+     100
+    ],
+    "result": 0
+   },
+   {
+    "args": [
+     50,
+     0,
+     100
+    ],
+    "result": 5000
+   },
+   {
+    "args": [
+     25,
+     0,
+     50
+    ],
+    "result": 1250
+   },
+   {
+    "args": [
+     0.5,
+     0,
+     100
+    ],
+    "result": 50
+   }
+  ],
+  "getLeakSensorState": [
+   {
+    "args": [
+     0
+    ],
+    "result": 0
+   },
+   {
+    "args": [
+     1
+    ],
+    "result": 1
+   },
+   {
+    "args": [
+     -5
+    ],
+    "result": -5
+   },
+   {
+    "args": [
+     "0"
+    ],
+    "result": "0"
+   },
+   {
+    "args": [
+     "1"
+    ],
+    "result": "1"
+   }
+  ],
+  "getLockDoorState": [
+   {
+    "args": [
+     0
+    ],
+    "result": 0
+   },
+   {
+    "args": [
+     1
+    ],
+    "result": 1
+   },
+   {
+    "args": [
+     -5
+    ],
+    "result": -5
+   },
+   {
+    "args": [
+     "0"
+    ],
+    "result": "0"
+   },
+   {
+    "args": [
+     "1"
+    ],
+    "result": "1"
+   }
+  ],
+  "getLockState": [
+   {
+    "args": [
+     0
+    ],
+    "result": 1
+   },
+   {
+    "args": [
+     2
+    ],
+    "result": 0
+   }
+  ],
+  "getUuid": [
+   {
+    "args": [
+     "0"
+    ],
+    "result": "0"
+   },
+   {
+    "args": [
+     "1"
+    ],
+    "result": "1"
+   },
+   {
+    "args": [
+     "#ff0000"
+    ],
+    "result": "#ff0000"
+   },
+   {
+    "args": [
+     "a",
+     "b"
+    ],
+    "result": "a"
+   }
+  ],
+  "kelvinToMired": [
+   {
+    "args": [
+     0
+    ],
+    "result": null
+   },
+   {
+    "args": [
+     1
+    ],
+    "result": 1000000
+   },
+   {
+    "args": [
+     2
+    ],
+    "result": 500000
+   },
+   {
+    "args": [
+     50
+    ],
+    "result": 20000
+   },
+   {
+    "args": [
+     100
+    ],
+    "result": 10000
+   }
+  ],
+  "normalizeCameraSignalingUrl": [
+   {
+    "args": [
+     0
+    ],
+    "result": 0
+   },
+   {
+    "args": [
+     1
+    ],
+    "result": 1
+   },
+   {
+    "args": [
+     2
+    ],
+    "result": 2
+   },
+   {
+    "args": [
+     50
+    ],
+    "result": 50
+   },
+   {
+    "args": [
+     100
+    ],
+    "result": 100
+   }
+  ],
+  "parseCameraStatus": [
+   {
+    "args": [
+     0
+    ],
+    "result": null
+   }
+  ],
+  "rangeToFloat": [
+   {
+    "args": [
+     0
+    ],
+    "result": null
+   },
+   {
+    "args": [
+     0,
+     0,
+     100
+    ],
+    "result": 0
+   },
+   {
+    "args": [
+     50,
+     0,
+     100
+    ],
+    "result": 0.5
+   },
+   {
+    "args": [
+     0.5,
+     0,
+     100
+    ],
+    "result": 0.005
+   }
+  ],
+  "vacuumGetBattery": [
+   {
+    "args": [
+     0
+    ],
+    "result": null
+   }
+  ],
+  "vacuumGetFault": [
+   {
+    "args": [
+     0
+    ],
+    "result": null
+   }
+  ],
+  "vacuumGetMode": [
+   {
+    "args": [
+     0
+    ],
+    "result": null
+   }
+  ],
+  "vacuumIsCharging": [
+   {
+    "args": [
+     0
+    ],
+    "result": false
+   }
+  ],
+  "vacuumIsCleaning": [
+   {
+    "args": [
+     0
+    ],
+    "result": false
+   }
+  ],
+  "vacuumIsDocked": [
+   {
+    "args": [
+     0
+    ],
+    "result": false
+   }
+  ]
+ },
+ "behaviorNote": "What 1.1.15 returned for these inputs, for pure methods (no network, no clock, no randomness) that 2.x still matches. checkBrightnessValue and checkColorTemp are deliberately not here: 2.x fixes them."
+}
