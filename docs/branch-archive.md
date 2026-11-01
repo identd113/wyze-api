@@ -25,7 +25,7 @@ Commit `275ea63d8` ("Python Conversion from https://github.com/mrlt8/docker-wyze
 - `iotc.js`, `tutk/tutk.js`, `tutk/tutkProtocol.js`, `tutk/tutkIoctlMux.js`: the IOTC session and IOCtrl message mux.
 - `tutk/deviceConfig.js` (957 lines): the table of per-model camera settings.
 
-It was never wired into the library. The working version of this idea is in `future/tutk/lib/` (codec, header, messages, xxtea, auth, constants), which says it is a port from docker-wyze-bridge. If the local TUTK path is picked up again, `deviceConfig.js` on this branch is the part to read first; I found no matching per-model settings table in `src/tutk/`.
+It was never wired into the library. The working version of this idea is in `future/tutk/lib/` (codec, header, messages, xxtea, auth, constants), which says it is a port from docker-wyze-bridge. If the local TUTK path is picked up again, `deviceConfig.js` on this branch is the part to read first; I found no matching per-model settings table in `future/tutk/`.
 
 ## The `4-robot-vacuum-support` branch, as research
 
