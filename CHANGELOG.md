@@ -4,6 +4,10 @@
 
 ### Unreleased
 
+- **Fix: concurrent logins.** Several callers finding the access token missing at once (parallel requests at start-up) each started their own login. They now share one. A second login could also run unawaited, so a failure became an unhandled rejection that crashes a default Node process, and a one-shot 2FA code failed on the repeat.
+- **Fix: a missing or broken ffmpeg no longer crashes the host process.** Starting a HomeKit stream with an ffmpeg that cannot start (binary missing or not executable) threw an unhandled `error` event. The stream now ends and logs why; audio failure carries on without audio.
+- **Requests to Wyze time out after 30 seconds** when the caller set no timeout, so a stalled connection no longer hangs login and every poll that waits on it. The camera thumbnail download has its own 15 second timeout and a 20 MB size cap.
+- **`cameraGetEvents` and `cameraGetEventsMulti` throw on an unknown `types` or `tags` name.** They used to drop it quietly, and an empty filter means "everything", so a typo returned every event. (These options are new in 2.x.)
 - **Login tokens are saved to `~/.wyze-api` when you give no `persistPath`** (or to `$WYZE_API_PERSIST_PATH`). A client built without one used to fail at login. The folder is created owner-only. An explicit `persistPath` works as before. The probe scripts now use this default instead of their own folder, so they no longer leave a token file inside the package; the package also excludes `scripts/wyze-*.json`.
 - **`getCamPlusPlans()` lists the account's Cam Plus plans** with their status, end date, seats and the cameras each one covers. `getPlanBindingListByUser(groupId = "hms")` takes the plan group, so `"cam-plus"` returns the camera plans; the default is unchanged.
 - **2.x is checked against 1.1.15 on every test run.** `tests/compat-1x.test.js` fails if a public method, its parameter order, an export or a pure helper's result changes from 1.x. The differences that are on purpose are listed in `docs/downstream.md`, which also lists the projects still on 1.x.
