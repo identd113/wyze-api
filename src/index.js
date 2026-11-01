@@ -587,7 +587,19 @@ module.exports = class WyzeAPI {
    * If the access token is missing or expired, it handles the login process,
    * considering debounce settings to avoid multiple login attempts.
    */
-  async maybeLogin() {
+  maybeLogin() {
+    // Several callers can find the token missing at once (parallel requests at start-up, or after a 2001).
+    // They share one attempt: a second login started while the first is running would race it, and a one-shot
+    // 2FA code fails on the repeat.
+    if (!this._maybeLoginPromise) {
+      this._maybeLoginPromise = this._maybeLogin().finally(() => {
+        this._maybeLoginPromise = null;
+      });
+    }
+    return this._maybeLoginPromise;
+  }
+
+  async _maybeLogin() {
     // Check if the access token is available.
     if (!this.access_token) {
       await this._loadPersistedTokens(); // Load any previously saved tokens.
@@ -612,7 +624,7 @@ module.exports = class WyzeAPI {
       // If the access token is still not available after waiting,
       // update debounce settings and try logging in again.
       if (!this.access_token) {
-        this.updateDebounceAndLogin(now);
+        await this.updateDebounceAndLogin(now);
       }
     }
   }
