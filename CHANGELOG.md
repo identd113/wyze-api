@@ -2,7 +2,9 @@
 
 ## Releases
 
-### Unreleased
+### v2.0.0-beta.4
+
+Pairs with `homebridge-wyze-smart-home` 2.0.0-beta.4. Release notes: [docs/releases/2.0.0-beta.4.md](docs/releases/2.0.0-beta.4.md).
 
 - **Development: `npm run lint`** (ESLint on `src`, `scripts` and `tests`) and a lint job in CI. Nothing about the published package changes.
 - **Fix: concurrent logins.** Several callers finding the access token missing at once (parallel requests at start-up) each started their own login. They now share one. A second login could also run unawaited, so a failure became an unhandled rejection that crashes a default Node process, and a one-shot 2FA code failed on the repeat.
