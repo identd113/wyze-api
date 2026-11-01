@@ -26,7 +26,7 @@ const wyze = new Wyze({
   password: process.env.PASSWORD,
   keyId: process.env.KEY_ID,
   apiKey: process.env.API_KEY,
-  persistPath: "./",
+  // persistPath: "/path/for/saved-tokens", // optional; defaults to ~/.wyze-api
 });
 
 await wyze.maybeLogin();

@@ -25,7 +25,7 @@ const options = {
   apiKey: process.env.apiKey,
   mfaCode: process.env.mfaCode, // optional, only required if your account has 2FA enabled
   totpSecret: process.env.totpSecret, // optional, recommended for 2FA: base32 key from the authenticator QR setup
-  persistPath: "./",
+  // persistPath: "/path/for/saved-tokens", // optional; defaults to ~/.wyze-api
   logLevel: "none"
 }
 const wyze = new Wyze(options)

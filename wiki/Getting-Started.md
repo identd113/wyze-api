@@ -18,7 +18,7 @@ const wyze = new Wyze({
   password: process.env.PASSWORD,
   keyId: process.env.KEY_ID,
   apiKey: process.env.API_KEY,
-  persistPath: "./",
+  // persistPath: "/path/for/saved-tokens", // optional; defaults to ~/.wyze-api
 });
 
 (async () => {
@@ -39,7 +39,7 @@ const wyze = new Wyze({
 | `apiKey` | — | Developer api key |
 | `totpSecret` | — | Base32 key from the authenticator-app QR setup (**recommended** for 2FA accounts): a fresh code is generated on every login. Wins over `mfaCode` if both are set. |
 | `mfaCode` | — | The current 6-digit authenticator code, for 2FA accounts without `totpSecret`. Expires after 30 seconds, so it only works for a login that happens right away. |
-| `persistPath` | — | Directory for cached auth tokens. **Recommended** — without this, every process restart triggers a fresh login. |
+| `persistPath` | `$WYZE_API_PERSIST_PATH`, else `~/.wyze-api` | Directory for cached auth tokens, so a restart reuses the login instead of making a new one. Keep it outside any project folder, and do not use the working directory. The folder and the token file are owner-only. |
 | `logLevel` | `"info"` | Verbosity for the built-in `WyzeLogger`. One of `"error"` / `"warn"` / `"info"` / `"debug"`. Set to `"debug"` to log every request/response (replaces the legacy `apiLogEnabled` toggle). |
 | `apiLogEnabled` | `false` | Legacy boolean — `true` is now mapped to `logLevel: "debug"` for back-compat. |
 | `logPrefix` | `"Wyze"` | Bracket tag at the front of every log line so output blends in with the host application's logs. |

@@ -1,6 +1,7 @@
 //v0.2.0.0 Update on new releases
 
 const fs = require("fs").promises;
+const os = require("os");
 const path = require("path");
 const getUuid = require("uuid-by-string");
 const payloadFactory = require("./utils/payloadFactory");
@@ -61,7 +62,9 @@ module.exports = class WyzeAPI {
       // debug captures. Off by default — never set true in shared logs.
       redact: options.disableLogRedaction !== true,
     });
-    this.persistPath = options.persistPath;
+    // Where the login tokens are saved. Without an option, `WYZE_API_PERSIST_PATH`, else a per-user folder outside
+    // any project (`~/.wyze-api`). It used to have no default, and a client built without one failed at login.
+    this.persistPath = options.persistPath ?? process.env.WYZE_API_PERSIST_PATH ?? path.join(os.homedir(), ".wyze-api");
     this.refreshTokenTimerEnabled = options.refreshTokenTimerEnabled || false;
     this.lowBatteryPercentage = options.lowBatteryPercentage || 30;
     // User login parameters
@@ -809,7 +812,7 @@ module.exports = class WyzeAPI {
         // Ensure the persist directory exists. HOOBS doesn't pre-create
         // its own /var/lib/hoobs/.../persist dir, so the first write
         // here was throwing ENOENT and the plugin never recovered.
-        await fs.mkdir(path.dirname(tokenPath), { recursive: true });
+        await fs.mkdir(path.dirname(tokenPath), { recursive: true, mode: 0o700 }); // a folder made here is owner-only too
         await fs.writeFile(tokenPath, JSON.stringify(data), { mode: 0o600 }); // Tokens are credentials: owner-only.
         await fs.chmod(tokenPath, 0o600); // `mode` only applies to a newly created file; fix one saved by an older version.
         return; // Exit if successful.

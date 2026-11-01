@@ -12,11 +12,11 @@ const wyze = new Wyze({
   password: process.env.PASSWORD,
   keyId: process.env.KEY_ID,
   apiKey: process.env.API_KEY,
-  persistPath: "./",
+  // persistPath: "/path/for/saved-tokens", // optional; defaults to ~/.wyze-api
 });
 ```
 
-With `persistPath` set, tokens are written to `<persistPath>/wyze-<uuid-from-username>.json` and loaded on subsequent `maybeLogin()` calls. **Without it, every process restart triggers a fresh login** — Wyze rate-limits aggressive logins and may temporarily lock the account.
+Tokens are written to `<persistPath>/wyze-<uuid-from-username>.json` (`persistPath` defaults to `$WYZE_API_PERSIST_PATH`, else `~/.wyze-api`) and loaded on subsequent `maybeLogin()` calls. **Without it, every process restart triggers a fresh login** — Wyze rate-limits aggressive logins and may temporarily lock the account.
 
 ## Login flow
 
@@ -55,7 +55,7 @@ const wyze = new Wyze({
   keyId: process.env.KEY_ID,
   apiKey: process.env.API_KEY,
   totpSecret: process.env.TOTP_SECRET,
-  persistPath: "./",
+  // persistPath: "/path/for/saved-tokens", // optional; defaults to ~/.wyze-api
 });
 ```
 
@@ -72,7 +72,7 @@ const wyze = new Wyze({
   keyId: process.env.KEY_ID,
   apiKey: process.env.API_KEY,
   mfaCode: "123456",
-  persistPath: "./",
+  // persistPath: "/path/for/saved-tokens", // optional; defaults to ~/.wyze-api
 });
 ```
 

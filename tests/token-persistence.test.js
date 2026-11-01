@@ -217,3 +217,51 @@ test("a token file saved by an older version with loose permissions is tightened
     await fs.rm(dir, { recursive: true, force: true });
   }
 });
+
+// ---- where tokens go when the caller gives no persistPath ----
+
+const makeClient = (options = {}) =>
+  new WyzeAPI({ username: "test@example.com", password: "p", keyId: "k", apiKey: "a", logLevel: "silent", ...options });
+
+test("without a persistPath the tokens go to ~/.wyze-api, not the working directory", () => {
+  const saved = process.env.WYZE_API_PERSIST_PATH;
+  delete process.env.WYZE_API_PERSIST_PATH;
+  try {
+    const client = makeClient();
+    assert.strictEqual(client.persistPath, path.join(os.homedir(), ".wyze-api"));
+    assert.ok(client._tokenPersistPath().startsWith(path.join(os.homedir(), ".wyze-api") + path.sep));
+    client.destroy?.();
+  } finally {
+    if (saved !== undefined) process.env.WYZE_API_PERSIST_PATH = saved;
+  }
+});
+
+test("WYZE_API_PERSIST_PATH overrides the default, and an explicit persistPath beats both", () => {
+  const saved = process.env.WYZE_API_PERSIST_PATH;
+  process.env.WYZE_API_PERSIST_PATH = path.join(os.tmpdir(), "from-env");
+  try {
+    const fromEnv = makeClient();
+    assert.strictEqual(fromEnv.persistPath, path.join(os.tmpdir(), "from-env"));
+    const explicit = makeClient({ persistPath: path.join(os.tmpdir(), "explicit") });
+    assert.strictEqual(explicit.persistPath, path.join(os.tmpdir(), "explicit"));
+    fromEnv.destroy?.();
+    explicit.destroy?.();
+  } finally {
+    if (saved === undefined) delete process.env.WYZE_API_PERSIST_PATH;
+    else process.env.WYZE_API_PERSIST_PATH = saved;
+  }
+});
+
+test("tokens saved into a folder that does not exist yet are owner-only, folder and file", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "wyze-api-test-"));
+  const persistPath = path.join(root, "new-folder");
+  const client = makeClient({ persistPath });
+  client.access_token = "at";
+  client.refresh_token = "rt";
+  await client._persistTokens();
+  const folderMode = (await fs.stat(persistPath)).mode & 0o777;
+  const fileMode = (await fs.stat(client._tokenPersistPath())).mode & 0o777;
+  assert.strictEqual(fileMode, 0o600);
+  assert.strictEqual(folderMode & 0o077, 0, `folder is ${folderMode.toString(8)}, should not be open to group or others`);
+  client.destroy?.();
+});

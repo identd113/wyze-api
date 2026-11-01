@@ -4,6 +4,7 @@
 
 ### Unreleased
 
+- **Login tokens are saved to `~/.wyze-api` when you give no `persistPath`** (or to `$WYZE_API_PERSIST_PATH`). A client built without one used to fail at login. The folder is created owner-only. An explicit `persistPath` works as before. The probe scripts now use this default instead of their own folder, so they no longer leave a token file inside the package; the package also excludes `scripts/wyze-*.json`.
 - **`getCamPlusPlans()` lists the account's Cam Plus plans** with their status, end date, seats and the cameras each one covers. `getPlanBindingListByUser(groupId = "hms")` takes the plan group, so `"cam-plus"` returns the camera plans; the default is unchanged.
 - **2.x is checked against 1.1.15 on every test run.** `tests/compat-1x.test.js` fails if a public method, its parameter order, an export or a pure helper's result changes from 1.x. The differences that are on purpose are listed in `docs/downstream.md`, which also lists the projects still on 1.x.
 - **The TUTK and GUTES code is no longer in the package.** `src/tutk/` and `src/gutes/` moved to `future/`, which is tracked in the repository but not published. Nothing in the library used them. Anything that imported `wyze-api/src/tutk/...` must now take it from the repository. `npm run test:future` runs their tests.

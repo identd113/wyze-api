@@ -39,7 +39,7 @@ const wyze = new WyzeAPI({
   password: process.env.PASSWORD,
   keyId: process.env.KEY_ID,
   apiKey: process.env.API_KEY,
-  persistPath: process.env.PERSIST_PATH || __dirname,
+  persistPath: process.env.PERSIST_PATH, // unset: the library default (~/.wyze-api)
   logLevel: process.env.LOG_LEVEL || "info",
 });
 
