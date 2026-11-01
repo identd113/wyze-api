@@ -48,6 +48,7 @@
   "files": [
     "src",
     "scripts",
+    "!scripts/wyze-*.json",
     "docs",
     "CHANGELOG.md"
   ],
