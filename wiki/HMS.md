@@ -14,8 +14,22 @@ const plans = await wyze.getPlanBindingListByUser();
 
 | Method | Notes |
 |---|---|
-| `getPlanBindingListByUser()` | Subscription/plan info — contains the `hms_id` |
+| `getPlanBindingListByUser(groupId = "hms")` | Subscription/plan info. The default, `"hms"`, is the Home Monitoring plan and contains the `hms_id`. Pass `"cam-plus"` for the camera plans, where each plan's `deviceList` names the cameras it covers. |
+| `getCamPlusPlans()` | The account's Cam Plus plans as a plain list (see below) |
 | `getHmsID()` | Convenience wrapper around `getPlanBindingListByUser()` |
+
+## Cam Plus plans
+
+Not part of the monitoring system, but it comes from the same plan service. `getCamPlusPlans()` returns every plan the account has had, expired ones included:
+
+```js
+const plans = await wyze.getCamPlusPlans();
+// [{ pid: "cam-plus-yearly", name: "Annual Plan", status: "RENEW", active: true,
+//    expires: 1804106553000, quantity: 1, used: 1, macs: ["AABBCCDDEEFF"] }, ...]
+const covered = plans.filter((plan) => plan.active).flatMap((plan) => plan.macs);
+```
+
+`active` is true only for a plan that has not expired by its date, whatever its status says. `macs` are the cameras the plan covers; `used` and `quantity` are seats taken and seats bought. Wyze lists no features for a plan, so this tells you who has one and until when, not what it allows. In practice, a camera on a plan gets video clips, AI labels and no five-minute wait between events; one without a plan gets a picture about every five minutes.
 
 ## Reading the current state
 
