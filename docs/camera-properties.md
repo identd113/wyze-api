@@ -88,7 +88,7 @@ from docker-wyze-bridge. None is tested here yet.
 | Pan / tilt, cruise, motion tracking (Pan cams) | `K11000` to `K11022` | |
 | RTSP on/off | `K10604` / `K10600` | |
 
-`wyze-api` already carries a port of this protocol in `src/tutk/` (including
+`wyze-api` already carries a port of this protocol in `future/tutk/` (including
 `K10042SetNightVisionStatus`), but it needs Wyze's native IOTC library and only loads on Linux,
 so it would not run on the Mac test bridge. It is not used by the plugin today.
 

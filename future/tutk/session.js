@@ -32,7 +32,7 @@
  *
  * Usage:
  *
- *   const { TutkSession } = require('wyze-api/src/tutk/session');
+ *   const { TutkSession } = require('wyze-api/future/tutk/session');
  *   const sess = new TutkSession({ uid, enr, productModel, phoneId, openUserId });
  *   await sess.connect();
  *   const time = await sess.send(new M.K10090GetCameraTime());

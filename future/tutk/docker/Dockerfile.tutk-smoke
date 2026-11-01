@@ -12,10 +12,10 @@
 # from glibc enough to fail.
 #
 # Build (Apple Silicon — auto-picks linux/arm64):
-#   docker build -f tests/docker/Dockerfile.tutk-smoke -t wyze-api-tutk-smoke .
+#   docker build -f future/tutk/docker/Dockerfile.tutk-smoke -t wyze-api-tutk-smoke .
 #
 # Build (force linux/amd64 to test the x86 .so on any host):
-#   docker build --platform linux/amd64 -f tests/docker/Dockerfile.tutk-smoke -t wyze-api-tutk-smoke .
+#   docker build --platform linux/amd64 -f future/tutk/docker/Dockerfile.tutk-smoke -t wyze-api-tutk-smoke .
 #
 # Run:
 #   docker run --rm wyze-api-tutk-smoke
@@ -44,11 +44,15 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm install --omit=dev --no-audit --no-fund
 
+# koffi is declared by the parked TUTK code, not by the main package.
+COPY future/tutk/package.json ./future/tutk/package.json
+RUN cd future/tutk && npm install --omit=dev --no-audit --no-fund
+
 # Now the source. We only need what the smoke test imports.
 COPY src/ ./src/
 COPY scripts/ ./scripts/
 COPY example/ ./example/
-COPY tests/docker/ ./tests/docker/
+COPY future/tutk/ ./future/tutk/
 
 # Fetch the .so for this image's architecture at BUILD time.
 # WYZE_SDK_ALLOW_NON_LINUX is a no-op here (we ARE linux) — kept for
@@ -57,4 +61,4 @@ RUN node scripts/fetch-wyze-sdk.js --type tutk --yes && \
     ls -lh /root/.homebridge/wyze-sdk/
 
 # Default command: run the smoke test.
-CMD ["node", "tests/docker/smoke.js"]
+CMD ["node", "future/tutk/docker/smoke.js"]

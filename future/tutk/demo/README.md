@@ -11,21 +11,21 @@ Python implementation in
 
 The protocol modules originally lived here under `lib/`. They have been
 promoted into the package's main source tree at
-[`src/tutk/lib/`](../../src/tutk/lib/) and are used by `src/tutk/session.js`.
+[`../lib/`](../lib/) and are used by `../session.js`.
 This directory now keeps only the demo (`spike.js`) and fixture tests as
 runnable documentation of the protocol layer in isolation.
 
 ## What's in this directory
 
 ```
-tutk-spike/
+demo/
 ├── spike.js               End-to-end protocol round-trip + perf bench
 ├── test/
 │   └── fixtures.test.js   Pinned vectors vs Python reference
 └── README.md              you are here
 ```
 
-The actual modules (imported above) live in `src/tutk/lib/`:
+The actual modules (imported above) live in `../lib/`:
 
 - `constants.js`  Protocol version 5, prefix "HL", FRAME_SIZE, BITRATE
 - `header.js`     16-byte TutkWyzeProtocolHeader pack/unpack
@@ -37,8 +37,8 @@ The actual modules (imported above) live in `src/tutk/lib/`:
 ## Running
 
 ```bash
-# Individual self-tests (each module, run from src/tutk/lib/):
-node ../../src/tutk/lib/xxtea.js
+# Individual self-tests (each module, run from lib/):
+node ../lib/xxtea.js
 
 # Top-level spike — round-trips everything:
 node spike.js
@@ -116,11 +116,11 @@ delivery plumbing.
 Every implementation in this directory is a port of code in
 [docker-wyze-bridge](https://github.com/mrlt8/docker-wyze-bridge):
 
-- `src/tutk/lib/header.js` ← `app/wyzecam/tutk/tutk_protocol.py` (TutkWyzeProtocolHeader)
-- `src/tutk/lib/codec.js`  ← `app/wyzecam/tutk/tutk_protocol.py` (encode/decode)
-- `src/tutk/lib/messages.js` ← `app/wyzecam/tutk/tutk_protocol.py` (all K-classes)
-- `src/tutk/lib/xxtea.js` ← XXTEA spec; verified against `xxtea` PyPI package
-- `src/tutk/lib/auth.js` ← `app/wyzecam/tutk/tutk_protocol.py`
+- `../lib/header.js` ← `app/wyzecam/tutk/tutk_protocol.py` (TutkWyzeProtocolHeader)
+- `../lib/codec.js`  ← `app/wyzecam/tutk/tutk_protocol.py` (encode/decode)
+- `../lib/messages.js` ← `app/wyzecam/tutk/tutk_protocol.py` (all K-classes)
+- `../lib/xxtea.js` ← XXTEA spec; verified against `xxtea` PyPI package
+- `../lib/auth.js` ← `app/wyzecam/tutk/tutk_protocol.py`
   (respond_to_ioctrl_10001, generate_challenge_response)
 
 Constants and bitrate enums come from `app/wyzecam/tutk/tutk.py`.
@@ -146,7 +146,7 @@ Like `gutes-spike/`, this directory lives under `example/` and is
 excluded from the published package via `package.json`'s `files`
 field. It exists for development + manual verification only. When
 this matures into something users run, the relevant code moves to
-`src/tutk/` with proper exports.
+`future/tutk/` with proper exports.
 
 ## Hardware coverage
 

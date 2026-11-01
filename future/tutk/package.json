@@ -1,0 +1,8 @@
+{
+  "name": "wyze-api-future-tutk",
+  "private": true,
+  "description": "Parked TUTK (IOTC) local-camera code. Not published, not used by wyze-api. Only the real library needs koffi.",
+  "dependencies": {
+    "koffi": "^3.0.2"
+  }
+}

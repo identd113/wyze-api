@@ -11,8 +11,8 @@
     "test": "node --test --test-reporter=spec tests/*.test.js",
     "test:future": "node --test future/*/test/*.test.js",
     "fetch-wyze-sdk": "node scripts/fetch-wyze-sdk.js",
-    "tutk-smoke": "tests/docker/run-tutk-smoke.sh",
-    "tutk-smoke-real": "tests/docker/run-real-camera-smoke.sh"
+    "tutk-smoke": "future/tutk/docker/run-tutk-smoke.sh",
+    "tutk-smoke-real": "future/tutk/docker/run-real-camera-smoke.sh"
   },
   "keywords": [
     "wyze",
@@ -30,7 +30,6 @@
   "dependencies": {
     "axios": "^1.12.0",
     "ffmpeg-static": "^5.3.0",
-    "koffi": "^3.0.2",
     "utf8": "3.0.0",
     "uuid-by-string": "4.0.0",
     "werift": "^0.25.1",

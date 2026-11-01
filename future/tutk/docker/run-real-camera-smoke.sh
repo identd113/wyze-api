@@ -4,17 +4,17 @@
 # Usage (from wyze-api repo root):
 #
 #   # First time — fill in credentials in .env (file is gitignored):
-#   cp tests/docker/.env.sample tests/docker/.env
-#   $EDITOR tests/docker/.env
+#   cp future/tutk/docker/.env.sample future/tutk/docker/.env
+#   $EDITOR future/tutk/docker/.env
 #
 #   # Run:
-#   ./tests/docker/run-real-camera-smoke.sh
+#   ./future/tutk/docker/run-real-camera-smoke.sh
 #
 # Or pass env vars inline:
 #
 #   WYZE_USERNAME=you@example.com WYZE_PASSWORD=... \
 #   WYZE_KEY_ID=... WYZE_API_KEY=... WYZE_CAMERA_NICK="<your camera nickname>" \
-#     ./tests/docker/run-real-camera-smoke.sh
+#     ./future/tutk/docker/run-real-camera-smoke.sh
 #
 # IMPORTANT: this runs the container with --network host so it can reach
 # your Wyze cameras on the LAN over UDP. On Docker Desktop for Mac that
@@ -24,16 +24,16 @@
 
 set -euo pipefail
 
-if [ ! -f "tests/docker/Dockerfile.real-camera" ]; then
+if [ ! -f "future/tutk/docker/Dockerfile.real-camera" ]; then
   echo "error: run this from the wyze-api repo root" >&2
   exit 1
 fi
 
 # Load .env if present (overridden by anything already in the env).
-if [ -f "tests/docker/.env" ]; then
+if [ -f "future/tutk/docker/.env" ]; then
   # shellcheck disable=SC1091
   set -a
-  source tests/docker/.env
+  source future/tutk/docker/.env
   set +a
 fi
 
@@ -43,7 +43,7 @@ for v in WYZE_USERNAME WYZE_PASSWORD WYZE_KEY_ID WYZE_API_KEY; do
 done
 if [ -n "$MISSING" ]; then
   echo "error: missing required env vars:$MISSING" >&2
-  echo "fill in tests/docker/.env (copy from .env.sample) or pass inline." >&2
+  echo "fill in future/tutk/docker/.env (copy from .env.sample) or pass inline." >&2
   exit 2
 fi
 
@@ -55,8 +55,8 @@ if [ -n "${TARGET_PLATFORM:-}" ]; then
   echo "→ forcing platform: $TARGET_PLATFORM"
 fi
 
-echo "→ docker build $PLATFORM_FLAG -f tests/docker/Dockerfile.real-camera -t $TAG ."
-docker build $PLATFORM_FLAG -f tests/docker/Dockerfile.real-camera -t "$TAG" . >/dev/null
+echo "→ docker build $PLATFORM_FLAG -f future/tutk/docker/Dockerfile.real-camera -t $TAG ."
+docker build $PLATFORM_FLAG -f future/tutk/docker/Dockerfile.real-camera -t "$TAG" . >/dev/null
 
 echo
 echo "→ docker run --rm --network host $PLATFORM_FLAG <creds> -e WYZE_CAMERA_NICK='${WYZE_CAMERA_NICK:-(first online)}' $TAG"

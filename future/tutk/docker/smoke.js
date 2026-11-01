@@ -11,7 +11,7 @@
  *   - The .so file we ship via fetch-wyze-sdk.js can be opened by koffi
  *     on a real Linux host (no Bionic shim needed — Throughtek's Linux
  *     build is glibc-compatible)
- *   - Every function signature in src/tutk/loader.js matches what's
+ *   - Every function signature in future/tutk/loader.js matches what's
  *     actually exported from the .so (missing symbol → koffi throws)
  *   - IOTC_Initialize2 / avInitialize / IOTC_DeInitialize return 0
  *     (the SDK is happy with its own internal state)
@@ -57,7 +57,7 @@ let loader, koffi, sdk;
 // ---- 1. Pre-flight ----------------------------------------------------
 
 check("loader module imports", () => {
-  loader = require("../../src/tutk/loader");
+  loader = require("../loader");
 });
 
 check("isTutkSupported() returns supported on Linux", () => {

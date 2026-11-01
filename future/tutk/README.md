@@ -1,4 +1,27 @@
-# src/tutk
+# future/tutk
+
+> **Parked, and not part of the published package.** Moved out of `src/` on 2026-11-01. Nothing in `wyze-api`
+> or the Homebridge plugin loads it. See [`../README.md`](../README.md) for what `future/` means.
+
+## Where this stands
+
+- **What it is for:** talking to Wyze cameras over the local network with ThroughTek's TUTK (IOTC, "Kalay")
+  protocol, the way docker-wyze-bridge does, instead of through Wyze's cloud.
+- **How far:** the control side works. It loads TUTK's native library through `koffi`, opens a session,
+  authenticates and exchanges commands, with unit tests and a Docker smoke test against the real library. The
+  video side is not built: no worker-thread receive pump, no routing of commands locally, no turning frames into
+  H.264 for HomeKit (Phases 2, 2.5 and 3).
+- **Is it better than what we have:** not today. The cloud path (WebRTC and Wyze's HTTP API) already does
+  everything the plugin needs, including video. This would add local, cloud-free control and video.
+- **Platform:** Linux only (the library ships glibc binaries for x86_64, arm64 and armv7). The Mac mini cannot
+  run it; the Synology's Docker could.
+- **Not like GUTES:** it uses an ordinary Linux library, so there is no equivalent of GUTES's Android-library
+  wall. What is left is engineering, not a blocker.
+- **Pick it up again when:** there is a reason for local video or LAN control (latency, running without the
+  cloud) and a Linux host to run it on.
+- **Why `koffi` is declared here:** only this code needs it. See `package.json` in this folder. Run
+  `npm install` here before using the real library; the unit tests use a stub and do not need it.
+
 
 Phase 1 production code — Tutk SDK loader + session orchestrator. This
 is the layer that actually talks to Wyze cameras over the local IOTC
@@ -7,17 +30,18 @@ session.
 ## Files
 
 ```
-src/tutk/
+future/tutk/
 ├── loader.js   — koffi bindings for libIOTCAPIs_ALL.so
 ├── session.js  — Promise-based session/auth/IOCtrl mux
 ├── lib/        — pure-JS protocol layer (Phase 0 port from
 │                 docker-wyze-bridge), see lib/ for details:
 │                 codec/header/messages/xxtea/auth/constants
+├── demo/       — runnable Phase 0 demo (spike.js)
+├── test/       — unit and fixture tests: `npm run test:future`
+├── docker/     — Docker smoke tests against the real library (and a real camera)
+├── package.json— declares koffi, the only dependency this code needs
 └── README.md   — you are here
 ```
-
-The runnable Phase 0 demo + fixture tests live in
-[`example/tutk-spike/`](../../example/tutk-spike/).
 
 ## Loader
 
@@ -59,8 +83,8 @@ ships is compiled against standard glibc, **no Bionic shim required**
 camera sessions:
 
 ```js
-const { TutkSession } = require('wyze-api/src/tutk/session');
-const M = require('wyze-api/src/tutk/lib/messages');
+const { TutkSession } = require('wyze-api/future/tutk/session');
+const M = require('wyze-api/future/tutk/lib/messages');
 
 const sess = new TutkSession({
   uid: 'AABBCCDDEEFF',
@@ -131,8 +155,8 @@ This frees the main loop entirely. TODO marker is in `session.js`.
 Two test files run on every host (macOS/Windows/Linux) via the stub
 SDK pattern — no `.so` required:
 
-- `tests/tutk-loader.test.js` — loader refusal modes + platform detection
-- `tests/tutk-session.test.js` — full auth flow, send/receive matching,
+- `test/loader.test.js` — loader refusal modes + platform detection
+- `test/session.test.js` — full auth flow, send/receive matching,
   timeouts, lifecycle. Uses an in-memory stub that mimics the koffi
   bindings.
 
@@ -150,13 +174,13 @@ not yet committed).
                                  │
                                  ▼
                         ┌──────────────────┐
-                        │  src/tutk/       │  ← you are here
+                        │ future/tutk/     │  ← you are here
                         │  session.js      │
                         └────────┬─────────┘
                                  │
                                  ▼
                         ┌──────────────────┐
-                        │  src/tutk/       │
+                        │ future/tutk/     │
                         │  loader.js       │  (koffi bindings)
                         └────────┬─────────┘
                                  │

@@ -9,7 +9,7 @@
  *   - Loader-error shapes
  *
  * Anything that requires the .so itself is covered by a separate
- * Linux-only smoke test (tests/tutk-load-real.smoke.js, not run by
+ * Linux-only smoke test (future/tutk/docker/smoke.js, not run by
  * the default `npm test` because it depends on the binary being
  * fetched ahead of time).
  */
@@ -25,7 +25,7 @@ const {
   defaultSoPath,
   loadTutk,
   TutkLoaderError,
-} = require("../src/tutk/loader");
+} = require("../loader");
 
 test("isTutkSupported returns object with platform + arch", () => {
   const r = isTutkSupported();

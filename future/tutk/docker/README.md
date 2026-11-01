@@ -1,4 +1,4 @@
-# tests/docker — Tutk loader smoke tests
+# future/tutk/docker — Tutk loader smoke tests
 
 Validate the Phase 1 Tutk loader against the **real** `libIOTCAPIs_ALL.so`
 inside a Linux container. Lets you exercise the binding layer from
@@ -8,7 +8,7 @@ macOS/Windows without needing a Pi or NAS.
 
 - The `.so` actually opens via `koffi` (vs cryptic "wrong arch" /
   "missing dependency" errors that only show up at runtime)
-- All 29 IOTC + AV function signatures in `src/tutk/loader.js`
+- All 29 IOTC + AV function signatures in `future/tutk/loader.js`
   match the symbols exported from the `.so` (a missing symbol throws
   immediately at bind time)
 - `IOTC_Initialize2` / `avInitialize` succeed end-to-end
@@ -26,15 +26,15 @@ From the wyze-api repo root:
 ```bash
 # Build + run for your host's architecture (Apple Silicon → arm64,
 # Intel → amd64):
-./tests/docker/run-tutk-smoke.sh
+./future/tutk/docker/run-tutk-smoke.sh
 
 # Force a specific Linux arch (Rosetta on Apple Silicon, qemu on
 # Intel — both supported by Docker Desktop):
-./tests/docker/run-tutk-smoke.sh amd64
-./tests/docker/run-tutk-smoke.sh arm64
+./future/tutk/docker/run-tutk-smoke.sh amd64
+./future/tutk/docker/run-tutk-smoke.sh arm64
 
 # Run both sequentially (useful in CI):
-./tests/docker/run-tutk-smoke.sh both
+./future/tutk/docker/run-tutk-smoke.sh both
 ```
 
 The first build downloads ~150 MB (Debian + Node + ~4 MB `.so`).
@@ -73,7 +73,7 @@ arch-specific builds) — both `_Arm_*` and `_x64` are valid.
 | Failure | Likely cause |
 |---|---|
 | `loadTutk() opens the .so` ✗ — "Failed to dlopen" | wrong arch (use `--platform` to match), or `.so` corrupted (re-build image without cache: `docker build --no-cache ...`) |
-| `all 29 raw bindings registered` ✗ — "missing: X, Y, Z" | docker-wyze-bridge updated to a newer SDK that removed/renamed symbols. Inspect `nm -D /root/.homebridge/wyze-sdk/libIOTCAPIs_ALL.so` inside the container; update `src/tutk/loader.js`. |
+| `all 29 raw bindings registered` ✗ — "missing: X, Y, Z" | docker-wyze-bridge updated to a newer SDK that removed/renamed symbols. Inspect `nm -D /root/.homebridge/wyze-sdk/libIOTCAPIs_ALL.so` inside the container; update `future/tutk/loader.js`. |
 | `iotcInitialize2(0) returns 0` ✗ — returns negative | SDK couldn't initialize — usually a UDP port conflict or sandboxing issue. Check the value against [Throughtek IOTC error codes](https://github.com/mrlt8/docker-wyze-bridge/blob/main/app/wyzecam/tutk/tutk.py) (search for `IOTC_ER_*`). |
 
 ## Image internals
@@ -110,8 +110,8 @@ credentials piped in as env vars.
 ## Setup (one time)
 
 ```bash
-cp tests/docker/.env.sample tests/docker/.env
-$EDITOR tests/docker/.env
+cp future/tutk/docker/.env.sample future/tutk/docker/.env
+$EDITOR future/tutk/docker/.env
 ```
 
 Fill in `WYZE_USERNAME`, `WYZE_PASSWORD`, `WYZE_KEY_ID`, `WYZE_API_KEY`.
@@ -123,7 +123,7 @@ blank, the smoke uses the first online camera on the account.
 ## Run
 
 ```bash
-./tests/docker/run-real-camera-smoke.sh
+./future/tutk/docker/run-real-camera-smoke.sh
 ```
 
 The container runs with `--network host` so it can reach Wyze
@@ -166,7 +166,7 @@ Docker Desktop's network isolation.
 
 3. **Don't use Docker** — install Node 20 on a Linux host on the
    same LAN (Pi, NAS, server, WSL 2 with mirrored networking) and
-   run `node tests/docker/connect-real-camera.js` directly. The
+   run `node future/tutk/docker/connect-real-camera.js` directly. The
    `.so` lives under `~/.homebridge/wyze-sdk/` either way.
 
 If none of those work, the macOS Docker smoke still validates ~80%

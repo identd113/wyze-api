@@ -21,7 +21,7 @@
  *
  * Usage:
  *
- *   const { loadTutk } = require('wyze-api/src/tutk/loader');
+ *   const { loadTutk } = require('wyze-api/future/tutk/loader');
  *   const sdk = loadTutk('/path/to/libIOTCAPIs_ALL.so');
  *   const version = sdk.getVersionString();
  *   sdk.iotcInitialize2(0); // any UDP port
@@ -395,7 +395,7 @@ function loadTutk(soPath) {
 
     /**
      * Send an IOCtrl frame (i.e. a Tutk K-class message — see
-     * src/tutk-spike/lib/messages.js for the catalog).
+     * future/tutk/lib/messages.js for the catalog).
      *
      * @param {number} chanId
      * @param {number} ctrlType — typically `0x0` for the standard control channel

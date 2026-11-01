@@ -12,3 +12,4 @@ Each folder has its own README saying what it is, how far it got, and what would
 | Folder | What | Status |
 |---|---|---|
 | [`gutes/`](gutes/) | Protocol layer for the GUTES P2P protocol (Doorbell Pro, Doorbell Pro 2) | Phase 0 of 3, parked |
+| [`tutk/`](tutk/) | TUTK (IOTC) local camera control: loader, session, protocol layer, Docker smoke tests | Control works, video not built; parked |

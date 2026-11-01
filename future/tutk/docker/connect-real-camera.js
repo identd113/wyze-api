@@ -22,13 +22,13 @@
  *
  * Run via Docker (recommended; from wyze-api repo root):
  *
- *   ./tests/docker/run-real-camera-smoke.sh
+ *   ./future/tutk/docker/run-real-camera-smoke.sh
  *
  * Run directly (only works on Linux with the .so present):
  *
  *   WYZE_USERNAME=... WYZE_PASSWORD=... WYZE_KEY_ID=... WYZE_API_KEY=... \
  *     WYZE_CAMERA_NICK="<your camera nickname>" \
- *     node tests/docker/connect-real-camera.js
+ *     node future/tutk/docker/connect-real-camera.js
  *
  * Exit codes:
  *   0 — connect + send + close all succeeded
@@ -61,7 +61,7 @@ async function main() {
 
   section("Wyze cloud — login + device list");
 
-  const WyzeAPI = require("../../src/index");
+  const WyzeAPI = require("../../../src/index");
   const api = new WyzeAPI({
     username: process.env.WYZE_USERNAME,
     password: process.env.WYZE_PASSWORD,
@@ -130,8 +130,8 @@ async function main() {
 
   section("Tutk session — connect → send K10090 → close");
 
-  const { TutkSession, TutkSessionError } = require("../../src/tutk/session");
-  const M = require("../../src/tutk/lib/messages");
+  const { TutkSession, TutkSessionError } = require("../session");
+  const M = require("../lib/messages");
 
   // Generate stable phoneId from the host (Tutk wants something
   // consistent so the camera can rate-limit per client; doesn't need
@@ -162,7 +162,7 @@ async function main() {
     if (e.code !== undefined) console.error(`    sdk error code: ${e.code}`);
     // Specific hint for the most common cause of "connect timed out"
     // — Docker Desktop on Mac/Windows isolating the container from
-    // the LAN. See tests/docker/README.md for the three workarounds.
+    // the LAN. See future/tutk/docker/README.md for the three workarounds.
     if (/timed out/.test(e.message) && camIp) {
       console.error(``);
       console.error(`    Hint: if you're running this in Docker on macOS/Windows, --network host`);
@@ -171,7 +171,7 @@ async function main() {
       console.error(``);
       console.error(`      docker run --rm --network host alpine ping -c 2 ${camIp}`);
       console.error(``);
-      console.error(`    If that pings fail, see tests/docker/README.md "Docker Desktop for`);
+      console.error(`    If that pings fail, see future/tutk/docker/README.md "Docker Desktop for`);
       console.error(`    Mac/Windows networking" — the host-networking setting fixes this on`);
       console.error(`    Docker Desktop 4.34+.`);
     }

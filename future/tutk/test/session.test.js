@@ -16,13 +16,13 @@ const path = require("node:path");
 
 // We don't actually load the real loader; we use the internal SDK
 // ref-count + a stub that mimics its surface.
-const sessionMod = require("../src/tutk/session");
+const sessionMod = require("../session");
 const { TutkSession, TutkSessionError, SessionClosedError } = sessionMod;
 
-const codec = require("../src/tutk/lib/codec");
-const M = require("../src/tutk/lib/messages");
-const auth = require("../src/tutk/lib/auth");
-const xxtea = require("../src/tutk/lib/xxtea");
+const codec = require("../lib/codec");
+const M = require("../lib/messages");
+const auth = require("../lib/auth");
+const xxtea = require("../lib/xxtea");
 
 // ---- A stub SDK that simulates a camera --------------------------------
 //
@@ -75,10 +75,10 @@ function makeStubSdk(camResponses = []) {
  */
 function withStubSdk(camResponses, fn) {
   const stub = makeStubSdk(camResponses);
-  const loaderPath = require.resolve("../src/tutk/loader");
+  const loaderPath = require.resolve("../loader");
   const origLoader = require.cache[loaderPath]
     ? require.cache[loaderPath].exports
-    : require("../src/tutk/loader");
+    : require("../loader");
 
   // Re-export the stubbed surface.
   require.cache[loaderPath] = {
@@ -89,8 +89,8 @@ function withStubSdk(camResponses, fn) {
     },
   };
   // Force session.js to pick up the stubbed loader.
-  delete require.cache[require.resolve("../src/tutk/session")];
-  const reloadedSession = require("../src/tutk/session");
+  delete require.cache[require.resolve("../session")];
+  const reloadedSession = require("../session");
 
   // Reset the SDK ref-count so successive tests don't reuse a stale SDK.
   reloadedSession._internal._releaseSdk();
@@ -99,7 +99,7 @@ function withStubSdk(camResponses, fn) {
 
   return Promise.resolve(fn(reloadedSession, stub)).finally(() => {
     require.cache[loaderPath].exports = origLoader;
-    delete require.cache[require.resolve("../src/tutk/session")];
+    delete require.cache[require.resolve("../session")];
   });
 }
 
@@ -251,7 +251,7 @@ test("close() rejects pending sends with SessionClosedError", async () => {
 test("connect() reports IOTC error code on failure", async () => {
   const stub = makeStubSdk([]);
   stub.sdk.connectByUidAsync = () => Promise.resolve(-3); // simulate IOTC_ER_NETWORK_UNREACHABLE
-  const loaderPath = require.resolve("../src/tutk/loader");
+  const loaderPath = require.resolve("../loader");
   const orig = require.cache[loaderPath].exports;
   require.cache[loaderPath] = {
     exports: {
@@ -260,8 +260,8 @@ test("connect() reports IOTC error code on failure", async () => {
       isTutkSupported: () => ({ supported: true, platform: "linux", arch: "x64" }),
     },
   };
-  delete require.cache[require.resolve("../src/tutk/session")];
-  const { TutkSession: T, TutkSessionError: E, _internal } = require("../src/tutk/session");
+  delete require.cache[require.resolve("../session")];
+  const { TutkSession: T, TutkSessionError: E, _internal } = require("../session");
   _internal._releaseSdk();
   _internal._releaseSdk();
   try {
@@ -275,6 +275,6 @@ test("connect() reports IOTC error code on failure", async () => {
     );
   } finally {
     require.cache[loaderPath].exports = orig;
-    delete require.cache[require.resolve("../src/tutk/session")];
+    delete require.cache[require.resolve("../session")];
   }
 });

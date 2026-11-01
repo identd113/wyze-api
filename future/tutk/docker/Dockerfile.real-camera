@@ -2,7 +2,7 @@
 # call the cloud API + Tutk loader against actual hardware.
 #
 # Build the same way as the loader smoke:
-#   docker build -f tests/docker/Dockerfile.real-camera -t wyze-api-real-camera .
+#   docker build -f future/tutk/docker/Dockerfile.real-camera -t wyze-api-real-camera .
 #
 # But RUN with --network host so the container can reach Wyze cameras
 # on your LAN. Cloud API works fine without --network host (just HTTPS),
@@ -32,15 +32,19 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm install --omit=dev --no-audit --no-fund
 
+# koffi is declared by the parked TUTK code, not by the main package.
+COPY future/tutk/package.json ./future/tutk/package.json
+RUN cd future/tutk && npm install --omit=dev --no-audit --no-fund
+
 # Source tree
 COPY src/ ./src/
 COPY scripts/ ./scripts/
 COPY example/ ./example/
-COPY tests/docker/ ./tests/docker/
+COPY future/tutk/ ./future/tutk/
 
 # Pre-fetch the .so at build time so the runtime test has nothing to
 # download. WYZE_SDK_ALLOW_NON_LINUX is irrelevant here (this IS Linux).
 RUN node scripts/fetch-wyze-sdk.js --type tutk --yes && \
     ls -lh /root/.homebridge/wyze-sdk/
 
-CMD ["node", "tests/docker/connect-real-camera.js"]
+CMD ["node", "future/tutk/docker/connect-real-camera.js"]

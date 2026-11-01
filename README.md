@@ -254,13 +254,15 @@ protocols so cameras can be controlled without going through Wyze's
 cloud HTTP API. This work is in-progress; the table below tracks
 where each protocol stands.
 
-### Tutk (V2 / V3 / V4 / Pan / Outdoor / OG / Doorbell v1 / Vacuum)
+### Tutk (V2 / V3 / V4 / Pan / Outdoor / OG / Doorbell v1 / Vacuum) — parked in [`future/tutk/`](future/tutk/)
+
+Not part of the published package and not used by the library or the plugin. Kept for later; see its README.
 
 | Phase | What | Status |
 |---|---|---|
-| **0**  | Pure-JS protocol layer (`src/tutk/lib/` — codec, header, K-class messages, xxtea, auth) — byte-exact against docker-wyze-bridge Python reference | ✅ done |
-| **1**  | `koffi` loader for `libIOTCAPIs_ALL.so` (`src/tutk/loader.js`) + Promise-based session/auth/IOCtrl mux (`src/tutk/session.js`), with koffi `.async()` for non-blocking blocking calls | ✅ done |
-| **1.5**| Self-test harness without the `.so` (stub SDK) + Docker smoke that loads the real `.so` (`tests/docker/`) + real-camera smoke (`tests/docker/connect-real-camera.js`) | ✅ done |
+| **0**  | Pure-JS protocol layer (`future/tutk/lib/` — codec, header, K-class messages, xxtea, auth) — byte-exact against docker-wyze-bridge Python reference | ✅ done |
+| **1**  | `koffi` loader for `libIOTCAPIs_ALL.so` (`future/tutk/loader.js`) + Promise-based session/auth/IOCtrl mux (`future/tutk/session.js`), with koffi `.async()` for non-blocking blocking calls | ✅ done |
+| **1.5**| Self-test harness without the `.so` (stub SDK) + Docker smoke that loads the real `.so` (`future/tutk/docker/`) + real-camera smoke (`future/tutk/docker/connect-real-camera.js`) | ✅ done |
 | **2**  | Worker-thread receive pump (move 50 Hz `avRecvIOCtrl` poll off the main loop so video streaming is viable) | ⏳ planned |
 | **2.5**| Wire Tutk control into the homebridge bridge: route camera commands locally when Tutk is up, fall back to cloud HTTP otherwise | ⏳ planned |
 | **3**  | A/V transport — `avRecvFrameData2` → H.264 NALUs into a stream HomeKit can consume | ⏳ planned |
@@ -286,11 +288,11 @@ see [`scripts/README.md`](scripts/README.md) and run
 
 ### Deep-dive READMEs
 
-- [`src/tutk/README.md`](src/tutk/README.md) — loader + session details, lifecycle, thread model
+- [`future/tutk/README.md`](future/tutk/README.md) — loader + session details, lifecycle, thread model
 - [`future/gutes/README.md`](future/gutes/README.md) — where it stands, protocol layer + Phase 1 wall (Bionic shim)
-- [`example/tutk-spike/README.md`](example/tutk-spike/README.md) — Tutk Phase 0 demo + fixtures
+- [`future/tutk/demo/README.md`](future/tutk/demo/README.md) — Tutk Phase 0 demo + fixtures
 - [`future/gutes/demo/README.md`](future/gutes/demo/README.md) — GUTES Phase 0 demo + pcap reader
-- [`tests/docker/README.md`](tests/docker/README.md) — Docker smoke harness + Docker Desktop on Mac UDP NAT caveats
+- [`future/tutk/docker/README.md`](future/tutk/docker/README.md) — Docker smoke harness + Docker Desktop on Mac UDP NAT caveats
 
 ## Other Info
 

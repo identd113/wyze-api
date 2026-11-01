@@ -2,16 +2,16 @@
 # Build + run the Tutk loader smoke test in Docker.
 #
 # Usage:
-#   ./tests/docker/run-tutk-smoke.sh                  # build + run for host arch
-#   ./tests/docker/run-tutk-smoke.sh amd64            # force linux/amd64 (Rosetta on Apple Silicon)
-#   ./tests/docker/run-tutk-smoke.sh arm64            # force linux/arm64
-#   ./tests/docker/run-tutk-smoke.sh both             # run both archs sequentially
+#   ./future/tutk/docker/run-tutk-smoke.sh                  # build + run for host arch
+#   ./future/tutk/docker/run-tutk-smoke.sh amd64            # force linux/amd64 (Rosetta on Apple Silicon)
+#   ./future/tutk/docker/run-tutk-smoke.sh arm64            # force linux/arm64
+#   ./future/tutk/docker/run-tutk-smoke.sh both             # run both archs sequentially
 #
 # Run from the wyze-api repo root.
 
 set -euo pipefail
 
-if [ ! -f "tests/docker/Dockerfile.tutk-smoke" ]; then
+if [ ! -f "future/tutk/docker/Dockerfile.tutk-smoke" ]; then
   echo "error: run this from the wyze-api repo root" >&2
   exit 1
 fi
@@ -31,8 +31,8 @@ build_and_run() {
   echo "  Tutk smoke — platform=${platform:-host} tag=${tag}"
   echo "==============================================================="
   echo
-  echo "→ docker build $plat_flag -f tests/docker/Dockerfile.tutk-smoke -t $tag ."
-  docker build $plat_flag -f tests/docker/Dockerfile.tutk-smoke -t "$tag" . >/dev/null
+  echo "→ docker build $plat_flag -f future/tutk/docker/Dockerfile.tutk-smoke -t $tag ."
+  docker build $plat_flag -f future/tutk/docker/Dockerfile.tutk-smoke -t "$tag" . >/dev/null
   echo
   echo "→ docker run --rm $plat_flag $tag"
   echo
