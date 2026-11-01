@@ -1,17 +1,14 @@
-# Upstream and downstream
+# Downstream
 
-Who `wyze-api` depends on (upstream), who depends on it (downstream), and what we promise the second group. Facts below were checked on 2026-11-01. The commands to check them again are at the end.
+Who depends on `wyze-api`, and what we promise them. Facts below were checked on 2026-11-01. The commands to check them again are at the end.
 
 ```
-Wyze cloud (unofficial endpoints)
-        ^
-        |   wyze-api  (this repo, npm: wyze-api)
-        |        ^
-        |        |-- homebridge-wyze-smart-home  -->  Homebridge  -->  HomeKit
-        |        |-- other projects (mostly on the 1.x line)
+wyze-api  (this repo, npm: wyze-api)
+   |-- homebridge-wyze-smart-home  -->  Homebridge  -->  HomeKit
+   |-- other projects (mostly on the 1.x line)
 ```
 
-## Downstream: who depends on us
+## Who depends on us
 
 **The Homebridge plugin** ([homebridge-wyze-smart-home](https://github.com/identd113/homebridge-wyze-smart-home)) is the main user.
 
@@ -70,32 +67,6 @@ These are on purpose. Each is also listed, with its reason, in `KNOWN_DIFFERENCE
 - **Documented helpers stay**, even when nothing in the plugin uses them. `rangeToFloat`, `fahrenheit2celsius` and the sensor accessors are in the wiki, so removing them is a breaking change.
 - **An unused method that is not documented and not in the 1.1.15 fixture** (for example, the device-object wrappers) can be removed without a compatibility entry, but check the wiki and the plugin first.
 - **Keep parked code out of the package.** Experimental work lives in `future/`, which `package.json`'s `files` list leaves out.
-
-## Upstream: what we depend on and learn from
-
-**The Wyze cloud.** There is no official public API for most of what this library does. It calls the same endpoints the Wyze app uses, so Wyze can change or remove them without notice. `docs/endpoints.md` records which endpoints have been checked against a real account, when, and by which script.
-
-**Reference projects.** We read these and port from them. They are not dependencies.
-
-| Project | What we took from it |
-|---|---|
-| [wyze-sdk](https://github.com/shauntarves/wyze-sdk) (Python) | The feature list for the parity batch (plug timers, wall-switch press types, lock reads, Bolt v2 and others, tracked in issues #41 and #42), and the model-to-device mapping. |
-| [docker-wyze-bridge](https://github.com/mrlt8/docker-wyze-bridge) | The TUTK (IOTC) protocol layer, now parked in `future/tutk/`. |
-| [cryze](https://github.com/carTloyal123/cryze) | The GUTES protocol layer, now parked in `future/gutes/`. |
-| [ha-wyzeapi](https://github.com/JoshuaMulliken/ha-wyzeapi), [wyze-node](https://github.com/noelportugal/wyze-node), [wyzeapy](https://github.com/SecKatie/wyzeapy) | Reference and inspiration, credited in the README. |
-
-**npm dependencies** (what a project installing `wyze-api` also gets):
-
-| Package | Used for |
-|---|---|
-| `axios` | HTTP calls to Wyze |
-| `ffmpeg-static` | Live streams and snapshots (falls back to an `ffmpeg` on the PATH) |
-| `werift` | WebRTC signalling and media for camera streams |
-| `ws` | WebSocket signalling |
-| `uuid-by-string` | A stable id made from the username (it names the saved-token file) |
-| `utf8` | Text encoding for the password hash and request signing (`src/utils/crypto.js`) |
-
-The TUTK code needs `koffi`. It is declared in `future/tutk/package.json`, not here.
 
 ## Before a release
 

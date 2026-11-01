@@ -296,7 +296,7 @@ see [`scripts/README.md`](scripts/README.md) and run
 
 ## Other Info
 
-Who depends on this library, what we promise them, and what we depend on: [Upstream and downstream](docs/upstream-downstream.md).
+Who depends on this library, and what we promise them (including that 2.x is a drop-in for 1.x): [Downstream](docs/downstream.md).
 
 Special thanks to the following projects for reference and inspiration:
 
