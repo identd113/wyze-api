@@ -67,7 +67,9 @@ Code written against `wyze-api` 1.1.15 should run on 2.x without changes, apart 
 
 **How it is enforced:** `tests/compat-1x.test.js` checks all of the above against `tests/fixtures/api-1.1.15.json`, which was taken from `main`. It runs in `npm test`. If a change breaks one of these, the test fails and names the method.
 
-**What is not covered:** what the network methods return, thrown errors, and default values. A method can keep its name and parameters and still return a differently shaped response. That needs real calls to Wyze under both versions, and has not been done.
+**What is not covered by the automated tests:** what the network methods return, thrown errors, and default values. A method can keep its name and parameters and still return a differently shaped response.
+
+**Checked once by hand (2026-11-01, real account, read-only):** the same getters under the published 1.1.15 and under 2.x returned responses of the same shape (the same keys and types, compared on the first item of each list). The calls were `getDeviceList`, `getObjectList`, `getDeviceGroupsList`, `getDeviceSortList`, `getUserProfile`, `getPlanBindingListByUser`, and `getPropertyList` and `getDevicePID` for a Cam v2, a Cam v3 and a doorbell. Both returned the same 10 devices. Only the shape was compared, not the values, and nothing that writes to a device was called. `getDeviceInfo` has no 1.x counterpart. This is not repeated by the test suite, so re-run it before a release that touches the request code.
 
 ### Known differences from 1.1.15
 
