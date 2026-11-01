@@ -18,3 +18,14 @@ testing/
 # agent instruction files stay local
 CLAUDE.md
 AGENTS.md
+
+# what the probe scripts write into the working directory: it holds account data (event history, the profile)
+camera-properties.json
+unused-endpoints.json
+unused-reads.json
+options-probe.json
+snapshot-*.json
+
+# build output and packet captures
+*.tgz
+*.pcap

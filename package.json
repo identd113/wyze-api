@@ -47,8 +47,8 @@
   },
   "files": [
     "src",
-    "scripts",
-    "!scripts/wyze-*.json",
+    "scripts/*.js",
+    "scripts/README.md",
     "docs",
     "CHANGELOG.md"
   ],
