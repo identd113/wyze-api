@@ -269,11 +269,13 @@ Tutk runs on Linux only (the SDK ships glibc binaries for x86_64,
 arm64, armv7). macOS/Windows hosts can still talk to cameras through
 the cloud HTTP API as today.
 
-### GUTES (Doorbell Pro family / Gwell devices)
+### GUTES (Doorbell Pro family / Gwell devices) — parked in [`future/gutes/`](future/gutes/)
+
+Not part of the published package and not used by the library. Kept for later; see its README.
 
 | Phase | What | Status |
 |---|---|---|
-| **0** | Pure-JS protocol layer (`src/gutes/lib/` — RC5, frame parser, session crypto, KEEPALIVE builders, pcap reader) — byte-exact against cryze Python reference | ✅ done |
+| **0** | Pure-JS protocol layer (`future/gutes/lib/` — RC5, frame parser, session crypto, KEEPALIVE builders, pcap reader) — byte-exact against cryze Python reference | ✅ done |
 | **1** | `libiotp2pav.so` loading via `koffi` — blocked on writing a Bionic-to-glibc shim (the GUTES `.so` is extracted from the Wyze APK and depends on Android's libc) | ❌ not started |
 | **2** | A/V transport (MTP_DATA reassembly into H.264 NALUs) — blocked on Phase 1 | ❌ not started |
 
@@ -285,9 +287,9 @@ see [`scripts/README.md`](scripts/README.md) and run
 ### Deep-dive READMEs
 
 - [`src/tutk/README.md`](src/tutk/README.md) — loader + session details, lifecycle, thread model
-- [`src/gutes/README.md`](src/gutes/README.md) — protocol layer + Phase 1 wall (Bionic shim)
+- [`future/gutes/README.md`](future/gutes/README.md) — where it stands, protocol layer + Phase 1 wall (Bionic shim)
 - [`example/tutk-spike/README.md`](example/tutk-spike/README.md) — Tutk Phase 0 demo + fixtures
-- [`example/gutes-spike/README.md`](example/gutes-spike/README.md) — GUTES Phase 0 demo + pcap reader
+- [`future/gutes/demo/README.md`](future/gutes/demo/README.md) — GUTES Phase 0 demo + pcap reader
 - [`tests/docker/README.md`](tests/docker/README.md) — Docker smoke harness + Docker Desktop on Mac UDP NAT caveats
 
 ## Other Info

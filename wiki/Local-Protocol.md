@@ -60,7 +60,7 @@ fallback.
 
 | Phase | What | Status |
 |---|---|---|
-| **0** | Pure-JS protocol layer (`src/gutes/lib/` — RC5, frame parser, session crypto, KEEPALIVE builders, pcap reader). Byte-exact against the cryze Python reference. | ✅ done |
+| **0** | Pure-JS protocol layer (`future/gutes/lib/` — RC5, frame parser, session crypto, KEEPALIVE builders, pcap reader). Byte-exact against the cryze Python reference. | ✅ done |
 | **1** | `libiotp2pav.so` loading via `koffi` — blocked on writing a Bionic-to-glibc shim. The `.so` is yanked out of the Wyze APK and depends on Android's libc layout (`__system_property_get`, `__strchr_chk`, Bionic pthread layout, etc.). | ❌ not started |
 | **2** | A/V transport (MTP_DATA reassembly into H.264 NALUs) — blocked on Phase 1. | ❌ not started |
 
@@ -92,9 +92,9 @@ These live in the repo (not the wiki) because they're tightly coupled
 to the source layout:
 
 - **`src/tutk/README.md`** — loader + session details, lifecycle, thread model, error taxonomy
-- **`src/gutes/README.md`** — protocol layer + Phase 1 wall (Bionic shim)
+- **`future/gutes/README.md`** — protocol layer + Phase 1 wall (Bionic shim)
 - **`example/tutk-spike/README.md`** — Tutk Phase 0 runnable demo + fixture tests
-- **`example/gutes-spike/README.md`** — GUTES Phase 0 runnable demo + pcap reader
+- **`future/gutes/demo/README.md`** — GUTES Phase 0 runnable demo + pcap reader
 - **`tests/docker/README.md`** — Docker smoke harness, including the Docker Desktop on macOS UDP NAT caveat
 
 ## How this fits the bigger picture
@@ -121,5 +121,5 @@ to the source layout:
 ```
 
 For the Doorbell Pro family the equivalent diagram would route through
-`src/gutes/` instead — but Phase 1 there is gated on the Bionic shim
+`future/gutes/` instead — but Phase 1 there is gated on the Bionic shim
 and is not yet started.

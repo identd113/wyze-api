@@ -17,7 +17,7 @@
  *   build — they compile against glibc directly. The Bionic shim
  *   problem only applies to .so files extracted from Android APKs
  *   (which `libiotp2pav.so` for GUTES devices is). That's a separate
- *   loader (src/gutes/loader.js, future).
+ *   loader (future/gutes/, not started).
  *
  * Usage:
  *

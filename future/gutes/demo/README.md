@@ -8,15 +8,13 @@ Doorbell Pro 2, certain other Gwell cameras).
 reference Python implementation in
 [cryze](https://github.com/carTloyal123/cryze).
 
-The protocol modules originally lived here under `lib/`. They have
-been promoted into the package's main source tree at
-[`src/gutes/lib/`](../../src/gutes/lib/). This directory now keeps
-only the runnable demo + fixture tests.
+The protocol modules are in [`../lib/`](../lib/) and the fixture tests are in
+[`../test/`](../test/). This directory keeps the runnable demo scripts.
 
 ## What's in this directory
 
 ```
-gutes-spike/
+demo/
 ├── test/
 │   └── fixtures.test.js     Fixture vectors pinned against Python reference
 ├── parse-pcap.js            Read a tcpdump capture, decode GUTES frames in it
@@ -24,7 +22,7 @@ gutes-spike/
 └── README.md                you are here
 ```
 
-The actual modules live in `src/gutes/lib/`:
+The actual modules live in [`../lib/`](../lib/):
 
 - `constants.js`         Frame type codes, header size, protocol bytes
 - `rc5.js`               RC5 cipher (8-byte + 16-byte block) + ID encrypt/decrypt
@@ -36,10 +34,10 @@ The actual modules live in `src/gutes/lib/`:
 
 ```bash
 # All units self-test on direct invocation:
-node ../../src/gutes/lib/rc5.js
-node ../../src/gutes/lib/frame.js
-node ../../src/gutes/lib/session-crypto.js
-node ../../src/gutes/lib/builders.js
+node ../lib/rc5.js
+node ../lib/frame.js
+node ../lib/session-crypto.js
+node ../lib/builders.js
 
 # Full protocol round-trip (build + parse + crypto):
 node spike.js
@@ -71,7 +69,7 @@ To re-verify the cross-language match yourself:
 # In a checkout of cryze:
 python3 src/relay/rc5.py
 # In this directory:
-node ../../src/gutes/lib/rc5.js
+node ../lib/rc5.js
 ```
 
 Both print identical hex output for `RC5-8B encrypt(zeros)`,
@@ -149,7 +147,5 @@ decode MTP_DATA into H.264). Both build on top of the layer here.
 
 ## Status in the shipped package
 
-The protocol modules now ship under `src/gutes/lib/` and are part of
-the published package. This `example/gutes-spike/` directory is
-excluded via `package.json`'s `files` field — it stays in-repo as a
-runnable demo + fixture-test harness for the protocol layer.
+None of this ships. It lives under `future/`, which the `files` field in
+`package.json` leaves out of the npm package. See [`../README.md`](../README.md).
