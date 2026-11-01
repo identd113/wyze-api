@@ -4,6 +4,7 @@
 
 ### Unreleased
 
+- **Development: `npm run lint`** (ESLint on `src`, `scripts` and `tests`) and a lint job in CI. Nothing about the published package changes.
 - **Fix: concurrent logins.** Several callers finding the access token missing at once (parallel requests at start-up) each started their own login. They now share one. A second login could also run unawaited, so a failure became an unhandled rejection that crashes a default Node process, and a one-shot 2FA code failed on the repeat.
 - **Fix: a missing or broken ffmpeg no longer crashes the host process.** Starting a HomeKit stream with an ffmpeg that cannot start (binary missing or not executable) threw an unhandled `error` event. The stream now ends and logs why; audio failure carries on without audio.
 - **`cameraWarmUp` leaves a camera alone while a live stream of it is open.** It used to take the camera's single connection slot and close the stream. It now does nothing and resolves `false`.

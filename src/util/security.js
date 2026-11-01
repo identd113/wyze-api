@@ -99,6 +99,7 @@ function sanitizeLogMessage(input) {
 
   // Strip newlines / tabs / control chars so a multi-line payload
   // can't break log parsing or smuggle escape sequences.
+  // eslint-disable-next-line no-control-regex -- removing control characters is the point
   s = s.replace(/[\r\n\t]+/g, " ").replace(/[\x00-\x1F\x7F]/g, "");
 
   // Bearer auth headers.
@@ -152,6 +153,7 @@ function sanitizeLogMessage(input) {
 function sanitizeDeviceName(name) {
   const clean = String(name || "")
     .replace(/[\r\n\t]+/g, " ")
+    // eslint-disable-next-line no-control-regex -- removing control characters is the point
     .replace(/[\x00-\x1F\x7F]/g, "")
     .trim();
   if (clean.length === 0) return "Wyze Device";

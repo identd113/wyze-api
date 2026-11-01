@@ -378,6 +378,8 @@ module.exports = {
    */
   async cameraStreamWithReconnect(fn, { maxAttempts = 3, baseDelayMs = 2000, onRetry } = {}) {
     let attempt = 0;
+    // The loop ends by returning on success or throwing once the attempts are used up.
+    // eslint-disable-next-line no-constant-condition
     while (true) {
       try {
         return await fn();

@@ -117,7 +117,7 @@ test("refreshToken() dedupes concurrent callers into a single in-flight refresh"
   };
   w._persistTokens = async () => {};
 
-  const [a, b] = await Promise.all([w.refreshToken(), w.refreshToken()]);
+  await Promise.all([w.refreshToken(), w.refreshToken()]);
 
   assert.strictEqual(performRequestCalls, 1);
   assert.strictEqual(w.access_token, "at-1");

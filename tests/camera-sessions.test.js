@@ -112,7 +112,7 @@ test("an aborted timeout rejects at once, a cleared one never fires, and neither
     await tick(60);
     assert.strictEqual(settled, false);
 
-    const expired = _makeTimeout(10, "expired"); // nobody awaits it
+    _makeTimeout(10, "expired"); // nobody awaits it
     await tick(50);
     assert.deepStrictEqual(unhandled, []);
   } finally {

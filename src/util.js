@@ -22,6 +22,8 @@ function wyzeDecrypt(key, enc) {
     const keyBuffer = Buffer.from(key, 'ascii');
     const decipher = crypto.createDecipheriv('aes-128-cbc', keyBuffer, keyBuffer);
     let decrypt = Buffer.concat([decipher.update(Buffer.from(enc, 'base64')), decipher.final()]);
+    // The decrypted text ends in padding bytes (0x05), which are removed on purpose.
+    // eslint-disable-next-line no-control-regex
     return decrypt.toString('ascii').replace(/\x05/g, '');
 }
 

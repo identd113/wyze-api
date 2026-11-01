@@ -13,7 +13,7 @@ How a release gets to npm, and the order to do things in. The plugin ([homebridg
 
 ## Before the release
 
-1. `npm test` passes. That includes the 1.x compatibility test (`tests/compat-1x.test.js`). If it fails because of a difference you meant, record it as described in [downstream.md](downstream.md).
+1. `npm test` and `npm run lint` pass. That includes the 1.x compatibility test (`tests/compat-1x.test.js`). If it fails because of a difference you meant, record it as described in [downstream.md](downstream.md).
 2. `npm audit --omit=dev` is clean, or you know why not.
 3. Bump `version` in `package.json`, and give the new section of `CHANGELOG.md` its version heading.
 4. Add release notes under `docs/releases/` if the release needs them: what changed, what was checked on real hardware, what is unfinished. Say which plugin version it pairs with.

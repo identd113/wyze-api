@@ -1,0 +1,11 @@
+{
+  "root": true,
+  "extends": ["eslint:recommended"],
+  "env": { "node": true, "es2022": true },
+  "parserOptions": { "ecmaVersion": 2022, "sourceType": "script" },
+  "ignorePatterns": ["node_modules/", "testing/", "future/", "example/", "wiki/", "tests/fixtures/"],
+  "rules": {
+    "no-empty": ["error", { "allowEmptyCatch": true }],
+    "no-unused-vars": ["error", { "args": "none", "caughtErrors": "none" }]
+  }
+}

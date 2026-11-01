@@ -33,6 +33,16 @@ jobs:
       - run: npm ci
       - run: npm test
 
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run lint
+
   package:
     # The published package must not pick up repository-only files.
     runs-on: ubuntu-latest
