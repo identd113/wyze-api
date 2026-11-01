@@ -10,7 +10,7 @@ Old branches that were cleaned out of the repository, what each one held, and wh
 |---|---|---|---|---|
 | `4-robot-vacuum-support` | `3cb026c0a` | 2024-02-29 | First vacuum support: a `src/payload/venus.js` payload builder and a crypto rewrite | `src/devices/vacuum.js`, `src/services/venus.js`, wiki [Robot-Vacuum](../wiki/Robot-Vacuum.md) (a later rewrite patterned on wyze-sdk) |
 | `6-to-many-request-to-wyze-server` | `6f3b261ad` | 2024-02-09 | Login debounce, a user-agent change and the "Clean up MFA" commit (`463197a`) | The login debounce is in `src/index.js` (`loginAttemptDebounceMilliseconds`). The CHANGELOG names "Clean up MFA" as the commit that dropped 2FA; it was restored in 2.0.0-beta.3 |
-| `cameraStream` | `275ea63d8` | 2024-02-23 | A JavaScript conversion of docker-wyze-bridge's `wyzecam` Python package (TUTK/IOTC) | Superseded by `src/tutk/` and `src/gutes/`, which are built on the same reference |
+| `cameraStream` | `275ea63d8` | 2024-02-23 | A JavaScript conversion of docker-wyze-bridge's `wyzecam` Python package (TUTK/IOTC) | Superseded by `future/tutk/` and `future/gutes/`, which are built on the same reference |
 | `patch-1` | `cbf09d728` | 2024-02-05 | A README edit | Nothing to keep |
 | `fix/runtime-bugs-and-logging-consistency` | `5e2eb1ed3` | 2026-04-24 | Replaces an unimported `moment().valueOf()` in `localBulbCommand` with `Date.now()`, plus logging cleanups | The `Date.now()` change is in `2.x` since 2.0.0-beta.2 (CHANGELOG). The logging cleanups were not compared |
 | `dependabot/...-9d02389744`, `...-security-group-8cb6623c4d` | `bcc650f8c`, `6054dc7e8` | 2025-01, 2024-03 | Dependency bumps | Out of date; `npm audit` is clean on `2.x` |

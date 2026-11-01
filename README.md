@@ -296,6 +296,8 @@ see [`scripts/README.md`](scripts/README.md) and run
 
 ## Other Info
 
+Who depends on this library, what we promise them, and what we depend on: [Upstream and downstream](docs/upstream-downstream.md).
+
 Special thanks to the following projects for reference and inspiration:
 
 - [ha-wyzeapi](https://github.com/JoshuaMulliken/ha-wyzeapi), a Wyze integration for Home Assistant.
