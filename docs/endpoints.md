@@ -80,6 +80,8 @@ itself, so nothing can be concluded about that endpoint.
 ## Not tried yet
 
 - **Scale service** (`https://wyze-scale-service.wyzecam.com`, paths under `/plugin/scale/`): the bathroom scale (`WL_SC3`) on the account. Calls to try are `get_latest_record`, `get_record_range`, `get_device_setting`, and `get_user_device_relation`. This host isn't in the library yet, and it may need its own token (`get_token`).
+  - **Another source says no separate token is needed.** A public project that audited the Wyze API live (a Pebble watch app, `ClickCalickClick/Wyze-Control-for-Pebble`, its `API_FEASIBILITY_REPORT.md`, dated 2025-12-12) rates the scale read "high" confidence and says the scale service takes the same Olive-style signed request (HMAC-MD5 with the app id and access token) as the thermostat, wall switch and Home Monitoring calls. That conflicts with the `get_token` note above. Neither has been tried here with a call from this library, so treat both as unconfirmed.
+  - **Parked on purpose (2026-11-01).** HomeKit has no weight or scale service, so the Homebridge plugin could not show these readings, and the library would be the only user. Probe it (read-only, one account scale) only if someone wants scale data in a script or in Home Assistant. A "someone just weighed in" trigger sensor would be the only HomeKit use, and it is not worth the work on its own.
 - **Sirius and earth services** (`plugin/sirius/…`, `plugin/earth/…`): listed in the SDK. None of the account's devices needs them as far as we know.
 
 ## Still open
