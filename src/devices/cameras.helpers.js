@@ -12,6 +12,7 @@ const {
   labelLogger,
   formatStartTiming,
   forgetSprop,
+  _sessionKind,
 } = require("./cameraStreamCapture");
 const {
   propertyIds: PIDs,
@@ -468,7 +469,8 @@ module.exports = {
    * (renewed by calling this again). A live stream of that camera takes the open connection
    * over and starts almost at once; a picture can be made from it with cameraWarmSnapshot.
    * A camera serves one viewer at a time, so while this is open the Wyze app cannot watch
-   * that camera. Resolves true once the connection is ready, false if it could not be made.
+   * that camera. Resolves true once the connection is ready, false if it could not be made, and false at
+   * once, doing nothing, when a live stream of that camera is already open: a new connection would end it.
    */
   cameraWarmUp(deviceMac, deviceModel, { label = null, ttlMs = WARM_DEFAULT_TTL_MS } = {}) {
     if (!this._warm) this._warm = new Map();
@@ -477,6 +479,7 @@ module.exports = {
       this._warmRenew(existing, ttlMs);
       return existing.promise.then(() => true, () => false);
     }
+    if (_sessionKind(deviceMac) === "stream") return Promise.resolve(false);
     const entry = { mac: deviceMac, timer: null, handle: null, ready: false };
     this._warm.set(deviceMac, entry);
     this._warmRenew(entry, ttlMs);

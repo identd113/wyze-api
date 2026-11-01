@@ -161,6 +161,12 @@ function _makeTimeout(ms, message) {
  * caller must call once its session is completely closed. `close` is how this
  * session is torn down when something else needs the slot.
  */
+/** The kind ("stream" or "capture") of the session open on this camera, or null when the slot is free or closing. */
+function _sessionKind(key) {
+  const cur = key ? _sessions.get(key) : null;
+  return cur && !cur.closing ? cur.kind : null;
+}
+
 async function _claimSession(key, kind, close) {
   if (!key) return () => {};
   let waited = false;
@@ -1294,6 +1300,7 @@ module.exports = {
   forgetSprop,
   formatStartTiming,
   _claimSession, // exported for tests
+  _sessionKind,
   _closePeer, // exported for tests
   _makeTimeout, // exported for tests
   h264Codecs, // exported for tests
