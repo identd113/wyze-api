@@ -7,6 +7,7 @@ Notes for people working on `wyze-api` or building on it. The user-facing guide 
 | File | What it covers |
 |---|---|
 | [downstream.md](downstream.md) | Who depends on `wyze-api`, the promise that 2.x is a drop-in for 1.x, the known differences, and the projects still on 1.x |
+| [releasing.md](releasing.md) | How a release reaches npm: the workflows, the staged publish, the checklist, and why `wyze-api` goes first |
 | [releases/](releases/) | Release notes for whoever ships and supports a release: what changed, what was checked on real hardware, what is unfinished |
 
 ## Reference
@@ -21,6 +22,8 @@ Notes for people working on `wyze-api` or building on it. The user-facing guide 
 | File | What it covers |
 |---|---|
 | [design-bulk-property-read.md](design-bulk-property-read.md) | Why and how the bulk property read works, with the risks |
+| [BUG-persisted-token-loop.md](BUG-persisted-token-loop.md) | Why a dead saved token blocked every re-login, and the fix |
+| [FIX-mfa-login.md](FIX-mfa-login.md) | How 2FA login was lost in a 2024 cleanup, and how it was restored |
 | [FIX-node24-tls-cert.md](FIX-node24-tls-cert.md) | Root cause of the `UNABLE_TO_GET_ISSUER_CERT_LOCALLY` errors on Node 24.18+, and the fix |
 | [branch-archive.md](branch-archive.md) | Old branches that were cleaned out, what each held, and where that work lives now |
 
