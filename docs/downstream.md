@@ -23,10 +23,36 @@ wyze-api  (this repo, npm: wyze-api)
 | npm `latest` | `1.1.15` (the 1.x line, branch `main`) |
 | npm `beta` | `2.0.0-beta.3` (this branch, `2.x`) |
 | Downloads | about 826 in the 30 days to 2026-10-29. Most are probably installs of the 1.x plugin. |
-| Outside projects found | A handful of public GitHub repos list `wyze-api` in a `package.json`: a Home Assistant bridge and a few small apps. Every one pins the 1.x line (`^1.1.x` or `1.1.15`). None is on 2.x. |
+| Outside projects found | See [Projects still on 1.x](#projects-still-on-1x). Every one pins the 1.x line; none is on 2.x. |
 | Outside use of 2.x-only methods | None found (searched for the device-object wrappers such as `plugOn(device)`). |
 
 This is a search of public code, so it misses private projects and anything that is not on GitHub. Treat it as "there are some, and they are on 1.x", not as a full list.
+
+## Projects still on 1.x
+
+Collected on 2026-11-01 from npm, deps.dev, ecosyste.ms and a search of public GitHub code. "Methods called" is read from each project's own source, and every 1.x method they call exists in 2.x with the same parameters. Nobody has been contacted.
+
+| Project | What it is | Last pushed | Uses `wyze-api` | Methods called | Moves to 2.x unchanged? |
+|---|---|---|---|---|---|
+| [homebridge-wyze-smart-home](https://github.com/jfarmer08/homebridge-wyze-smart-home) on npm (`latest` `0.5.61`) | The released Homebridge plugin. About 567 downloads in the 30 days to 2026-10-29, the largest group by far. | 2026-08-29 (125 stars) | `1.1.15`, exact | The whole plugin | This is the line 2.x of the plugin replaces. Its users upgrade by moving to the plugin's `2.x`, which brings `wyze-api` 2.x with it. |
+| [EldonMcGuinness/wyze-api-ha-bridge](https://github.com/EldonMcGuinness/wyze-api-ha-bridge) | A Home Assistant bridge in a Docker image | 2026-10-30 | `1.1.15`, exact | `getDeviceList`, `getDeviceState` | Yes: both are unchanged. |
+| [ClickCalickClick/Wyze-Control-for-Pebble](https://github.com/ClickCalickClick/Wyze-Control-for-Pebble) | A Pebble watch app that controls Wyze devices | 2026-06-17 | A copy of `1.1.7` kept inside the repo, not installed from npm | `getDeviceList`, `getDeviceState`, `getDeviceByName`, `maybeLogin`, and `plugOn(id, model)` | Mostly. `plugOn(id, model)` is not in any 1.x release, and 2.x defines `plugOn(device)`, so that call needs fixing either way. |
+| [NadavM316111/Jarvis](https://github.com/NadavM316111/Jarvis) | A personal assistant project | 2026-06-11 | `^1.1.7` | None found in the code I read | Probably an unused dependency. |
+| [chrisparedes566/aerial_control_app](https://github.com/chrisparedes566/aerial_control_app) | A small control app | 2025-11-07 | `^1.1.7` | `getDeviceByName`, `plugTurnOn`, `plugTurnOff`, `wallSwitchPowerOn`, `wallSwitchPowerOff` | Yes: all unchanged. Little recent activity. |
+
+Also on npm: `@zswuwing/homebridge-wyze-smart-home`, an old fork of the plugin (last release 2023, 46 downloads a month). Not worth chasing.
+
+These are only the ones a public search can find. deps.dev lists two npm packages that depend on `wyze-api`: that fork and a bulk registry mirror.
+
+### Encouraging an upgrade
+
+What to tell a project on 1.x:
+
+- `npm install wyze-api@beta` installs 2.x. Until 2.0 is stable, `latest` stays on 1.x, so nobody is moved by accident.
+- Code that calls the methods in the 1.x fixture runs unchanged. The differences are the ones listed below: Node.js 22 or newer, a constructor that throws on an empty username, and the removed dependencies.
+- What 2.x adds that a 1.x user does not have: bulk property reads, camera event lists with AI labels, the Cam Plus plan lookup, camera streaming and snapshots through a warm WebRTC connection, and the newer devices (Lock Bolt v2, Palm Lock, the newer cameras).
+
+Contacting these projects (an issue or a pull request that bumps the version) is a decision for the maintainer of this repo. Doing it from a public account is outward-facing, so nothing has been sent.
 
 ## The promise: 2.x is a drop-in for 1.x
 
