@@ -1,6 +1,6 @@
 # Design: read camera properties in one bulk call
 
-Status: proposed, not implemented. The plugin side is in
+Status: implemented as `getPropertyListForDevices` (`src/devices/cameras.js` and `src/index.js`). The plugin side is in
 `homebridge-wyze-smart-home/docs/design-bulk-property-read.md`.
 
 ## Problem

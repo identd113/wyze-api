@@ -3,6 +3,7 @@
 [![npm](https://img.shields.io/npm/v/wyze-api.svg?style=flat-square)](https://www.npmjs.com/package/wyze-api)
 [![Chat](https://img.shields.io/discord/1134601590762913863)](https://discord.gg/Mjkpq2x9)
 [![GitHub last commit](https://img.shields.io/github/last-commit/identd113/wyze-api)](https://github.com/identd113/wyze-api)
+[![CI](https://github.com/identd113/wyze-api/actions/workflows/ci.yml/badge.svg?branch=2.x)](https://github.com/identd113/wyze-api/actions/workflows/ci.yml)
 
 
 This is an unofficial Wyze API. This library uses the internal APIs from the Wyze mobile app. A list of all Wyze devices can be retrieved to check the status of Cameras, Senors, Bulbs, Plugs, Locks and more. This API can turn on and off cameras, lightbulbs and plugs and more.
@@ -293,6 +294,20 @@ see [`scripts/README.md`](scripts/README.md) and run
 - [`future/tutk/demo/README.md`](future/tutk/demo/README.md) — Tutk Phase 0 demo + fixtures
 - [`future/gutes/demo/README.md`](future/gutes/demo/README.md) — GUTES Phase 0 demo + pcap reader
 - [`future/tutk/docker/README.md`](future/tutk/docker/README.md) — Docker smoke harness + Docker Desktop on Mac UDP NAT caveats
+
+## Development
+
+```
+git clone https://github.com/identd113/wyze-api.git
+cd wyze-api
+npm install
+npm test
+```
+
+- **Tests** are in [`tests/`](tests/) and run with `npm test` (Node 22 or newer). They need no network and no Wyze account. That includes [`tests/compat-1x.test.js`](tests/compat-1x.test.js), which fails if 2.x drops or reorders anything that 1.1.15 offered. CI runs them on every pull request.
+- **Parked experiments** (the TUTK and GUTES local-camera protocols) are in [`future/`](future/README.md) and are not published. Their tests run with `npm run test:future`.
+- **Probe scripts** that check endpoints against a real account are in [`scripts/`](scripts/README.md). They read your credentials from a `.env` file (see `.env.sample`) and save the login token to `~/.wyze-api`.
+- **Documentation** for contributors is indexed in [`docs/`](docs/README.md): the endpoint notes, camera properties, design notes, and who depends on the library.
 
 ## Other Info
 
