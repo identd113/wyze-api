@@ -670,6 +670,13 @@ module.exports = {
         );
       }
 
+      // ffmpeg could not start at all (binary missing or not executable). Without a listener the 'error'
+      // event is thrown and takes the whole process down. Retrying cannot help, so carry on without audio.
+      audioFfmpeg.once("error", (err) => {
+        log("error", `[stream] FFmpeg/audio could not start: ${err.message}`);
+        audioRetries = MAX_AUDIO_RETRIES;
+      });
+
       audioFfmpeg.once("close", async (code) => {
         if (stopped) return;
         log("warn", `[stream] FFmpeg/audio exited (${code})`);
@@ -775,6 +782,14 @@ module.exports = {
         );
       }
 
+      // ffmpeg could not start at all (binary missing or not executable). Without a listener the 'error'
+      // event is thrown and takes the whole process down. A reconnect would fail the same way, so end the stream.
+      videoFfmpeg.once("error", (err) => {
+        log("error", `[stream] FFmpeg/video could not start: ${err.message}`);
+        dead = true;
+        cleanup();
+      });
+
       // Audio stream (optional — only if HomeKit provided audio params).
       // Self-heals via spawnAudio's close-handler if audio FFmpeg dies while
       // video is still running.
@@ -807,7 +822,7 @@ module.exports = {
 
       // Reconnect on unexpected video FFmpeg exit
       videoFfmpeg.once("close", async (code) => {
-        if (stopped) return;
+        if (stopped || dead) return; // dead: ffmpeg never started, nothing to reconnect to
         log("warn", `[stream] FFmpeg/video exited (${code})`);
         // The remembered SPS/PPS may be what it choked on (the camera's video settings changed):
         // the reconnect waits for fresh ones.
