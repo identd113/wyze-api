@@ -117,22 +117,30 @@ test("types asks Wyze for only those event types, by name; none asks for every t
   await w.cameraGetEvents("MAC", { types: ["SOUND"] });
   await w.cameraGetEvents("MAC", { types: ["SOUND", "MOTION"] });
   await w.cameraGetEvents("MAC");
-  await w.cameraGetEvents("MAC", { types: ["NOT_A_TYPE"] });
   assert.deepStrictEqual(calls[0][1].event_value_list, [2]);
   assert.deepStrictEqual(calls[1][1].event_value_list, [2, 1, 6, 7, 13]);
   assert.deepStrictEqual(calls[2][1].event_value_list, []);
-  assert.deepStrictEqual(calls[3][1].event_value_list, []);
 });
 
-test("tags asks Wyze only for events carrying those AI tags, by name; unknown names are ignored", async () => {
+test("tags asks Wyze only for events carrying those AI tags, by name", async () => {
   const calls = [];
   const w = stub([], calls);
   await w.cameraGetEvents("MAC", { tags: ["PACKAGE"] });
   await w.cameraGetEvents("MAC", { tags: ["PERSON", "PET"] });
   await w.cameraGetEvents("MAC");
-  await w.cameraGetEvents("MAC", { tags: ["NOT_A_TAG"] });
   assert.deepStrictEqual(calls[0][1].event_tag_list, [AiEventTag.PACKAGE]);
   assert.deepStrictEqual(calls[1][1].event_tag_list, [AiEventTag.PERSON, AiEventTag.PET]);
   assert.deepStrictEqual(calls[2][1].event_tag_list, []);
-  assert.deepStrictEqual(calls[3][1].event_tag_list, []);
+});
+
+test("an unknown event type or tag is an error, not a request with no filter", async () => {
+  const calls = [];
+  const w = stub([], calls);
+  await assert.rejects(() => w.cameraGetEvents("MAC", { types: ["MOTON"] }), /unknown event type "MOTON"/);
+  await assert.rejects(() => w.cameraGetEvents("MAC", { tags: ["PEOPLE"] }), /unknown event tag "PEOPLE"/);
+  await assert.rejects(() => w.cameraGetEventsMulti(["MAC"], { types: ["SOUND", "NOPE"], tags: ["PERSON", "NOPE"] }), /type "NOPE", tag "NOPE"/);
+  assert.strictEqual(calls.length, 0, "nothing was sent to Wyze");
+  // the real names still work
+  await w.cameraGetEvents("MAC", { types: ["SOUND"], tags: ["PERSON", "PACKAGE"] });
+  assert.strictEqual(calls.length, 1);
 });

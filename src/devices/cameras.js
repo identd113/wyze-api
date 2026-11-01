@@ -182,6 +182,13 @@ module.exports = {
    *   names ("PERSON", "PACKAGE", ...): only events carrying one of them come back
    */
   async cameraGetEventsMulti(deviceMacs, { sinceMs = 5 * 60_000, count = 20, types = [], tags = [] } = {}) {
+    // An unknown name used to be dropped quietly, and an empty list means "no filter": a typo returned every event.
+    const unknownTypes = types.filter((name) => !Object.hasOwn(EventAlarmType, name));
+    const unknownTags = tags.filter((name) => !Object.hasOwn(AiEventTag, name));
+    if (unknownTypes.length || unknownTags.length) {
+      const bad = [...unknownTypes.map((name) => `type "${name}"`), ...unknownTags.map((name) => `tag "${name}"`)];
+      throw new Error(`cameraGetEvents: unknown event ${bad.join(", ")}. Types: ${Object.keys(EventAlarmType).join(", ")}. Tags: ${Object.keys(AiEventTag).join(", ")}.`);
+    }
     const macs = [...new Set(deviceMacs)];
     const grouped = Object.fromEntries(macs.map((mac) => [mac, []]));
     if (macs.length === 0) return grouped;
@@ -278,7 +285,7 @@ module.exports = {
       const cloud = await this.getCameraSnapshot(mac);
       if (cloud?.url) {
         try {
-          const resp = await axios.get(cloud.url, { responseType: "arraybuffer" });
+          const resp = await axios.get(cloud.url, { responseType: "arraybuffer", timeout: 15_000, maxContentLength: 20 * 1024 * 1024 }); // a thumbnail host is not a Wyze host: bound the wait and the size
           return { buffer: Buffer.from(resp.data), source: "cloud" };
         } catch (err) {
           this.log.warning(`Cloud snapshot fetch failed, falling back to capture: ${err.message}`);

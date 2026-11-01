@@ -260,9 +260,13 @@ function getValidatedBaseUrls(config, log) {
 
 let _interceptorInstalled = false;
 
+// A request to Wyze that gets no answer must end, or whatever awaits it (login, every poll) hangs for good.
+// Applies only to requests bound for Wyze hosts and only when the caller set no timeout of their own.
+const WYZE_REQUEST_TIMEOUT_MS = 30_000;
+
 /**
  * Install a one-time axios interceptor that refuses to follow HTTP
- * redirects on requests bound for known Wyze hostnames. Wyze's real API
+ * redirects, and gives a request a 30 second timeout when it has none, on requests bound for known Wyze hostnames. Wyze's real API
  * never returns 3xx for these endpoints, so a redirect is at best a
  * configuration problem and at worst an attempt to steal the bearer
  * token by sending it to an attacker-controlled host.
@@ -284,6 +288,7 @@ function installRedirectGuard() {
     }
     if (hostname && WYZE_ALLOWED_HOSTNAMES.has(hostname)) {
       config.maxRedirects = 0;
+      if (!config.timeout) config.timeout = WYZE_REQUEST_TIMEOUT_MS;
     }
     return config;
   });
@@ -294,6 +299,7 @@ module.exports = {
   DEFAULT_AUTH_BASE_URL,
   DEFAULT_API_BASE_URL,
   WYZE_ALLOWED_HOSTNAMES,
+  WYZE_REQUEST_TIMEOUT_MS,
   CREDENTIAL_KEYS,
   REDACT_KEYS,
   ENV_MAP,
