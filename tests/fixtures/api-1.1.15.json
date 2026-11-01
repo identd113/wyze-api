@@ -1,6 +1,6 @@
 {
  "source": "wyze-api 1.1.15 (branch main, commit d91eab4)",
- "note": "The public method names, with their parameter names in order, and the module exports of 1.1.15. tests/compat-1x.test.js checks 2.x still has them.",
+ "note": "The public method names, with their parameters in order (an options object is {a,b}), and the module exports of 1.1.15, and what its pure methods returned. tests/compat-1x.test.js checks 2.x still has them.",
  "exports": [
   "StreamStatus",
   "VacuumControlType",
@@ -152,9 +152,7 @@
   ],
   "cameraStreamWithReconnect": [
    "fn",
-   "{ maxAttempts",
-   "baseDelayMs",
-   "onRetry }"
+   "{maxAttempts,baseDelayMs,onRetry}"
   ],
   "cameraToSummary": [
    "device"

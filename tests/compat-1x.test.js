@@ -1,9 +1,10 @@
 /**
  * 2.x stays a drop-in replacement for 1.x (1.1.15, branch main).
  *
- * `fixtures/api-1.1.15.json` pins what 1.1.15 offered: its public method names and parameter order, its module
- * exports, and what its pure methods (no network, clock or randomness) returned for sample inputs. These tests fail
- * if a 2.x change drops or reorders any of that.
+ * `fixtures/api-1.1.15.json` pins what 1.1.15 offered: its public method names and parameter names in order, its
+ * module exports, and what its pure methods (no network, clock or randomness) returned for sample inputs. These
+ * tests fail if a 2.x change drops a method, drops or reorders a parameter, removes an option from an options
+ * object, or changes what a pure method returns. They do not check what network methods return.
  *
  * Differences from 1.x are on purpose, and each one is listed in KNOWN_DIFFERENCES below. To add another, put it
  * there with the reason, and note it in the changelog under "Migrating from 1.x".
@@ -12,6 +13,7 @@ const test = require("node:test");
 const assert = require("node:assert");
 const WyzeAPI = require("../src/index");
 const pinned = require("./fixtures/api-1.1.15.json");
+const { parametersOf } = require("./helpers/parameters");
 
 // Public methods that 1.x had and 2.x does not, and parameters 2.x no longer takes. Keep this list short.
 const KNOWN_DIFFERENCES = {
@@ -20,6 +22,11 @@ const KNOWN_DIFFERENCES = {
   },
   droppedParameters: {
     localBulbCommand: "1.x took a seventh parameter, actionKey, and never used it.",
+  },
+  // Same position, new name. Positional callers are not affected.
+  renamedParameters: {
+    setIotProp: { product_model: "deviceModel" },
+    getLockState: { deviceState: "hardlock" },
   },
 };
 
@@ -34,17 +41,11 @@ function methodsOf(proto) {
   return found;
 }
 
-// The parameter names of a function, in order, from its source (default values and `...` stripped).
-function parametersOf(fn) {
-  const match = fn.toString().match(/^(?:async\s*)?(?:function\s*\*?\s*)?\w*\s*\(([^)]*)\)/);
-  return (match ? match[1] : "").split(",").map((s) => s.trim().split("=")[0].trim()).filter(Boolean);
-}
-
 const methods = methodsOf(WyzeAPI.prototype);
 
 test("every public method 1.x had is still there, with its parameters in the same order", () => {
   const problems = [];
-  for (const [name, params] of Object.entries(pinned.methods)) {
+  for (const [name, was] of Object.entries(pinned.methods)) {
     if (KNOWN_DIFFERENCES.removedMethods[name]) continue;
     const fn = methods.get(name);
     if (!fn) {
@@ -52,14 +53,33 @@ test("every public method 1.x had is still there, with its parameters in the sam
       continue;
     }
     const now = parametersOf(fn);
-    const allowed = KNOWN_DIFFERENCES.droppedParameters[name] ? params.length - 1 : params.length;
-    if (now.length < allowed) problems.push(`${name} takes ${now.length} parameters (${now.join(", ")}); 1.x took ${params.length} (${params.join(", ")})`);
+    const kept = KNOWN_DIFFERENCES.droppedParameters[name] ? was.length - 1 : was.length;
+    if (now.length < kept) {
+      problems.push(`${name} takes ${now.length} parameters (${now.join(", ")}); 1.x took ${was.length} (${was.join(", ")})`);
+      continue;
+    }
+    for (let i = 0; i < kept; i += 1) {
+      const renamed = KNOWN_DIFFERENCES.renamedParameters[name]?.[was[i]];
+      if (was[i].startsWith("{")) {
+        // an options object: every option 1.x took must still be taken
+        const keys = (text) => text.slice(1, -1).split(",").filter(Boolean);
+        const missing = keys(was[i]).filter((key) => !keys(now[i]).includes(key));
+        if (!now[i].startsWith("{") || missing.length) problems.push(`${name}: parameter ${i + 1} no longer takes the option(s) ${missing.join(", ") || was[i]} (now ${now[i]})`);
+      } else if (now[i] !== was[i] && now[i] !== renamed) {
+        problems.push(`${name}: parameter ${i + 1} was "${was[i]}", is now "${now[i]}" (1.x order: ${was.join(", ")})`);
+      }
+    }
   }
   assert.deepStrictEqual(problems, []);
 });
 
 test("the known differences are still real, so the list does not go stale", () => {
   for (const name of Object.keys(KNOWN_DIFFERENCES.removedMethods)) assert.ok(!methods.has(name), `${name} is back: remove it from KNOWN_DIFFERENCES`);
+  for (const [name, renames] of Object.entries(KNOWN_DIFFERENCES.renamedParameters)) {
+    for (const [was, now] of Object.entries(renames)) {
+      assert.ok(pinned.methods[name].includes(was) && parametersOf(methods.get(name)).includes(now), `${name}: ${was} -> ${now} is not a rename any more: remove it from KNOWN_DIFFERENCES`);
+    }
+  }
   for (const [name] of Object.entries(KNOWN_DIFFERENCES.droppedParameters)) {
     assert.ok(parametersOf(methods.get(name)).length < pinned.methods[name].length, `${name} takes all its 1.x parameters again: remove it from KNOWN_DIFFERENCES`);
   }

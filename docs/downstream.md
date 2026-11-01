@@ -60,14 +60,14 @@ Code written against `wyze-api` 1.1.15 should run on 2.x without changes, apart 
 
 **What that covers** (and is tested):
 
-- Every public method that 1.1.15 had is still there, with its parameters in the same order.
+- Every public method that 1.1.15 had is still there, with its parameters in the same order, and every option of an options-object parameter still accepted. A parameter that is only renamed has to be listed below.
 - Every export is still exported.
 - The constructor takes every option 1.x took, and the client still sets the fields consumers read (`access_token`, `persistPath` and similar).
 - The pure helper methods (no network, clock or randomness) return what 1.x returned for the same inputs.
 
 **How it is enforced:** `tests/compat-1x.test.js` checks all of the above against `tests/fixtures/api-1.1.15.json`, which was taken from `main`. It runs in `npm test`. If a change breaks one of these, the test fails and names the method.
 
-**What is not covered:** what the network methods return. A method can keep its name and parameters and still return a differently shaped response. That needs real calls to Wyze under both versions, and has not been done.
+**What is not covered:** what the network methods return, thrown errors, and default values. A method can keep its name and parameters and still return a differently shaped response. That needs real calls to Wyze under both versions, and has not been done.
 
 ### Known differences from 1.1.15
 
@@ -77,6 +77,7 @@ These are on purpose. Each is also listed, with its reason, in `KNOWN_DIFFERENCE
 |---|---|
 | `authenticateAndFetchData` is removed | A Roku-auth helper that only logged a token. It went with the `aws-sdk` dependency. |
 | `localBulbCommand` no longer takes a seventh parameter, `actionKey` | 1.x never used it. |
+| `setIotProp`'s third parameter is `deviceModel`, not `product_model`. `getLockState`'s is `hardlock`, not `deviceState` | A rename only. Callers pass these by position, so nothing changes for them. |
 | `checkColorTemp` and `checkBrightnessValue` clamp to HomeKit's valid ranges | 1.x returned 500 for any colour temperature below 500, and passed brightness through unchanged. Both were bugs. |
 | The constructor throws when `username` is empty | 1.x failed later, at login. |
 | Node.js 22 or newer | 1.x declared no minimum. |
