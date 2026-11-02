@@ -21,8 +21,8 @@ How a release gets to npm, and the order to do things in. The plugin ([homebridg
 
 ## Releasing
 
-1. Push `2.x`.
-2. Make the GitHub Release (`v<version>`, target `2.x`, pre-release ticked for a beta).
+1. Make sure `release/<version>` is level with the commit you mean to ship, and pushed (`git branch -f release/<version> 2.x`, then `git push origin release/<version>`). Push `2.x` too, so the two match.
+2. Make the GitHub Release (`v<version>`, **target `release/<version>`, not `2.x`**, pre-release ticked for a beta). The tag then sits on the release branch, so a later commit on `2.x` cannot slip into it.
 3. Approve the staged publish on npmjs.com.
 4. Check the tags: `npm view wyze-api dist-tags`. For a beta, `beta` points at the new version and `latest` is unchanged.
 
