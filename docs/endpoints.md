@@ -84,6 +84,30 @@ itself, so nothing can be concluded about that endpoint.
   - **Parked on purpose (2026-11-01).** HomeKit has no weight or scale service, so the Homebridge plugin could not show these readings, and the library would be the only user. Probe it (read-only, one account scale) only if someone wants scale data in a script or in Home Assistant. A "someone just weighed in" trigger sensor would be the only HomeKit use, and it is not worth the work on its own.
 - **Sirius and earth services** (`plugin/sirius/…`, `plugin/earth/…`): listed in the SDK. None of the account's devices needs them as far as we know.
 
+## From other Wyze clients (unverified)
+
+Found by reading `wyzeapy`, `wyze-sdk`, `docker-wyze-bridge` and `wyze-node`. None of these has been called against a live account. Entries already listed above are left out.
+
+| Endpoint | Host | Method | Seen in | Notes |
+|---|---|---|---|---|
+| `user/login/sendSmsCode` and `user/login` | `auth-prod.api.wyze.com` | POST | wyzeapy `wyze_auth_lib.py` | SMS 2FA login. See [FIX-mfa-login.md](FIX-mfa-login.md). |
+| `app/v2/device_list/set_property_list` | `api.wyzecam.com` | POST | wyzeapy `base_service.py` | Bulk set-property. Not the same path as `app/v2/device/set_property_list`. Bulbs honour it. |
+| `openapi/lock/v1/ble/token` | `yd-saas-toc.wyzecam.com` | GET | wyzeapy `base_service.py` | BLE token for a lock. |
+| `<bulb_ip>:88/device_request` | the bulb on the LAN | POST | wyzeapy `base_service.py` | Local encrypted bulb control, with cloud as fallback. See [Local-Protocol.md](../wiki/Local-Protocol.md). |
+| `app/device/{endpoint}` | `api.wyzecam.com` | POST | docker-wyze-bridge `api.py` | Generic v1 device route. The endpoint name is supplied by the caller. `app/device/get_device_info` is confirmed above. |
+| `app/v4/device/{endpoint}` | `app-core.cloud.wyze.com` | POST | docker-wyze-bridge `api.py` | Signed v4 device route on another host. |
+| `signaling/device/{mac}?use_trickle=true` | `webrtc.api.wyze.com` | GET | docker-wyze-bridge `api.py` | WebRTC signalling and ICE servers for cameras. |
+| `user/event` | `wyze-general-api.wyzecam.com` | POST | wyze-sdk `general_api_service.py` | User event reporting. |
+| `plugin/earth/device_info/batch`, `plugin/earth/get_iot_prop/batch` | not stated in the source | GET | wyze-sdk (thermostat comments) | Batch reads for thermostat sub-devices and room sensors. |
+| `plugin/sirius/device_info`, `…/device_info/batch`, `…/get_iot_prop/batch`, `…/get_sub_device`, `…/set_iot_prop` | `api.wyzecam.com` | GET or POST | wyze-sdk `sirius_service.py` | Sirius hub sub-devices. `plugin/sirius/*` is blocked at `OPTIONS` (see above). |
+| `plugin/venus/{did}/control`, `plugin/venus/{did}/status` | `api.wyzecam.com` | POST, GET | wyze-sdk `venus_service.py` | Per-device routes. The library uses `set_iot_action` and `get_iot_prop` instead. |
+| `plugin/pluto/*` | scale service | GET, POST | wyze-sdk `pluto_service.py` | Newer scale service. Mirrors `plugin/scale/*` and is covered by the scale notes in "Not tried yet". |
+
+## Open items for the other-client endpoints
+
+- Whether the library's request host list needs `app-core.cloud.wyze.com`, `webrtc.api.wyze.com` and `wyze-general-api.wyzecam.com`. The redirect allowlist in `src/util/security.js` doesn't include them, so calls to them would be refused until it's updated.
+- The request parameters for each endpoint in the table. Read the matching SDK `*_service.py` first.
+
 ## Still open
 
 - Whether DELETE is supported on any of these. `OPTIONS` didn't show it, and no endpoint tried accepted it.
