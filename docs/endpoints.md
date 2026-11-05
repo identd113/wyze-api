@@ -58,6 +58,14 @@ not list every method.
 | `wyze-earth-service` | `plugin/earth/*` (7 paths) | 403 | not sent |
 | `wyze-sirius-service` | `plugin/sirius/*` (7 paths) | 403 | not sent |
 | `wyze-pluto-service` | `plugin/pluto/*` (11 paths) | 403 | not sent |
+| `api.wyzecam.com` | `app/v2/device_list/set_property_list` | 200 | `POST, OPTIONS` |
+| `yd-saas-toc.wyzecam.com` | `openapi/lock/v1/ble/token` | 200 | not sent |
+| `wyze-general-api.wyzecam.com` | `v1/user/event` | 200 | `POST, OPTIONS` |
+| `auth-prod.api.wyze.com` | `user/login/sendSmsCode`, `user/login` | 403 | not sent |
+| `wyze-earth-service` | `plugin/earth/device_info/batch`, `plugin/earth/get_iot_prop/batch` | 403 | not sent |
+| `wyze-sirius-service` | `plugin/sirius/device_info/batch`, `plugin/sirius/get_iot_prop/batch` | 403 | not sent |
+| `webrtc.api.wyze.com` | `signaling/device` (base path, no MAC) | 403 | not sent |
+| `app-core.cloud.wyze.com` | `app/v4/device/get-property` (guessed path) | 404 | not sent |
 
 The scale service returns 401 to `OPTIONS` without a token. That means the route exists, but the
 gateway checks authentication before it checks the method. The earth, sirius and pluto services
