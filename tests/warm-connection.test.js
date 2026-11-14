@@ -161,3 +161,44 @@ test("rtpContainsIdr finds an IDR slice whether or not it starts the fragment ru
   assert.strictEqual(cap.rtpContainsIdr(Buffer.from([0x67, 1])), false, "an SPS is not an IDR");
   assert.strictEqual(cap.rtpContainsIdr(null), false);
 });
+
+// ---- a keyframe with a packet missing is never kept ------------------------------------
+
+test("a keyframe with a packet missing inside it is not kept, and the previous one stays", () => {
+  const k = new KeyframeTracker();
+  const push = (name, ts, starts, idr, seq) => k.push(Buffer.from(name), ts, starts, idr, 0, seq);
+  push("a1", 100, true, true, 10);
+  push("a2", 100, false, true, 11);
+  push("p", 200, false, false, 12);
+  assert.deepStrictEqual(k.latest.packets.map(String), ["a1", "a2"]);
+  push("b1", 300, true, true, 20);
+  push("b3", 300, false, true, 22); // 21 never arrived
+  push("p", 400, false, false, 23);
+  assert.deepStrictEqual(k.latest.packets.map(String), ["a1", "a2"], "the damaged keyframe is dropped");
+});
+
+test("a keyframe whose last packet is missing is not kept", () => {
+  const k = new KeyframeTracker();
+  k.push(Buffer.from("b1"), 300, true, true, 0, 20);
+  k.push(Buffer.from("b2"), 300, false, true, 0, 21);
+  // 22 (the last packet of the frame) was lost: the next frame starts at 23
+  k.push(Buffer.from("p"), 400, false, false, 0, 23);
+  assert.strictEqual(k.latest, null);
+});
+
+test("sequence numbers wrap at 65535 without being taken for a gap", () => {
+  const k = new KeyframeTracker();
+  k.push(Buffer.from("a1"), 100, true, true, 0, 65534);
+  k.push(Buffer.from("a2"), 100, false, true, 0, 65535);
+  k.push(Buffer.from("a3"), 100, false, true, 0, 0);
+  k.push(Buffer.from("p"), 200, false, false, 0, 1);
+  assert.deepStrictEqual(k.latest.packets.map(String), ["a1", "a2", "a3"]);
+});
+
+test("a frame that starts mid-way (its first packet lost) is never started", () => {
+  const k = new KeyframeTracker();
+  k.push(Buffer.from("mid"), 100, false, true, 0, 11); // a fragment from the middle of an IDR slice
+  k.push(Buffer.from("end"), 100, false, true, 0, 12);
+  k.push(Buffer.from("p"), 200, false, false, 0, 13);
+  assert.strictEqual(k.latest, null);
+});
