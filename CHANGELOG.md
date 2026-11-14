@@ -4,7 +4,7 @@
 
 ### v2.1.0-beta.1
 
-Everything since the last published beta, **2.0.0-beta.3**. A `2.0.0-beta.4` was prepared but never published; its changes are listed below the new ones. Pairs with `homebridge-wyze-smart-home` 2.1.0-beta.1.
+Everything since the last published beta, **2.0.0-beta.3**. A `2.0.0-beta.4` was tagged on GitHub (2026-11-02) but its publish was never approved on npm, so it is not on npm; its changes are listed below the new ones. Pairs with `homebridge-wyze-smart-home` 2.1.0-beta.1.
 
 **New**
 - **Night vision over the local network.** `getCameraNightVision(mac)` returns `"on"`, `"off"` or `"auto"`, and `setCameraNightVision(mac, value)` sets it and reads it back (`{ before, after, matches }`). The Wyze cloud does not expose this setting for these cameras, so the library talks to the camera directly, with a pure-JavaScript client in `src/tutk/client.js` (no native library). It needs to run on the same network as the camera, and works for cameras the device list marks with the `dtls` flag and gives an IP and keys (the Cam v2, Cam v3 and Doorbell v2 are tested). One conversation per camera at a time.
@@ -13,7 +13,7 @@ Everything since the last published beta, **2.0.0-beta.3**. A `2.0.0-beta.4` was
 - **`scripts/device-report.js`** does the same from the command line for anyone with a checkout, with `--local` for a read-only ask of each camera on the home network.
 - **Pictures are captured from one whole keyframe** piped to ffmpeg, not from UDP packets, so a picture no longer depends on a free local port.
 
-**Carried over from the unpublished 2.0.0-beta.4**
+**Carried over from 2.0.0-beta.4 (tagged, not on npm)**
 
 - **Development: `npm run lint`** (ESLint on `src`, `scripts` and `tests`) and a lint job in CI. Nothing about the published package changes.
 - **Fix: concurrent logins.** Several callers finding the access token missing at once (parallel requests at start-up) each started their own login. They now share one. A second login could also run unawaited, so a failure became an unhandled rejection that crashes a default Node process, and a one-shot 2FA code failed on the repeat.

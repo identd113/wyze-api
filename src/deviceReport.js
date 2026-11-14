@@ -28,6 +28,7 @@ const PRIVATE_KEY = new RegExp(
     "token", "password", "secret", "apikey", "api_key", "key_id", "ticket", "latitude", "longitude",
     "^lat$", "^lon$", "^lng$", "address", "^did$", "device_id", "^uid$", "cloud_id", "^id$", "authorization",
     "p2p", "url", "thumbnail", "timezone",
+    "serial", "uuid", "guid", "home_id", "homeid", "group_id", "parent_id", "owner", "city", "zip", "postal", "street",
   ].join("|")
 );
 

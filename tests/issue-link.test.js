@@ -86,3 +86,11 @@ test("a link that would be too long loses the sentence first, then the device in
   const hugest = buildIssueUrl({ ...FORM, plugin: "p".repeat(6900) }, CAMERA, RESULT);
   assert.strictEqual(params(hugest).get("blob"), null, "then the device information");
 });
+
+test("a thermostat room sensor is a thermostat or room sensor, not a plain sensor", () => {
+  const { kindOf } = require("../src/web/issueLink");
+  assert.strictEqual(kindOf("ThermostatRoomSensor"), "Thermostat or room sensor");
+  assert.strictEqual(kindOf("RoomSensor"), "Thermostat or room sensor");
+  assert.strictEqual(kindOf("ContactSensor"), "Sensor (contact, motion, leak, climate)");
+  assert.strictEqual(kindOf("Thermostat"), "Thermostat or room sensor");
+});

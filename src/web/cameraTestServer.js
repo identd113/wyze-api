@@ -40,7 +40,9 @@ const { buildReport } = require("../deviceReport");
 const MIN_PORT = 1024;
 const MAX_PORT = 65535;
 const MAX_BODY = 2048;
-const AUTH_FAILURES_BEFORE_BLOCK = 8;
+// Wrong tokens before the block. The token has 144 bits, so guessing is hopeless; the block is a second line of defence,
+// and it is not tight, because a page left open across a Homebridge restart sends the old token a few times.
+const AUTH_FAILURES_BEFORE_BLOCK = 20;
 const AUTH_BLOCK_MS = 10 * 60 * 1000;
 const PROXY_HEADERS = ["x-forwarded-for", "x-forwarded-host", "x-forwarded-proto", "forwarded", "x-real-ip", "cf-connecting-ip", "cf-ray", "via"];
 
@@ -119,7 +121,7 @@ function page(nonce) {
  * @param {string} [opts.host] the address to listen on; default every address
  * @param {string} [opts.token] default: random
  * @param {Function} [opts.probe] default tutk.probeCamera
- * @param {Function} [opts.setNightVision] default tutk.setNightVision
+ * @param {Function} [opts.setNightVision] default: the client's setCameraNightVision (which shares its per-camera queue), else tutk.setNightVision
  * @param {boolean} [opts.ephemeral] tests only: let the system pick a port
  * @param {boolean} [opts.privateClientsOnly] default true
  * @param {{describe: Function}} [opts.settings] the host's settings, kept in its own config file, shown read-only.
@@ -142,7 +144,7 @@ function page(nonce) {
  */
 function createCameraTestServer({
   client, port, log = {}, host = "0.0.0.0", token = crypto.randomBytes(18).toString("hex"),
-  probe = tutk.probeCamera, setNightVision = tutk.setNightVision, ephemeral = false, privateClientsOnly = true, issueForm = null, settings = null, sensors = null,
+  probe = tutk.probeCamera, setNightVision = null, ephemeral = false, privateClientsOnly = true, issueForm = null, settings = null, sensors = null,
   unsupported = null, describeDevice = null, versions = {}, deviceReport = buildReport,
 }) {
   if (!client || typeof client.getDeviceList !== "function") throw new Error("createCameraTestServer needs a client with getDeviceList()");
@@ -191,6 +193,14 @@ function createCameraTestServer({
       issueUrl: buildDeviceIssueUrl(issueForm, { model: d.product_model, type: d.product_type, firmware: d.firmware_ver }, null),
     }));
   }
+
+  // The host's client keeps one conversation per camera at a time (its own night vision reads and switches use the
+  // same queue), so a test or a change from this page waits for those instead of colliding with them.
+  const oneAtATime = (mac, job) => (typeof client._oneAtATime === "function" ? client._oneAtATime(mac, job) : job());
+  const changeNightVision = (mac, args) => {
+    if (setNightVision) return setNightVision(args);
+    return typeof client.setCameraNightVision === "function" ? client.setCameraNightVision(mac, args.value) : tutk.setNightVision(args);
+  };
 
   const findOther = async (id) => {
     if (!others.length) await loadOthers();
@@ -368,8 +378,17 @@ function createCameraTestServer({
       if (!cam) return sendJson(res, 404, { error: "no such camera" });
       const why = tutk.cameraLocalSkipReason(cam);
       if (why) return sendJson(res, 422, { error: `cannot test this camera: ${why}` });
-      if (busy) return sendJson(res, 409, { error: "another test is running; wait for it to finish" });
       const target = { host: cam.device_params.ip, uid: cam.device_params.p2p_id, enr: cam.enr, mac: cam.mac };
+
+      // A change reads and checks its body first. The one test slot is taken right after the check, with no await in
+      // between, so two requests (a double click, two tabs) cannot both pass it.
+      let body;
+      if (m[2] === "night-vision") {
+        try { body = await readJson(req); } catch (e) { return sendJson(res, e.status || 400, { error: e.message }); }
+        if (body.confirm !== true) return sendJson(res, 400, { error: "changing a setting needs confirm: true" });
+        if (!["on", "off", "auto"].includes(body.value)) return sendJson(res, 400, { error: "value must be on, off or auto" });
+      }
+      if (busy) return sendJson(res, 409, { error: "another test is running; wait for it to finish" });
 
       if (m[2] === "test") {
         busy = true;
@@ -378,7 +397,7 @@ function createCameraTestServer({
         const send = (obj) => { if (!res.writableEnded) res.write(`${JSON.stringify(obj)}\n`); };
         say("info", `testing ${cam.nickname} (${cam.product_model})`);
         try {
-          const result = await probe({ ...target, onStep: (step) => send({ event: "step", step }) });
+          const result = await oneAtATime(cam.mac, () => probe({ ...target, onStep: (step) => send({ event: "step", step }) }));
           send({ event: "done", result, issueUrl: buildIssueUrl(issueForm, { model: cam.product_model, firmware: cam.firmware_ver }, result) });
           say("info", `${cam.nickname}: ${result.authenticated ? "authenticated" : `failed (${result.error || "no answer"})`}`);
         } catch (e) {
@@ -390,14 +409,10 @@ function createCameraTestServer({
         return undefined;
       }
 
-      let body;
-      try { body = await readJson(req); } catch (e) { return sendJson(res, e.status || 400, { error: e.message }); }
-      if (body.confirm !== true) return sendJson(res, 400, { error: "changing a setting needs confirm: true" });
-      if (!["on", "off", "auto"].includes(body.value)) return sendJson(res, 400, { error: "value must be on, off or auto" });
       busy = true;
       say("info", `setting night vision of ${cam.nickname} to ${body.value}`);
       try {
-        const result = await setNightVision({ ...target, value: body.value });
+        const result = await oneAtATime(cam.mac, () => changeNightVision(cam.mac, { ...target, value: body.value }));
         say("info", `${cam.nickname}: night vision ${result.before} -> ${result.after}${result.matches ? "" : " (did not match)"}`);
         return sendJson(res, 200, result);
       } catch (e) {

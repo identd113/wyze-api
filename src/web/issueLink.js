@@ -66,9 +66,9 @@ function kindOf(type) {
   if (/camera|doorbell|cam/.test(t)) return "Camera or doorbell";
   if (/light|bulb/.test(t)) return "Light, bulb or light strip";
   if (/plug|outlet|switch/.test(t)) return "Plug, outlet or switch";
+  if (/thermostat|roomsensor/.test(t)) return "Thermostat or room sensor"; // before "sensor", which would match a room sensor
   if (/sensor|contact|motion|leak|climate|gateway/.test(t)) return "Sensor (contact, motion, leak, climate)";
   if (/lock|keypad/.test(t)) return "Lock or keypad";
-  if (/thermostat|roomsensor/.test(t)) return "Thermostat or room sensor";
   if (/vacuum|sprinkler|irrigation|purifier|appliance/.test(t)) return "Vacuum, sprinkler or other appliance";
   return "Something else";
 }

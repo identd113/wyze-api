@@ -183,7 +183,7 @@ test("only one test or change runs at a time", async () => {
 test("repeated wrong tokens are blocked", async () => {
   const { server, port } = await start();
   try {
-    for (let i = 0; i < 8; i++) assert.strictEqual((await request(port, { path: "/api/cameras", headers: { "x-test-token": `wrong-${i}` } })).status, 401);
+    for (let i = 0; i < 20; i++) assert.strictEqual((await request(port, { path: "/api/cameras", headers: { "x-test-token": `wrong-${i}` } })).status, 401);
     assert.strictEqual((await request(port, { path: "/api/cameras", headers: auth })).status, 429, "even the right token is blocked for a while");
   } finally { await server.stop(); }
 });
@@ -458,4 +458,68 @@ test("a device report and a camera test never run at the same time", async () =>
     release();
     assert.strictEqual((await first).status, 200);
   } finally { release(); await server.stop(); }
+});
+
+// ---- review fixes: one change at a time, the lockout, and the host's per-camera queue ----
+
+test("two night vision changes sent together run one at a time: the second is refused while the first is running", async () => {
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  let started = 0;
+  const { server, port } = await start({ setNightVision: async (target) => { started += 1; await gate; return { before: "auto", after: target.value, matches: true }; } });
+  try {
+    await request(port, { path: "/api/cameras", headers: auth });
+    const body = { value: "on", confirm: true };
+    const first = request(port, { method: "POST", path: "/api/cameras/cam-1/night-vision", headers: json, body });
+    const second = request(port, { method: "POST", path: "/api/cameras/cam-1/night-vision", headers: json, body });
+    await new Promise((r) => setTimeout(r, 60));
+    release();
+    const statuses = [(await first).status, (await second).status].sort();
+    assert.deepStrictEqual(statuses, [200, 409]);
+    assert.strictEqual(started, 1, "only one conversation with the camera");
+  } finally { release(); await server.stop(); }
+});
+
+test("a night vision change that is refused before it starts (no confirm, bad value) does not take the slot", async () => {
+  const { server, port } = await start({});
+  try {
+    await request(port, { path: "/api/cameras", headers: auth });
+    assert.strictEqual((await request(port, { method: "POST", path: "/api/cameras/cam-1/night-vision", headers: json, body: { value: "on" } })).status, 400);
+    assert.strictEqual((await request(port, { method: "POST", path: "/api/cameras/cam-1/night-vision", headers: json, body: { value: "dim", confirm: true } })).status, 400);
+    assert.strictEqual((await request(port, { method: "POST", path: "/api/cameras/cam-1/night-vision", headers: json, body: { value: "on", confirm: true } })).status, 200);
+  } finally { await server.stop(); }
+});
+
+test("a few wrong tokens (a tab left open across a restart) do not lock the right token out; many do", async () => {
+  const { server, port } = await start({});
+  try {
+    for (let i = 0; i < 8; i += 1) assert.strictEqual((await request(port, { path: "/api/cameras", headers: { "x-test-token": "old-token" } })).status, 401);
+    assert.strictEqual((await request(port, { path: "/api/cameras", headers: auth })).status, 200, "still served after eight wrong ones");
+    for (let i = 0; i < 25; i += 1) await request(port, { path: "/api/cameras", headers: { "x-test-token": "guess" } });
+    assert.strictEqual((await request(port, { path: "/api/cameras", headers: auth })).status, 429, "blocked after many");
+  } finally { await server.stop(); }
+});
+
+test("with the host's own client, a night vision change and a test go through its per-camera queue", async () => {
+  const queued = [];
+  const client = {
+    getDeviceList: async () => CAMERAS,
+    _oneAtATime: (mac, job) => { queued.push(mac); return job(); },
+    setCameraNightVision: async (mac, value) => ({ before: "off", after: value, matches: true }),
+  };
+  const { server, port } = await start({ client, setNightVision: undefined, probe: async () => ({ authenticated: true }) });
+  try {
+    await request(port, { path: "/api/cameras", headers: auth });
+    const set = await request(port, { method: "POST", path: "/api/cameras/cam-1/night-vision", headers: json, body: { value: "auto", confirm: true } });
+    assert.deepStrictEqual(JSON.parse(set.text), { before: "off", after: "auto", matches: true }, "the client's method is used");
+    await request(port, { method: "POST", path: "/api/cameras/cam-1/test", headers: json, body: {} });
+    assert.strictEqual(queued.length, 2, "both went through the queue");
+  } finally { await server.stop(); }
+});
+
+test("the page stops asking once the server has refused its token", () => {
+  const html = fs.readFileSync(path.join(__dirname, "../src/web/cameraTestPage.html"), "utf8");
+  assert.ok(html.includes("linkExpired = true"));
+  assert.ok(html.includes('if (linkExpired) throw new Error("this link has expired")'));
+  assert.ok(html.includes("if (!linkExpired) showStatus"));
 });

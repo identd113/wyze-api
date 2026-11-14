@@ -204,8 +204,16 @@
   const NIGHT = { 1: "on", 2: "off", 3: "auto" };
   const STEPS = [["reachable", "Camera answered on the network"], ["dtlsHandshake", "Secure session (DTLS) opened"], ["avLogin", "Logged in"], ["authenticated", "Authenticated"]];
 
+  // Once the server has refused the token (Homebridge restarted, so the link in this tab is old), the page stops asking:
+  // every further request would only be refused again and count towards a lockout.
+  let linkExpired = false;
   async function api(path, options = {}) {
+    if (linkExpired) throw new Error("this link has expired");
     const res = await fetch(path, { ...options, headers: { "X-Test-Token": token, ...(options.headers || {}) } });
+    if (res.status === 401) {
+      linkExpired = true;
+      showStatus("This link has expired. Homebridge changed its token when it restarted. Open the camera test page again from the plugin's settings page or the Homebridge log.", true);
+    }
     return res;
   }
 
@@ -581,7 +589,7 @@
       $("cameras").replaceChildren(...data.cameras.map(renderCamera));
       setCount("count-cameras", String(data.cameras.length));
     } catch (e) {
-      showStatus(`Could not load the cameras: ${e.message}`, true);
+      if (!linkExpired) showStatus(`Could not load the cameras: ${e.message}`, true);
     }
   })();
 })();

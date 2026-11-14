@@ -897,6 +897,7 @@ class AvChannel {
     const challenge = Buffer.from(k10001.subarray(17, 33));
     vlog(`K10001 challenge received, status ${status}`);
     const resp = challengeResponse(challenge, this.enr, status);
+    if (!resp || resp.length < 16) throw new Error(`could not answer the camera's challenge (status ${status}, ${challenge.length}-byte challenge)`);
     const body = Buffer.alloc(22);
     resp.copy(body, 0, 0, 16);
     crypto.randomBytes(4).copy(body, 16);
@@ -1012,7 +1013,12 @@ async function openCamera({ host, port = 32761, uid, enr, mac, timeoutMs = 8000,
     if (dtls) dtls.close();
     session.close();
   };
-  const within = (promise, label) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error(`timeout: ${label}`)), timeoutMs))]);
+  // The timer is cleared when the race settles: a timer left running keeps the process alive for the whole timeout.
+  const within = (promise, label) => {
+    let timer;
+    const limit = new Promise((_, rej) => { timer = setTimeout(() => rej(new Error(`timeout: ${label}`)), timeoutMs); });
+    return Promise.race([promise, limit]).finally(() => clearTimeout(timer));
+  };
   try {
     await session.connect(timeoutMs);
     steps.reachable = true;

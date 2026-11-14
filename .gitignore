@@ -29,3 +29,6 @@ snapshot-*.json
 # build output and packet captures
 *.tgz
 *.pcap
+
+# logs
+*.log

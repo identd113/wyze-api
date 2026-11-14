@@ -216,3 +216,10 @@ test("the report records the endpoint of each answer: the cloud calls for every 
   assert.ok(camera.endpoints.devicemgmt.includes("get_iot_prop"));
   assert.ok(camera.endpoints.local.includes("32761"), "a local session notes its port, and that it is not a cloud call");
 });
+
+test("serial numbers, uuids, home and group ids, owner and address parts are removed from a report", () => {
+  const out = scrub({ serial_number: "SN123456789", serial: "ABC", uuid: "0f0f0f0f-aaaa", home_id: "h-77", group_id: "g-77", parent_id: "p-77", owner_name: "Sam", city: "Springfield", zip: "55555", firmware_ver: "1.2.3.4", power: 1 });
+  assert.deepStrictEqual(Object.values(out).filter((v) => typeof v === "string" && /SN123|ABC|0f0f|h-77|g-77|p-77|Sam|Springfield|55555/.test(v)), []);
+  assert.strictEqual(out.firmware_ver, "1.2.3.4", "a firmware version is kept");
+  assert.strictEqual(out.power, 1);
+});
