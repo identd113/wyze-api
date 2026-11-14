@@ -322,3 +322,72 @@ test("the page's script is valid, and the page uses nothing its security policy 
     assert.match(html, /\.info \.tip \{/);
   } finally { await server.stop(); }
 });
+
+// ---- the sensors panel: the same rules as the settings panel, and the same file ----
+
+function fakeSensors() {
+  const calls = { describe: 0, save: [] };
+  return {
+    calls,
+    describe: async () => { calls.describe += 1; return { plans: [], cameras: [{ id: "AA", name: "Yard", model: "HL_CAM3", plan: "", planActive: false, setting: "Automatic", notAuto: false, items: [], unnamed: [] }] }; },
+    save: async (id, choice) => {
+      calls.save.push({ id, ...choice });
+      if (id === "bad") throw Object.assign(new Error("Not saved: nope"), { status: 400 });
+      if (id === "broken") throw new Error("could not write config.json (EACCES)");
+      return { saved: true, restartNeeded: true };
+    },
+  };
+}
+
+test("without sensors there is no sensors route", async () => {
+  const { server, port } = await start({});
+  try {
+    assert.strictEqual((await request(port, { path: "/api/sensors", headers: auth })).status, 404);
+    assert.strictEqual((await request(port, { method: "PUT", path: "/api/sensors", headers: json, body: { id: "AA", auto: true } })).status, 404);
+  } finally { await server.stop(); }
+});
+
+test("the sensors are read from the host every time, and a save goes straight to the host", async () => {
+  const sensors = fakeSensors();
+  const { server, port } = await start({ sensors });
+  try {
+    assert.strictEqual((await request(port, { path: "/api/sensors" })).status, 401, "needs the token");
+    await request(port, { path: "/api/sensors", headers: auth });
+    const read = JSON.parse((await request(port, { path: "/api/sensors", headers: auth })).text).sensors;
+    assert.strictEqual(read.cameras[0].name, "Yard");
+    assert.strictEqual(sensors.calls.describe, 2, "no copy kept between reads");
+    const saved = await request(port, { method: "PUT", path: "/api/sensors", headers: json, body: { id: "AA", ticks: { person: false } } });
+    assert.strictEqual(saved.status, 200);
+    assert.deepStrictEqual(sensors.calls.save, [{ id: "AA", ticks: { person: false }, auto: false }]);
+    await request(port, { method: "PUT", path: "/api/sensors", headers: json, body: { id: "AA", auto: true } });
+    assert.strictEqual(sensors.calls.save[1].auto, true);
+  } finally { await server.stop(); }
+});
+
+test("a refused sensors choice is a 400 with the reason, and a failed write is a 502", async () => {
+  const { server, port } = await start({ sensors: fakeSensors() });
+  try {
+    const bad = await request(port, { method: "PUT", path: "/api/sensors", headers: json, body: { id: "bad", ticks: {} } });
+    assert.strictEqual(bad.status, 400);
+    assert.match(JSON.parse(bad.text).error, /Not saved: nope/);
+    assert.strictEqual((await request(port, { method: "PUT", path: "/api/sensors", headers: json, body: { id: "broken", auto: true } })).status, 502);
+    assert.strictEqual((await request(port, { method: "POST", path: "/api/sensors", headers: json, body: {} })).status, 405);
+    assert.strictEqual((await request(port, { method: "PUT", path: "/api/sensors", headers: { ...json, origin: "http://evil.example.com" }, body: { id: "AA", auto: true } })).status, 403);
+  } finally { await server.stop(); }
+});
+
+test("a settings save and a sensors save never write the file at the same time", async () => {
+  let active = 0;
+  let overlapped = false;
+  const slow = async (value) => { active += 1; if (active > 1) overlapped = true; await new Promise((r) => setTimeout(r, 50)); active -= 1; return value; };
+  const settings = { describe: async () => ({ file: "config.json", fields: [] }), save: (changes) => slow({ saved: changes, restartNeeded: true }) };
+  const sensors = { describe: async () => ({ plans: [], cameras: [] }), save: () => slow({ saved: true, restartNeeded: true }) };
+  const { server, port } = await start({ settings, sensors });
+  try {
+    await Promise.all([
+      request(port, { method: "PUT", path: "/api/settings", headers: json, body: { changes: { n: 1 } } }),
+      request(port, { method: "PUT", path: "/api/sensors", headers: json, body: { id: "AA", auto: true } }),
+    ]);
+    assert.strictEqual(overlapped, false);
+  } finally { await server.stop(); }
+});

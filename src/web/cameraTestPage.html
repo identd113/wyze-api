@@ -5,21 +5,50 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Wyze camera test</title>
 <style nonce="__NONCE__">
+  /* Wyze's teal on Homebridge's deep purple. Both themes keep text and controls above 4.5:1. */
   :root {
-    --bg: #f6f7f9; --card: #ffffff; --text: #1c2430; --muted: #5d6877; --line: #dfe3e9;
-    --accent: #1e66d0; --accent-text: #ffffff; --ok: #1a7f37; --bad: #b3261e; --warn: #8a5a00;
+    --bg: #f4f2f7; --card: #ffffff; --text: #1d1726; --muted: #5f566d; --line: #e0dbe8;
+    --accent: #0a8a74; --accent-text: #ffffff; --ok: #1a7f37; --bad: #b3261e; --warn: #8a5a00;
+    --side: #34194a; --side-text: #f3eefa; --side-muted: #b9aacb; --side-line: #4b2c66; --side-hover: #43245d; --brand: #2fd4b4;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #12161c; --card: #1b212a; --text: #e6eaf0; --muted: #98a3b3; --line: #2c3541;
-      --accent: #5b9bf0; --accent-text: #0b1118; --ok: #5fd07c; --bad: #ff8a80; --warn: #e5b45a;
+      --bg: #130e1a; --card: #1e1728; --text: #ece7f4; --muted: #a79bb8; --line: #302640;
+      --accent: #2fd4b4; --accent-text: #08201b; --ok: #5fd07c; --bad: #ff8a80; --warn: #e5b45a;
+      --side: #1b1026; --side-text: #f3eefa; --side-muted: #a79bb8; --side-line: #2e1d3f; --side-hover: #281838; --brand: #2fd4b4;
     }
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  main { max-width: 760px; margin: 0 auto; padding: 20px 16px 48px; }
-  h1 { font-size: 22px; margin: 0 0 4px; }
+  .app { display: grid; grid-template-columns: 232px minmax(0, 1fr); min-height: 100vh; }
+  .side { background: var(--side); color: var(--side-text); padding: 20px 14px; position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; gap: 18px; }
+  .brand { display: flex; align-items: center; gap: 10px; padding: 0 8px; }
+  .mark { width: 34px; height: 34px; border-radius: 10px; background: var(--brand); color: #08201b; display: grid; place-items: center; font-weight: 800; font-size: 18px; }
+  .brand b { display: block; font-size: 15px; line-height: 1.2; }
+  .brand span { display: block; font-size: 12px; color: var(--side-muted); }
+  .nav { display: flex; flex-direction: column; gap: 4px; }
+  .nav button { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; border: 0; border-left: 3px solid transparent; border-radius: 8px; padding: 10px 12px; background: transparent; color: var(--side-muted); font-size: 15px; }
+  .nav button:hover { background: var(--side-hover); color: var(--side-text); }
+  .nav button[aria-selected=true] { background: var(--side-hover); color: var(--side-text); border-left-color: var(--brand); font-weight: 600; }
+  .nav button:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
+  .nav .ico { width: 20px; text-align: center; font-size: 16px; }
+  .nav .count { margin-left: auto; min-width: 22px; padding: 0 7px; border-radius: 999px; background: var(--side-line); color: var(--side-text); font-size: 12px; line-height: 20px; text-align: center; }
+  .nav .count.alert { background: var(--brand); color: #08201b; font-weight: 700; }
+  .nav .count:empty { display: none; }
+  .side .foot { margin-top: auto; padding: 0 8px; font-size: 12px; color: var(--side-muted); }
+  main { padding: 26px 28px 56px; max-width: 860px; width: 100%; }
+  .panel:not(.active), .panel[hidden] { display: none; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
   p.lead { color: var(--muted); margin: 0 0 18px; }
+  @media (max-width: 760px) {
+    .app { grid-template-columns: 1fr; }
+    .side { position: static; height: auto; padding: 12px; gap: 10px; }
+    .nav { flex-direction: row; overflow-x: auto; }
+    .nav button { width: auto; white-space: nowrap; border-left: 0; border-bottom: 3px solid transparent; border-radius: 8px 8px 0 0; }
+    .nav button[aria-selected=true] { border-bottom-color: var(--brand); }
+    .side .foot { display: none; }
+    main { padding: 18px 16px 48px; }
+  }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; }
   .head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; justify-content: space-between; }
   .name { font-weight: 600; font-size: 17px; }
@@ -56,35 +85,72 @@
   .field .state { margin: 4px 0 0; font-size: 13px; color: var(--muted); }
   .field .pending { color: var(--warn); }
   .field .changed { color: var(--accent); }
+  .pills { display: flex; flex-wrap: wrap; gap: 14px 8px; margin: 14px 0 6px; }
+  .pill { position: relative; border-radius: 999px; padding: 4px 14px; font-size: 14px; background: transparent; }
+  .pill[aria-pressed=true] { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+  .pill .ai { position: absolute; top: -9px; right: 8px; padding: 0 5px; font-size: 10px; font-weight: 700; line-height: 16px; color: #fff; background: #1f7fbf; border-radius: 8px; }
+  .pill .tag { margin-left: 6px; font-size: 11px; opacity: .85; }
+  .sensor-warn { margin: 6px 0 0; padding-left: 8px; border-left: 3px solid var(--warn); font-size: 13px; }
   .issue { margin-top: 10px; }
   .issue a { color: var(--accent); }
 </style>
 </head>
 <body>
-<main>
-  <h1>Wyze camera test</h1>
-  <p class="lead">Asks each camera directly over your home network. A test only reads. Changing night vision asks you to confirm first.</p>
-  <div id="status" class="card" hidden></div>
-  <section id="settings" class="card" hidden>
-    <div class="head">
-      <div><div class="name">Settings</div><div class="meta" id="settings-file"></div></div>
-      <div class="row"><button id="settings-reload">Reload from file</button><button id="settings-save" class="primary" disabled>Save</button></div>
+<div class="app">
+  <aside class="side">
+    <div class="brand"><div class="mark" aria-hidden="true">W</div><div><b>Wyze camera test</b><span>for Homebridge</span></div></div>
+    <div class="nav" role="tablist" aria-orientation="vertical" aria-label="Sections">
+      <button role="tab" id="tab-cameras" data-panel="cameras" aria-selected="true" aria-controls="panel-cameras"><span class="ico" aria-hidden="true">&#9673;</span>Cameras<span class="count" id="count-cameras"></span></button>
+      <button role="tab" id="tab-sensors" data-panel="sensors" aria-selected="false" aria-controls="sensors" hidden><span class="ico" aria-hidden="true">&#9678;</span>Sensors<span class="count" id="count-sensors"></span></button>
+      <button role="tab" id="tab-settings" data-panel="settings" aria-selected="false" aria-controls="settings" hidden><span class="ico" aria-hidden="true">&#9881;</span>Settings<span class="count" id="count-settings"></span></button>
     </div>
-    <div id="settings-fields"></div>
-    <div id="settings-note" class="note"></div>
-  </section>
-  <div id="cameras"></div>
-  <div class="footer row">
-    <button id="download" disabled>Download results (JSON)</button>
-    <span class="meta">The file has no addresses, ids or keys.</span>
-  </div>
-</main>
+    <div class="foot">A test only reads. Night vision asks you to confirm first.</div>
+  </aside>
+  <main>
+    <div id="status" class="card" hidden></div>
+    <div class="panel active" id="panel-cameras" role="tabpanel" aria-labelledby="tab-cameras">
+      <h1>Cameras</h1>
+      <p class="lead">Asks each camera directly over your home network. A test only reads. Changing night vision asks you to confirm first.</p>
+      <div id="cameras"></div>
+      <div class="footer row">
+        <button id="download" disabled>Download results (JSON)</button>
+        <span class="meta">The file has no addresses, ids or keys.</span>
+      </div>
+    </div>
+    <section id="sensors" class="panel" role="tabpanel" aria-labelledby="tab-sensors" hidden>
+      <h1>Sensors</h1>
+      <p class="lead">What each camera was found to have, and which sensors it gets in HomeKit. <span id="sensors-info"></span></p>
+      <div class="card">
+        <div class="head">
+          <div class="meta">Click a sensor to turn it on (filled) or off (outlined).</div>
+          <div class="row"><button id="sensors-reload">Reload from file</button></div>
+        </div>
+        <div id="sensors-plans"></div>
+        <div id="sensors-cameras"></div>
+        <div id="sensors-note" class="note"></div>
+      </div>
+    </section>
+    <section id="settings" class="panel" role="tabpanel" aria-labelledby="tab-settings" hidden>
+      <h1>Settings</h1>
+      <p class="lead">The plugin's Advanced options, read from and saved to Homebridge's config file.</p>
+      <div class="card">
+        <div class="head">
+          <div class="meta" id="settings-file"></div>
+          <div class="row"><button id="settings-reload">Reload from file</button><button id="settings-save" class="primary" disabled>Save</button></div>
+        </div>
+        <div id="settings-fields"></div>
+        <div id="settings-note" class="note"></div>
+      </div>
+    </section>
+  </main>
+</div>
 <script nonce="__NONCE__">
 (() => {
   "use strict";
   const params = new URLSearchParams(location.search);
   const token = params.get("token") || "";
-  history.replaceState(null, "", location.pathname); // keep the token out of the address bar
+  let startTab = location.hash.slice(1);
+  history.replaceState(null, "", location.pathname + location.hash); // keep the token out of the address bar
   const results = {};
   const $ = (id) => document.getElementById(id);
   const el = (tag, props = {}, ...kids) => {
@@ -242,6 +308,8 @@
   function renderSettings(data) {
     $("settings").hidden = false;
     $("settings-file").textContent = `Read from and saved to ${data.file}`;
+    const waiting = data.fields.filter((f) => f.pending).length;
+    setCount("count-settings", waiting ? `${waiting} to restart` : "", waiting);
     const box = $("settings-fields");
     box.replaceChildren();
     dirty.clear();
@@ -393,8 +461,137 @@
     URL.revokeObjectURL(a.href);
   };
 
+  // ---- detected sensors: what each camera has, and which sensors to switch on; read from and saved to the config file ----
+  function renderSensorCard(cam) {
+    const ticks = new Map();
+    const box = el("div", { className: "field" });
+    box.append(el("div", { className: "head" }, el("div", {}, el("span", { className: "name", textContent: cam.name }),
+      cam.model ? el("span", { className: "meta", textContent: ` ${cam.model}` }) : "")));
+    if (cam.plan) box.append(el("div", { className: `meta ${cam.planActive ? "" : "note"}`, textContent: cam.plan }));
+    box.append(el("div", { className: "meta", textContent: cam.setting }));
+    const save = el("button", { className: "primary", textContent: "Save these to the config", disabled: true });
+    const pills = el("div", { className: "pills" });
+    const main = cam.items.filter((i) => !i.other);
+    const other = cam.items.filter((i) => i.other);
+    const makePill = (item) => {
+      const pill = el("button", { type: "button", className: "pill", disabled: item.blocked });
+      const paint = () => {
+        const on = ticks.has(item.key) ? ticks.get(item.key) : item.checked;
+        pill.setAttribute("aria-pressed", on ? "true" : "false");
+        pill.title = `${item.label}: ${on ? "on" : "off"} (click to change)`;
+      };
+      pill.onclick = () => {
+        const now = ticks.has(item.key) ? ticks.get(item.key) : item.checked;
+        if (now === !item.checked) ticks.delete(item.key); else ticks.set(item.key, !now);
+        paint();
+        save.disabled = ticks.size === 0;
+      };
+      pill.append(el("span", { textContent: item.label }));
+      if (item.ai) pill.append(el("span", { className: "ai", textContent: "AI" }));
+      if (item.tag) pill.append(el("span", { className: "tag", textContent: item.tag }));
+      paint();
+      return pill;
+    };
+    pills.append(...main.map(makePill));
+    box.append(pills);
+    for (const item of main.filter((i) => i.blocked)) box.append(el("p", { className: "sensor-warn", textContent: `${item.label}: ${item.warning}` }));
+    if (!cam.items.some((i) => i.ai)) box.append(el("div", { className: "meta", textContent: "No AI labels found on this camera's events." }));
+    if (other.length) {
+      box.append(el("div", { className: "meta", textContent: "Other labels. No sensor type for these yet, so turning one on only saves the name." }));
+      box.append(el("div", { className: "pills" }, ...other.map(makePill)));
+    }
+    if (cam.unnamed.length) box.append(el("div", { className: "meta", textContent: `Labels with no name here: ${cam.unnamed.join(", ")}. They get no sensor.` }));
+    const row = el("div", { className: "row" }, save);
+    const send = async (body, button) => {
+      button.disabled = true;
+      $("sensors-note").className = "note";
+      $("sensors-note").textContent = "Saving...";
+      try {
+        const res = await api("/api/sensors", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: cam.id, ...body }) });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || res.statusText);
+        await loadSensors(`Saved for ${cam.name}${data.restartNeeded ? ". Restart Homebridge to apply it." : "."}`);
+      } catch (e) {
+        button.disabled = false;
+        $("sensors-note").className = "note bad";
+        $("sensors-note").textContent = e.message.startsWith("Not saved") ? e.message : `Not saved: ${e.message}`;
+      }
+    };
+    save.onclick = () => send({ ticks: Object.fromEntries(ticks) }, save);
+    if (cam.notAuto) {
+      const back = el("button", { textContent: "Back to automatic" });
+      back.onclick = () => send({ auto: true }, back);
+      row.append(back);
+    }
+    box.append(row);
+    return box;
+  }
+
+  function renderSensors(data) {
+    $("sensors").hidden = false;
+    setCount("count-sensors", String(data.cameras.length));
+    $("sensors-plans").replaceChildren(...data.plans.map((p) => el("div", { className: p.soon ? "meta note" : "meta", textContent: p.text })));
+    $("sensors-cameras").replaceChildren(...(data.cameras.length ? data.cameras.map(renderSensorCard)
+      : [el("div", { className: "meta", textContent: "Nothing yet. Each camera is checked when Homebridge starts; this fills in a minute or so after a start." })]));
+  }
+
+  async function loadSensors(message) {
+    try {
+      const res = await api("/api/sensors");
+      if (res.status === 404) { $("sensors").hidden = true; return; }
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || res.statusText);
+      renderSensors(data.sensors);
+      $("sensors-note").className = "note";
+      $("sensors-note").textContent = message || "";
+    } catch (e) {
+      $("sensors").hidden = false;
+      $("sensors-note").className = "note bad";
+      $("sensors-note").textContent = `Could not read the sensors: ${e.message}`;
+    }
+  }
+  $("sensors-reload").onclick = () => loadSensors("Reloaded from the file.");
+  $("sensors-info").append(info("Which sensors each camera gets in HomeKit. Automatic gives Motion and Sound where the camera reports them, plus Person, Vehicle, Pet and Package when your Wyze plan has AI detection. Face is never automatic. A change is written to config.json and applies after Homebridge restarts. Reload re-reads the file, so edits made elsewhere show here.", "About detected sensors"));
+
+  // ---- sections: tabs down the side. A section the host does not provide (it hides itself) loses its tab. ----
+  const tabs = [...document.querySelectorAll(".nav [role=tab]")];
+  const panelOf = (tab) => $(tab.dataset.panel === "cameras" ? "panel-cameras" : tab.dataset.panel);
+  function showTab(tab, focus) {
+    for (const t of tabs) {
+      const on = t === tab;
+      t.setAttribute("aria-selected", on ? "true" : "false");
+      t.tabIndex = on ? 0 : -1;
+      panelOf(t).classList.toggle("active", on);
+    }
+    try { history.replaceState(null, "", `${location.pathname}#${tab.dataset.panel}`); } catch (_) { /* the address bar is only a convenience */ }
+    if (focus) tab.focus();
+    closeInfos();
+  }
+  const visibleTabs = () => tabs.filter((t) => !t.hidden);
+  function syncTabs() {
+    for (const t of tabs) t.hidden = t.dataset.panel !== "cameras" && panelOf(t).hidden;
+    if (startTab) {
+      const wanted = tabs.find((t) => t.dataset.panel === startTab && !t.hidden);
+      if (wanted) { startTab = ""; showTab(wanted); }
+    }
+    const current = tabs.find((t) => t.getAttribute("aria-selected") === "true");
+    if (current.hidden) showTab(tabs[0]);
+  }
+  for (const t of tabs) {
+    t.onclick = () => showTab(t);
+    t.onkeydown = (e) => {
+      const list = visibleTabs();
+      const i = list.indexOf(t);
+      const next = { ArrowDown: list[(i + 1) % list.length], ArrowRight: list[(i + 1) % list.length], ArrowUp: list[(i - 1 + list.length) % list.length], ArrowLeft: list[(i - 1 + list.length) % list.length], Home: list[0], End: list[list.length - 1] }[e.key];
+      if (next) { e.preventDefault(); showTab(next, true); }
+    };
+    if (t.dataset.panel !== "cameras") new MutationObserver(syncTabs).observe(panelOf(t), { attributes: true, attributeFilter: ["hidden"] });
+  }
+  function setCount(id, text, alert) { const n = $(id); n.textContent = text; n.classList.toggle("alert", Boolean(alert)); }
+
   (async () => {
     if (!token) return showStatus("Open the link from the log. It ends with ?token=...", true);
+    loadSensors();
     loadSettings(); // the settings are the host's own file, so they do not wait for Wyze
     try {
       const res = await api("/api/cameras");
@@ -402,6 +599,7 @@
       if (!res.ok) throw new Error(data.error || res.statusText);
       if (!data.cameras.length) return showStatus("No cameras on this account.");
       $("cameras").replaceChildren(...data.cameras.map(renderCamera));
+      setCount("count-cameras", String(data.cameras.length));
     } catch (e) {
       showStatus(`Could not load the cameras: ${e.message}`, true);
     }
