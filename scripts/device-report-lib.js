@@ -22,7 +22,9 @@ const PRIVATE_KEY = new RegExp(
 const MAC_COLON = /\b[0-9A-Fa-f]{2}([:-])[0-9A-Fa-f]{2}(?:\1[0-9A-Fa-f]{2}){4}\b/g;
 const MAC_PLAIN = /(?<![0-9A-Za-z])[0-9A-Fa-f]{12}(?![0-9A-Za-z])/g;
 const MAC_AFTER_UNDERSCORE = /(?<=_)[0-9A-Fa-f]{12}(?![0-9A-Za-z])/g;
-const IPV4 = /\b\d{1,3}(?:\.\d{1,3}){3}\b/g;
+const IPV4 = /(?<![\d.])(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)(?![\d.])/g;
+// A version number such as 4.53.2.1 has the shape of an IPv4 address. Under these keys it is kept.
+const VERSION_KEY = /(^|_)(fw|firmware|ver|version)(_|$)|ver$/;
 
 // Values the device list itself gives for this account (MAC, name, Wi-Fi name, IP, serial,
 // P2P id), found wherever they turn up in another answer. Short ones are ignored.
@@ -42,28 +44,29 @@ function literalsOf(devices) {
   return [...found].sort((a, b) => b.length - a.length);
 }
 
-function scrubString(s, literals = []) {
+function scrubString(s, literals = [], keepVersions = false) {
   let out = s;
   for (const lit of literals) out = out.split(lit).join("<id>");
-  return out
+  out = out
     .replace(MAC_COLON, "<mac>")
     .replace(MAC_AFTER_UNDERSCORE, "<mac>")
-    .replace(MAC_PLAIN, "<mac>")
-    .replace(IPV4, "<ip>");
+    .replace(MAC_PLAIN, "<mac>");
+  return keepVersions ? out : out.replace(IPV4, "<ip>");
 }
 
 /**
  * Returns a copy of `value` with private keys removed and MAC and IPv4 patterns in
  * strings replaced. Keys are dropped, not blanked, so nothing about them is left.
  */
-function scrub(value, literals = []) {
-  if (typeof value === "string") return scrubString(value, literals);
-  if (Array.isArray(value)) return value.map((v) => scrub(v, literals));
+function scrub(value, literals = [], keepVersions = false) {
+  if (typeof value === "string") return scrubString(value, literals, keepVersions);
+  if (Array.isArray(value)) return value.map((v) => scrub(v, literals, keepVersions));
   if (value && typeof value === "object") {
     const out = {};
     for (const [k, v] of Object.entries(value)) {
-      if (PRIVATE_KEY.test(k.toLowerCase())) continue;
-      out[scrubString(k, literals)] = scrub(v, literals);
+      const lower = k.toLowerCase();
+      if (PRIVATE_KEY.test(lower)) continue;
+      out[scrubString(k, literals)] = scrub(v, literals, VERSION_KEY.test(lower));
     }
     return out;
   }
@@ -92,7 +95,7 @@ function flattenProperties(props, literals) {
   const list = Array.isArray(props) ? props : props && props.property_list;
   if (!Array.isArray(list)) return props === undefined ? undefined : scrub(props, literals);
   const out = {};
-  for (const p of list) out[p.pid] = p.pvalue;
+  for (const p of list) out[p.pid] = scrub(p.pvalue, literals);
   return out;
 }
 
@@ -174,4 +177,4 @@ async function buildReport({ client: rawClient, models = [], versions = {}, rout
   return report;
 }
 
-module.exports = { READ_METHODS, DEVICEMGMT_FALLBACK_MODEL, scrub, scrubString, readOnly, buildReport };
+module.exports = { READ_METHODS, DEVICEMGMT_FALLBACK_MODEL, scrub, scrubString, flattenProperties, readOnly, buildReport };

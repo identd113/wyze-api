@@ -87,6 +87,13 @@ test("only the read methods can be reached", async () => {
   }
 });
 
+test("scrub keeps version numbers that look like an IPv4 address, and still hides real IPs", () => {
+  const out = scrub({ firmware_ver: "4.53.2.1", mcu_ver: "1.0.0.12", note: "at 192.168.1.5 and 300.1.1.1" });
+  assert.strictEqual(out.firmware_ver, "4.53.2.1");
+  assert.strictEqual(out.mcu_ver, "1.0.0.12");
+  assert.strictEqual(out.note, "at <ip> and 300.1.1.1");
+});
+
 test("scrub removes private keys and rewrites MACs and IPs inside strings", () => {
   const out = scrub({ keep: "ok", mac: "x", nested: [{ nickname: "n", text: `a 00:11:22:33:44:55 b ${MAC} c 10.0.0.9 d WYZE_CAKP2JFUS_${MAC}` }] });
   assert.deepStrictEqual(out, { keep: "ok", nested: [{ text: "a <mac> b <mac> c <ip> d WYZE_CAKP2JFUS_<mac>" }] });
@@ -110,4 +117,10 @@ test("values from the device list are removed wherever they turn up, even when t
   assert.ok(!text.includes("AB12CD34"), "id leaked");
   assert.ok(!text.includes("sig=abc"), "URL leaked");
   assert.ok(text.includes("<id>"));
+});
+
+test("property values are scrubbed too", async () => {
+  const { flattenProperties } = require("../scripts/device-report-lib");
+  const out = flattenProperties({ property_list: [{ pid: "P1", pvalue: "10.0.0.9" }, { pid: "P2", pvalue: "2" }] }, []);
+  assert.deepStrictEqual(out, { P1: "<ip>", P2: "2" });
 });
