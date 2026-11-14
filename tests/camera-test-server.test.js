@@ -422,7 +422,7 @@ test("a long report is summarised in the link, and the full one is still in the 
     assert.ok(body.issueUrl.length <= 7000);
     const blob = JSON.parse(new URL(body.issueUrl).searchParams.get("blob"));
     assert.strictEqual(blob.device_report.property_count, 400);
-    assert.match(blob.device_report.note, /attached as a file/);
+    assert.match(blob.device_report.note, /drag it into the .What the device does. box/);
     assert.strictEqual(Object.keys(body.report.device.propertyList).length, 400);
   } finally { await server.stop(); }
 });

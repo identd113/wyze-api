@@ -504,7 +504,7 @@
         if (data.issueUrl && data.issueUrl.startsWith("https://github.com/")) {
           issue.append(
             el("a", { href: data.issueUrl, target: "_blank", rel: "noopener noreferrer", textContent: "Report this device on GitHub" }),
-            el("span", { className: "meta", textContent: " Opens the add-a-device form with the model, type and what was found filled in. If the report is long the form holds a summary, so attach the downloaded file. Nothing is sent until you submit it there." }),
+            el("span", { className: "meta", textContent: " Opens the add-a-device form with the model, type and what was found filled in. If the report is long the form holds a summary: drag the downloaded file into the “What the device does” box (the device information box cannot take files). Nothing is sent until you submit it there." }),
           );
         }
       } catch (e) {

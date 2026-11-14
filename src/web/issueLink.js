@@ -111,7 +111,7 @@ function buildDeviceIssueUrl(form, device, report) {
       property_count: props,
       device_info_answered: !!(report.deviceInfo && !report.deviceInfo.error),
       ...(report.devicemgmt ? { devicemgmt_answered: !!report.devicemgmt.answered, devicemgmt_capabilities: caps } : {}),
-      note: "the full report is attached as a file",
+      note: "the full report is a downloaded file: drag it into the 'What the device does' box",
     },
   };
   const candidates = [
