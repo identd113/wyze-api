@@ -303,3 +303,22 @@ test("two saves at the same time are written one after the other", async () => {
     assert.strictEqual(overlapped, false);
   } finally { await server.stop(); }
 });
+
+// ---- the page itself ----
+
+test("the page's script is valid, and the page uses nothing its security policy blocks", async () => {
+  const { server, port } = await start();
+  try {
+    const html = (await request(port, { path: "/?token=test-token-1234" })).text;
+    const scripts = [...html.matchAll(/<script nonce="[^"]+">([\s\S]*?)<\/script>/g)].map((m) => m[1]);
+    assert.strictEqual(scripts.length, 1, "one inline script, with the nonce");
+    assert.doesNotThrow(() => new (require("node:vm").Script)(scripts[0]), "the script parses");
+    assert.ok(!/\sstyle\s*=/.test(html.replace(/<style[\s\S]*?<\/style>/g, "")), "no inline style attributes: the policy allows only the nonce'd style element");
+    assert.ok(!/\son[a-z]+\s*=\s*["']/i.test(html.replace(/<script[\s\S]*?<\/script>/g, "")), "no inline event handler attributes");
+    assert.ok(!/<(script|link|img|iframe)[^>]+(src|href)\s*=\s*["']https?:/i.test(html), "nothing is loaded from another site");
+    // the i icon that carries the extra information
+    assert.match(scripts[0], /function info\(text, label/);
+    assert.match(scripts[0], /setAttribute\("role", "tooltip"\)/);
+    assert.match(html, /\.info \.tip \{/);
+  } finally { await server.stop(); }
+});

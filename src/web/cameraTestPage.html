@@ -45,7 +45,13 @@
   .nv { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; }
   .field { padding: 10px 0; border-top: 1px solid var(--line); }
   .field:first-of-type { margin-top: 10px; }
+  .fieldhead { display: flex; align-items: center; gap: 8px; }
   .field label { font-weight: 500; display: flex; align-items: center; gap: 8px; }
+  .info { position: relative; display: inline-flex; vertical-align: middle; }
+  .info button { width: 18px; height: 18px; padding: 0; border-radius: 50%; border: 1px solid var(--muted); background: transparent; color: var(--muted); font: italic 700 12px/16px Georgia, serif; cursor: help; }
+  .info button:hover, .info button:focus-visible, .info.open button { color: var(--accent-text); background: var(--accent); border-color: var(--accent); outline: none; }
+  .info .tip { display: none; position: absolute; z-index: 10; left: -4px; top: 26px; width: 340px; max-width: calc(100vw - 48px); padding: 9px 11px; background: var(--card); color: var(--text); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 20px rgba(0, 0, 0, .3); font: 400 13px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; font-style: normal; text-align: left; }
+  .info.open .tip, .info:hover .tip { display: block; }
   .field input[type=number] { width: 9em; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; }
   .field .state { margin: 4px 0 0; font-size: 13px; color: var(--muted); }
   .field .pending { color: var(--warn); }
@@ -86,6 +92,34 @@
     for (const k of kids) e.append(k);
     return e;
   };
+
+  // The i icon: more information as a tooltip. It opens on hover, on keyboard focus and on a tap or click, and closes
+  // on Escape or a click elsewhere. The text is set with textContent, never as HTML.
+  let infoCount = 0;
+  function closeInfos(except) {
+    document.querySelectorAll(".info.open").forEach((n) => { if (n !== except) { n.classList.remove("open"); n.querySelector("button").setAttribute("aria-expanded", "false"); } });
+  }
+  function info(text, label = "More information") {
+    const tipId = `tip-${++infoCount}`;
+    const button = el("button", { type: "button", textContent: "i" });
+    button.setAttribute("aria-label", label);
+    button.setAttribute("aria-describedby", tipId);
+    button.setAttribute("aria-expanded", "false");
+    const tip = el("span", { className: "tip", id: tipId, textContent: text });
+    tip.setAttribute("role", "tooltip");
+    const wrap = el("span", { className: "info" }, button, tip);
+    button.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const open = !wrap.classList.contains("open");
+      closeInfos(wrap);
+      wrap.classList.toggle("open", open);
+      button.setAttribute("aria-expanded", String(open));
+    };
+    return wrap;
+  }
+  document.addEventListener("click", () => closeInfos(null));
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeInfos(null); });
 
   const PARAM_NAMES = {
     1: "Status light", 2: "Night vision", 3: "Bitrate", 4: "Resolution", 5: "Frame rate", 6: "Flip (horizontal)",
@@ -217,7 +251,8 @@
       const state = el("div", { className: "state" });
       const refresh = () => {
         const parts = [`Saved: ${show(f.value, f)}`, `running: ${show(f.running, f)}`];
-        state.replaceChildren(document.createTextNode(parts.join(" · ")));
+        state.replaceChildren(document.createTextNode(parts.join(" · ")), document.createTextNode(" "),
+          info("Saved is what the config file holds now. Running is what the plugin is using. Most options are read when Homebridge starts, so a saved change shows here as saved, and running catches up after a restart.", "What saved and running mean"));
         if (f.pending) state.append(el("span", { className: "pending", textContent: " · restart Homebridge to apply" }));
         if (dirty.has(f.key)) state.append(el("span", { className: "changed", textContent: " · not saved yet" }));
       };
@@ -236,9 +271,14 @@
         };
       }
       const label = el("label", { htmlFor: id }, control, document.createTextNode(f.title));
+      const extra = [];
+      if (f.default !== undefined) extra.push(`Default: ${f.default}.`);
+      if (f.minimum !== undefined && f.maximum !== undefined) extra.push(`Allowed: ${f.minimum} to ${f.maximum}.`);
+      const more = [f.description, extra.join(" ")].filter(Boolean).join(" ");
       refresh();
-      box.append(el("div", { className: "field" }, label, state,
-        f.description ? el("details", {}, el("summary", { textContent: "What it does" }), el("div", { className: "meta", textContent: f.description })) : ""));
+      box.append(el("div", { className: "field" },
+        el("div", { className: "fieldhead" }, label, more ? info(more, `About ${f.title}`) : ""),
+        state));
     }
   }
 
