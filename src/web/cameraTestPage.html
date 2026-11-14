@@ -336,6 +336,79 @@
   }
   $("settings-reload").onclick = () => loadSettings("Reloaded from the file.");
 
+
+  async function runTest(card, cam, button) {
+    const steps = card.querySelector(".steps");
+    const answers = card.querySelector(".answers");
+    const note = card.querySelector(".note");
+    button.disabled = true;
+    note.textContent = "Testing... this can take 15 to 40 seconds.";
+    answers.replaceChildren();
+    card.querySelector(".nv").replaceChildren();
+    card.querySelector(".issue").replaceChildren();
+    const live = {};
+    renderSteps(steps, live);
+    let asked = 0;
+    try {
+      const res = await api(`/api/cameras/${cam.id}/test`, { method: "POST" });
+      if (!res.ok) throw new Error((await res.json()).error || res.statusText);
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let final = null;
+      let issueUrl = null;
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let nl;
+        while ((nl = buffer.indexOf("\n")) >= 0) {
+          const msg = JSON.parse(buffer.slice(0, nl));
+          buffer = buffer.slice(nl + 1);
+          if (msg.event === "step") {
+            if (/^K\d+$/.test(msg.step)) { asked += 1; note.textContent = `Asked ${asked} commands...`; } else { live[msg.step] = true; renderSteps(steps, live); }
+          } else if (msg.event === "done") { final = msg.result; issueUrl = msg.issueUrl || null; }
+        }
+      }
+      if (!final) throw new Error("the test ended without a result");
+      results[cam.id] = { model: cam.model, firmware: cam.firmware, result: final };
+      renderSteps(steps, final);
+      renderAnswers(answers, final);
+      if (final.error) { note.className = "note bad"; note.textContent = `Stopped: ${final.error}`; } else { note.className = "note"; note.textContent = ""; }
+      if (final.authenticated) nightControls(card, cam, final);
+      showIssueLink(card, issueUrl);
+      $("download").disabled = false;
+    } catch (e) {
+      note.className = "note bad";
+      note.textContent = `Failed: ${e.message}`;
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  function renderCamera(cam) {
+    const test = el("button", { className: "primary", textContent: "Test" });
+    const card = el("div", { className: "card" },
+      el("div", { className: "head" },
+        el("div", {}, el("div", { className: "name", textContent: cam.name }), el("div", { className: "meta", textContent: `${cam.model} · firmware ${cam.firmware}` })),
+        test),
+      el("ul", { className: "steps" }),
+      el("div", { className: "note" }),
+      el("div", { className: "answers" }),
+      el("div", { className: "nv" }),
+      el("div", { className: "issue" }));
+    if (cam.reason) { test.disabled = true; card.querySelector(".note").textContent = `Cannot be tested here: ${cam.reason}.`; }
+    test.onclick = () => runTest(card, cam, test);
+    return card;
+  }
+
+  $("download").onclick = () => {
+    const blob = new Blob([JSON.stringify({ generated: new Date().toISOString(), cameras: Object.values(results) }, null, 2)], { type: "application/json" });
+    const a = el("a", { href: URL.createObjectURL(blob), download: "wyze-camera-test.json" });
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
   // ---- detected sensors: shown as the config file holds them. This page only reads them; sensors are chosen in the host's own settings. ----
   function renderSensorCard(cam) {
     const box = el("div", { className: "field" });

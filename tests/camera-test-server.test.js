@@ -311,3 +311,15 @@ test("the page itself never writes settings: it has no save button and sends no 
   assert.ok(!html.includes("settings-save"));
   assert.ok(!html.includes("/api/sensors\", {"));
 });
+
+test("every name the page's script uses is defined (a missing function only shows in the browser)", async () => {
+  const { ESLint } = require("eslint");
+  const html = fs.readFileSync(path.join(__dirname, "../src/web/cameraTestPage.html"), "utf8");
+  const script = /<script[^>]*>([\s\S]*)<\/script>/.exec(html)[1];
+  const eslint = new ESLint({
+    useEslintrc: false,
+    overrideConfig: { root: true, parserOptions: { ecmaVersion: 2022 }, env: { browser: true, es2022: true }, rules: { "no-undef": "error" } },
+  });
+  const [result] = await eslint.lintText(script);
+  assert.deepStrictEqual(result.messages.map((m) => `${m.line}: ${m.message}`), []);
+});
