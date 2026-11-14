@@ -1413,6 +1413,7 @@ module.exports.DeviceModels = types.DeviceModels;
 for (const name of ["createCameraTestServer", "validateWebPort"]) {
   Object.defineProperty(module.exports, name, {
     enumerable: true,
+    configurable: true,
     get: () => require("./web/cameraTestServer")[name],
   });
 }
