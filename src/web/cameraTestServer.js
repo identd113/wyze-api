@@ -34,7 +34,8 @@ const os = require("os");
 const path = require("path");
 
 const tutk = require("../tutk/client");
-const { buildIssueUrl } = require("./issueLink");
+const { buildIssueUrl, buildDeviceIssueUrl } = require("./issueLink");
+const { buildReport } = require("../deviceReport");
 
 const MIN_PORT = 1024;
 const MAX_PORT = 65535;
@@ -129,12 +130,20 @@ function page(nonce) {
  *   { plans: [{ text, soon }], cameras: [{ id, name, model, plan, planActive, setting, notAuto,
  *   items: [{ key, label, ai, checked, blocked, warning, tag, other }], unnamed }] } read from the file now.
  *   Without it the page has no sensors tab.
+ * @param {(device: object) => boolean} [opts.unsupported] true for a device from the Wyze device list that the host has no
+ *   support for. With it, the page has an "Other devices" tab listing them, each with a Test button that reads what Wyze
+ *   knows about the device (read only; see src/deviceReport.js) and makes a link to the issue form with it filled in.
+ * @param {(model: string) => string|undefined} [opts.describeDevice] what the host already knows about a model code (one
+ *   sentence), shown on that device's card
+ * @param {object} [opts.versions] shown in the report, for example { plugin: "2.0.0" }
+ * @param {Function} [opts.deviceReport] default buildReport (src/deviceReport.js); tests give a stand-in
  * @param {object} [opts.issueForm] { url, template, origin, plugin, kind, deviceLabel(model) }: when given, a finished
  *   test comes with a link that opens that GitHub issue form with the test's findings filled in (see issueLink.js)
  */
 function createCameraTestServer({
   client, port, log = {}, host = "0.0.0.0", token = crypto.randomBytes(18).toString("hex"),
   probe = tutk.probeCamera, setNightVision = tutk.setNightVision, ephemeral = false, privateClientsOnly = true, issueForm = null, settings = null, sensors = null,
+  unsupported = null, describeDevice = null, versions = {}, deviceReport = buildReport,
 }) {
   if (!client || typeof client.getDeviceList !== "function") throw new Error("createCameraTestServer needs a client with getDeviceList()");
   if (!ephemeral) {
@@ -147,6 +156,7 @@ function createCameraTestServer({
   const failures = new Map(); // address -> { count, until }
   let busy = false;
   let cameras = []; // the last device list, in the order shown
+  let others = []; // the devices the host does not support, in the order shown
 
   const tokenOk = (given) => {
     if (typeof given !== "string") return false;
@@ -165,6 +175,41 @@ function createCameraTestServer({
       reason: tutk.cameraLocalSkipReason(d) || null,
       issueUrl: buildIssueUrl(issueForm, { model: d.product_model, firmware: d.firmware_ver }, null),
     }));
+  }
+
+  async function loadOthers() {
+    const list = await client.getDeviceList();
+    others = list.filter((d) => unsupported(d));
+    return others.map((d, i) => ({
+      id: `dev-${i + 1}`,
+      name: d.nickname,
+      model: d.product_model,
+      type: d.product_type,
+      firmware: d.firmware_ver,
+      connected: d.conn_state === 1,
+      known: (typeof describeDevice === "function" && describeDevice(d.product_model)) || null,
+      issueUrl: buildDeviceIssueUrl(issueForm, { model: d.product_model, type: d.product_type, firmware: d.firmware_ver }, null),
+    }));
+  }
+
+  const findOther = async (id) => {
+    if (!others.length) await loadOthers();
+    const m = /^dev-(\d+)$/.exec(id);
+    return m ? others[Number(m[1]) - 1] : undefined;
+  };
+
+  // What the report found, as short lines for the page.
+  function reportSteps(entry) {
+    const steps = [];
+    const answered = (part) => part && !part.error && !part.skipped;
+    steps.push({ name: "Property list", ok: answered(entry.propertyList), detail: answered(entry.propertyList) ? `${Object.keys(entry.propertyList).length} properties` : (entry.propertyList && entry.propertyList.error) || "no answer" });
+    steps.push({ name: "Device info", ok: answered(entry.deviceInfo), detail: answered(entry.deviceInfo) ? "answered" : (entry.deviceInfo && entry.deviceInfo.error) || "no answer" });
+    if (entry.devicemgmt) steps.push({ name: "Devicemgmt read", ok: !!entry.devicemgmt.answered, detail: entry.devicemgmt.answered ? `${Object.keys(entry.devicemgmt.capabilities || {}).length} capabilities` : entry.devicemgmt.error || "no answer" });
+    if (entry.local) {
+      const ok = !!(entry.local.authenticated);
+      steps.push({ name: "Direct local session", ok, detail: entry.local.skipped ? entry.local.skipped : ok ? `${Object.values(entry.local.answers || {}).filter((a) => a.answer).length} commands answered` : entry.local.error || "did not authenticate" });
+    }
+    return steps;
   }
 
   const findCamera = async (id) => {
@@ -271,6 +316,49 @@ function createCameraTestServer({
         }
       }
       return sendText(res, 405, "Method not allowed");
+    }
+
+    if (url.pathname === "/api/devices") {
+      if (!unsupported) return sendJson(res, 404, { error: "this page has no other-devices tab" });
+      if (req.method !== "GET") return sendText(res, 405, "Method not allowed");
+      try { return sendJson(res, 200, { devices: await loadOthers() }); } catch (e) {
+        say("error", `could not read the device list: ${e.message}`);
+        return sendJson(res, 502, { error: "could not read the device list from Wyze" });
+      }
+    }
+
+    const dm = /^\/api\/devices\/(dev-\d+)\/report$/.exec(url.pathname);
+    if (dm) {
+      if (!unsupported) return sendJson(res, 404, { error: "this page has no other-devices tab" });
+      if (req.method !== "POST") return sendText(res, 405, "Method not allowed");
+      const device = await findOther(dm[1]);
+      if (!device) return sendJson(res, 404, { error: "no such device" });
+      if (busy) return sendJson(res, 409, { error: "another test is running; wait for it to finish" });
+      busy = true;
+      try {
+        const report = await deviceReport({
+          client,
+          select: (d) => d.mac === device.mac,
+          versions,
+          routing: { devicemgmt: (m) => (typeof client.cameraUsesDeviceMgmt === "function" ? client.cameraUsesDeviceMgmt(m) : false) },
+          localProbe: probe,
+        });
+        const entry = report.devices[0];
+        if (!entry) return sendJson(res, 404, { error: "that device is no longer on the account" });
+        const info = { model: device.product_model, type: device.product_type, firmware: device.firmware_ver };
+        say("info", `collected a report for a ${device.product_model} (${device.product_type})`);
+        return sendJson(res, 200, {
+          done: true,
+          steps: reportSteps(entry),
+          report: { generated: report.generated, versions: report.versions, device: entry },
+          issueUrl: buildDeviceIssueUrl(issueForm, info, entry),
+        });
+      } catch (e) {
+        say("warn", `could not collect a report: ${e.message}`);
+        return sendJson(res, 502, { error: `could not collect a report: ${e.message}` });
+      } finally {
+        busy = false;
+      }
     }
 
     const m = /^\/api\/cameras\/(cam-\d+)\/(test|night-vision)$/.exec(url.pathname);

@@ -5,7 +5,7 @@
 const test = require("node:test");
 const assert = require("node:assert");
 
-const { buildReport, scrub, readOnly, localSkipReason, READ_METHODS, DEVICEMGMT_FALLBACK_MODEL } = require("../scripts/device-report-lib");
+const { buildReport, scrub, readOnly, localSkipReason, READ_METHODS, DEVICEMGMT_FALLBACK_MODEL } = require("../src/deviceReport");
 const WyzeAPI = require("../src/index");
 
 const MAC = "AABBCCDDEEFF";
@@ -120,7 +120,7 @@ test("values from the device list are removed wherever they turn up, even when t
 });
 
 test("property values are scrubbed too", async () => {
-  const { flattenProperties } = require("../scripts/device-report-lib");
+  const { flattenProperties } = require("../src/deviceReport");
   const out = flattenProperties({ property_list: [{ pid: "P1", pvalue: "10.0.0.9" }, { pid: "P2", pvalue: "2" }] }, []);
   assert.deepStrictEqual(out, { P1: "<ip>", P2: "2" });
 });

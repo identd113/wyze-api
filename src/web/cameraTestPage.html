@@ -102,6 +102,7 @@
     <div class="brand"><div class="mark" aria-hidden="true">W</div><div><b>Wyze camera test</b><span>for Homebridge</span></div></div>
     <div class="nav" role="tablist" aria-orientation="vertical" aria-label="Sections">
       <button role="tab" id="tab-cameras" data-panel="cameras" aria-selected="true" aria-controls="panel-cameras"><span class="ico" aria-hidden="true">&#9673;</span>Cameras<span class="count" id="count-cameras"></span></button>
+      <button role="tab" id="tab-devices" data-panel="devices" aria-selected="false" aria-controls="devices" hidden><span class="ico" aria-hidden="true">&#9635;</span>Other devices<span class="count" id="count-devices"></span></button>
       <button role="tab" id="tab-sensors" data-panel="sensors" aria-selected="false" aria-controls="sensors" hidden><span class="ico" aria-hidden="true">&#9678;</span>Sensors<span class="count" id="count-sensors"></span></button>
       <button role="tab" id="tab-settings" data-panel="settings" aria-selected="false" aria-controls="settings" hidden><span class="ico" aria-hidden="true">&#9881;</span>Settings<span class="count" id="count-settings"></span></button>
     </div>
@@ -118,6 +119,12 @@
         <span class="meta">The file has no addresses, ids or keys.</span>
       </div>
     </div>
+    <section id="devices" class="panel" role="tabpanel" aria-labelledby="tab-devices" hidden>
+      <h1>Other devices <span id="devices-info"></span></h1>
+      <p class="lead">Devices on your Wyze account that the plugin does not support yet. Test one to collect what Wyze knows about it, and send that to the plugin's author with one click.</p>
+      <div id="devices-list"></div>
+      <div id="devices-note" class="note"></div>
+    </section>
     <section id="sensors" class="panel" role="tabpanel" aria-labelledby="tab-sensors" hidden>
       <h1>Sensors</h1>
       <p class="lead">What each camera was found to have, and which sensors it gets in HomeKit. To change them, use the plugin's settings in Homebridge. <span id="sensors-info"></span></p>
@@ -464,6 +471,66 @@
   $("sensors-reload").onclick = () => loadSensors("Reloaded from the file.");
   $("sensors-info").append(info("Which sensors each camera gets in HomeKit. Automatic gives Motion and Sound where the camera reports them, plus Person, Vehicle, Pet and Package when your Wyze plan has AI detection. Face is never automatic. This page only shows them. Change them in Homebridge: Plugins, Wyze Smart Home, Settings. Reload re-reads the file.", "About detected sensors"));
 
+  // ---- other devices: ones the plugin has no support for. Test reads what Wyze knows about the device (read only) ----
+  function renderDeviceCard(dev) {
+    const results = el("div");
+    const issue = el("div", { className: "issue" });
+    const steps = el("ul", { className: "steps" });
+    const button = el("button", { className: "primary", textContent: "Test and collect report" });
+    const head = el("div", { className: "head" }, el("div", {}, el("span", { className: "name", textContent: dev.name }),
+      el("span", { className: "meta", textContent: ` ${dev.model} · ${dev.type}${dev.firmware ? ` · firmware ${dev.firmware}` : ""}${dev.connected ? "" : " · offline"}` })));
+    const box = el("div", { className: "card" }, head);
+    if (dev.known) box.append(el("div", { className: "meta", textContent: dev.known }));
+    box.append(el("div", { className: "row" }, button), steps, results, issue);
+    button.onclick = async () => {
+      button.disabled = true;
+      steps.replaceChildren(el("li", { textContent: "Asking Wyze (read only)..." }));
+      results.replaceChildren();
+      issue.replaceChildren();
+      try {
+        const res = await api(`/api/devices/${dev.id}/report`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || res.statusText);
+        steps.replaceChildren(...data.steps.map((st) => el("li", { className: st.ok ? "ok" : "bad", textContent: `${st.ok ? "✓" : "✗"} ${st.name}: ${st.detail}` })));
+        const download = el("button", { textContent: "Download report (JSON)" });
+        download.onclick = () => {
+          const blob = new Blob([JSON.stringify(data.report, null, 2)], { type: "application/json" });
+          const a = el("a", { href: URL.createObjectURL(blob), download: `wyze-device-report-${dev.model}.json` });
+          a.click();
+          URL.revokeObjectURL(a.href);
+        };
+        results.replaceChildren(el("div", { className: "row" }, download));
+        if (data.issueUrl && data.issueUrl.startsWith("https://github.com/")) {
+          issue.append(
+            el("a", { href: data.issueUrl, target: "_blank", rel: "noopener noreferrer", textContent: "Report this device on GitHub" }),
+            el("span", { className: "meta", textContent: " Opens the add-a-device form with the model, type and what was found filled in. If the report is long the form holds a summary, so attach the downloaded file. Nothing is sent until you submit it there." }),
+          );
+        }
+      } catch (e) {
+        steps.replaceChildren(el("li", { className: "bad", textContent: `✗ ${e.message}` }));
+      } finally {
+        button.disabled = false;
+      }
+    };
+    return box;
+  }
+
+  async function loadDevices() {
+    try {
+      const res = await api("/api/devices");
+      if (res.status === 404) { $("devices").hidden = true; return; }
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || res.statusText);
+      if (!data.devices.length) { $("devices").hidden = true; return; }
+      setCount("count-devices", String(data.devices.length));
+      $("devices-list").replaceChildren(...data.devices.map(renderDeviceCard));
+      $("devices").hidden = false;
+    } catch (e) {
+      $("devices").hidden = true; // nothing to offer if the list cannot be read; the Cameras tab shows that error
+    }
+  }
+  $("devices-info").append(info("A device is listed here when your Wyze account has it and the plugin has no support for it. Test asks Wyze for the device's property list and device info (and for a camera, its devicemgmt answer and, on your network, a read-only local session). Nothing is changed on the device. Addresses, names and ids are removed from the report before it is shown.", "About other devices"));
+
   // ---- sections: tabs down the side. A section the host does not provide (it hides itself) loses its tab. ----
   const tabs = [...document.querySelectorAll(".nav [role=tab]")];
   const panelOf = (tab) => $(tab.dataset.panel === "cameras" ? "panel-cameras" : tab.dataset.panel);
@@ -502,6 +569,7 @@
 
   (async () => {
     if (!token) return showStatus("Open the link from the log. It ends with ?token=...", true);
+    loadDevices();
     loadSensors();
     loadSettings(); // the settings are the host's own file, so they do not wait for Wyze
     try {

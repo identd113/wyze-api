@@ -36,3 +36,5 @@ Notes for people working on `wyze-api` or building on it. The user-facing guide 
 ## Reporting a device
 
 If a device is missing or only partly works, run `node scripts/device-report.js` from a checkout of this repo and paste the file it writes into the issue. It only reads, and it removes MAC addresses, names, IP addresses and account identifiers. Add `--local` when you are on the same network as your cameras: it also asks each camera directly (read only) for its settings, such as night vision. See [`../scripts/README.md`](../scripts/README.md#device-reportjs).
+
+The camera test page (`npm run camera-test`, or inside Homebridge with a plugin that turns it on) does the same from a browser: its **Other devices** tab lists the devices the host program does not support, and its Test button builds this report for one device and opens the issue form with it filled in. The code is in [`../src/deviceReport.js`](../src/deviceReport.js).

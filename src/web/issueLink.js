@@ -60,4 +60,69 @@ function buildIssueUrl(form, camera, result) {
   return url;
 }
 
-module.exports = { buildIssueUrl, MAX_URL };
+// The issue form's "What kind of device is it?" options, picked from the product type Wyze gives.
+function kindOf(type) {
+  const t = String(type || "").toLowerCase();
+  if (/camera|doorbell|cam/.test(t)) return "Camera or doorbell";
+  if (/light|bulb/.test(t)) return "Light, bulb or light strip";
+  if (/plug|outlet|switch/.test(t)) return "Plug, outlet or switch";
+  if (/sensor|contact|motion|leak|climate|gateway/.test(t)) return "Sensor (contact, motion, leak, climate)";
+  if (/lock|keypad/.test(t)) return "Lock or keypad";
+  if (/thermostat|roomsensor/.test(t)) return "Thermostat or room sensor";
+  if (/vacuum|sprinkler|irrigation|purifier|appliance/.test(t)) return "Vacuum, sprinkler or other appliance";
+  return "Something else";
+}
+
+/**
+ * The link for a device the host does not support, from what the report on it found (src/deviceReport.js: the
+ * property list, device info and, for a camera, the devicemgmt read, already scrubbed of addresses and ids). The
+ * report goes into the form's device information box when it fits in a link; if not, a short summary of it does,
+ * and the person attaches the downloaded file. Nothing is sent: GitHub shows the form and the person submits it.
+ * @param {object} form  as for buildIssueUrl
+ * @param {{model: string, type?: string, firmware?: string}} device
+ * @param {object} [report] one entry of the device report
+ * @returns {string|null}
+ */
+function buildDeviceIssueUrl(form, device, report) {
+  if (!form || !form.url || !/^https:\/\/github\.com\//.test(form.url)) return null;
+  const label = typeof form.deviceLabel === "function" ? form.deviceLabel(device.model) : undefined;
+  const fields = [["template", form.template || "new-device.yml"], ["report", "It is not supported yet"]];
+  if (label) fields.push(["device", label]);
+  else fields.push(["model", device.model]);
+  fields.push(["kind", (typeof form.kindFor === "function" && form.kindFor(device.type)) || kindOf(device.type)]);
+  if (form.plugin) fields.push(["plugin", form.plugin]);
+  if (form.origin) fields.push(["origin", form.origin]);
+
+  // product_model first: the issue form's check looks for the model code in this text
+  const head = { product_model: device.model, ...(device.type ? { product_type: device.type } : {}), ...(device.firmware ? { firmware_ver: device.firmware } : {}) };
+  const make = (extra) => `${form.url}?${[...fields, ...extra].map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join("&")}`;
+  if (!report) return make([]);
+
+  const props = report.propertyList && !report.propertyList.error ? Object.keys(report.propertyList).length : 0;
+  const caps = report.devicemgmt && report.devicemgmt.answered ? Object.keys(report.devicemgmt.capabilities || {}) : [];
+  const sentence = `Collected with the camera test page (read only): ${props ? `${props} properties in the property list` : "no property list"}`
+    + `${report.deviceInfo && !report.deviceInfo.error ? "; device info answered" : "; device info did not answer"}`
+    + `${report.devicemgmt ? (report.devicemgmt.answered ? `; devicemgmt answered with ${caps.length} capabilities` : "; devicemgmt did not answer") : ""}.`;
+  const summary = {
+    ...head,
+    device_report: {
+      property_count: props,
+      device_info_answered: !!(report.deviceInfo && !report.deviceInfo.error),
+      ...(report.devicemgmt ? { devicemgmt_answered: !!report.devicemgmt.answered, devicemgmt_capabilities: caps } : {}),
+      note: "the full report is attached as a file",
+    },
+  };
+  const candidates = [
+    [["details", sentence], ["blob", JSON.stringify({ ...head, device_report: report })]],
+    [["details", sentence], ["blob", JSON.stringify(summary)]],
+    [["blob", JSON.stringify(summary)]],
+    [["blob", JSON.stringify(head)]],
+  ];
+  for (const extra of candidates) {
+    const url = make(extra);
+    if (url.length <= MAX_URL) return url;
+  }
+  return make([]);
+}
+
+module.exports = { buildIssueUrl, buildDeviceIssueUrl, kindOf, MAX_URL };

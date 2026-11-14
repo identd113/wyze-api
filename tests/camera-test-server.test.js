@@ -323,3 +323,133 @@ test("every name the page's script uses is defined (a missing function only show
   const [result] = await eslint.lintText(script);
   assert.deepStrictEqual(result.messages.map((m) => `${m.line}: ${m.message}`), []);
 });
+
+// ---- the other-devices tab: devices the host does not support, tested and reported ----
+
+const THINGS = [
+  { mac: "AABBCCDDEEFF", product_model: "CO_AP1", product_type: "AirPurifier", nickname: "Bedroom purifier", firmware_ver: "1.2.3", conn_state: 1, device_params: { ip: "10.0.0.7" } },
+  { mac: "112233445566", product_model: "WLPP1", product_type: "Plug", nickname: "Lamp", firmware_ver: "1.0", conn_state: 1, device_params: {} },
+  { mac: "665544332211", product_model: "GW_WC", product_type: "Camera", nickname: "Window", firmware_ver: "9.9", conn_state: 0, device_params: { dtls: 1, ip: "10.0.0.8", p2p_id: "U", } },
+];
+const issueForm = { url: "https://github.com/example/plugin/issues/new", template: "new-device.yml", origin: "camera-test-page", plugin: "2.0.0", deviceLabel: (m) => (m === "WLPP1" ? "Plugs and switches - Plug (WLPP1)" : undefined) };
+const ENTRY = {
+  label: "device-1", model: "CO_AP1", type: "AirPurifier", firmware: "1.2.3",
+  propertyList: { P3: "1", P5: "2", P1301: "40" }, deviceInfo: { power: 1 },
+};
+
+function startOthers(extra = {}) {
+  const calls = { report: [] };
+  const unsupported = (d) => d.product_model !== "WLPP1";
+  return {
+    calls,
+    ...{ promise: start({
+      client: { getDeviceList: async () => THINGS, cameraUsesDeviceMgmt: () => false },
+      unsupported,
+      describeDevice: (m) => (m === "GW_WC" ? "Wyze Window Cam: nothing is known about how it is controlled yet." : undefined),
+      versions: { plugin: "2.0.0" },
+      issueForm,
+      deviceReport: async (opts) => {
+        calls.report.push({ selected: THINGS.filter(opts.select).map((d) => d.product_model), versions: opts.versions, hasProbe: typeof opts.localProbe === "function" });
+        const entry = ENTRY;
+        return { generated: "2026-11-14T00:00:00Z", versions: opts.versions, devices: [entry] };
+      },
+      ...extra,
+    }) },
+  };
+}
+
+test("without an unsupported check there are no device routes", async () => {
+  const { server, port } = await start({});
+  try {
+    assert.strictEqual((await request(port, { path: "/api/devices", headers: auth })).status, 404);
+    assert.strictEqual((await request(port, { method: "POST", path: "/api/devices/dev-1/report", headers: json, body: {} })).status, 404);
+  } finally { await server.stop(); }
+});
+
+test("the devices the host does not support are listed, with what it knows, and the ids show no address", async () => {
+  const { promise } = startOthers();
+  const { server, port } = await promise;
+  try {
+    assert.strictEqual((await request(port, { path: "/api/devices" })).status, 401, "needs the token");
+    const res = await request(port, { path: "/api/devices", headers: auth });
+    const devices = JSON.parse(res.text).devices;
+    assert.deepStrictEqual(devices.map((d) => [d.id, d.model, d.type]), [["dev-1", "CO_AP1", "AirPurifier"], ["dev-2", "GW_WC", "Camera"]]);
+    assert.strictEqual(devices[1].known, "Wyze Window Cam: nothing is known about how it is controlled yet.")
+    assert.strictEqual(devices[0].known, null);
+    assert.match(devices[0].issueUrl, /^https:\/\/github\.com\/example\/plugin\/issues\/new\?/);
+    assert.match(devices[0].issueUrl, /model=CO_AP1/);
+    assert.match(devices[0].issueUrl, /kind=Vacuum%2C%20sprinkler%20or%20other%20appliance/);
+    assert.match(devices[0].issueUrl, /report=It%20is%20not%20supported%20yet/);
+    assert.ok(!res.text.includes("AABBCCDDEEFF") && !res.text.includes("10.0.0.7"), "no MAC or address in the answer");
+  } finally { await server.stop(); }
+});
+
+test("the Test button collects a report for that one device and returns steps, the report and a prefilled link", async () => {
+  const { promise, calls } = startOthers();
+  const { server, port } = await promise;
+  try {
+    await request(port, { path: "/api/devices", headers: auth });
+    const res = await request(port, { method: "POST", path: "/api/devices/dev-1/report", headers: json, body: {} });
+    assert.strictEqual(res.status, 200);
+    const body = JSON.parse(res.text);
+    assert.deepStrictEqual(calls.report, [{ selected: ["CO_AP1"], versions: { plugin: "2.0.0" }, hasProbe: true }]);
+    assert.deepStrictEqual(body.steps.map((s) => [s.name, s.ok]), [["Property list", true], ["Device info", true]]);
+    assert.strictEqual(body.steps[0].detail, "3 properties");
+    assert.strictEqual(body.report.device.model, "CO_AP1");
+    const link = new URL(body.issueUrl);
+    assert.strictEqual(link.searchParams.get("model"), "CO_AP1");
+    const blob = JSON.parse(link.searchParams.get("blob"));
+    assert.strictEqual(blob.product_model, "CO_AP1", "the form's check finds the model code first");
+    assert.deepStrictEqual(blob.device_report.propertyList, { P3: "1", P5: "2", P1301: "40" }, "the report fits, so it is in the link");
+    assert.match(link.searchParams.get("details"), /3 properties in the property list/);
+    assert.ok(body.issueUrl.length <= 7000);
+  } finally { await server.stop(); }
+});
+
+test("a long report is summarised in the link, and the full one is still in the answer for the download", async () => {
+  const big = { ...ENTRY, propertyList: Object.fromEntries(Array.from({ length: 400 }, (_, i) => [`P${i}`, "x".repeat(20)])) };
+  const { promise } = startOthers({ deviceReport: async (opts) => ({ generated: "now", versions: opts.versions, devices: [big] }) });
+  const { server, port } = await promise;
+  try {
+    await request(port, { path: "/api/devices", headers: auth });
+    const body = JSON.parse((await request(port, { method: "POST", path: "/api/devices/dev-1/report", headers: json, body: {} })).text);
+    assert.ok(body.issueUrl.length <= 7000);
+    const blob = JSON.parse(new URL(body.issueUrl).searchParams.get("blob"));
+    assert.strictEqual(blob.device_report.property_count, 400);
+    assert.match(blob.device_report.note, /attached as a file/);
+    assert.strictEqual(Object.keys(body.report.device.propertyList).length, 400);
+  } finally { await server.stop(); }
+});
+
+test("a report that fails is a 502 and leaves the page free for the next one; an unknown device is a 404; only POST is accepted", async () => {
+  let fail = true;
+  const { promise } = startOthers({ deviceReport: async (opts) => { if (fail) throw new Error("Wyze said no"); return { generated: "now", versions: opts.versions, devices: [ENTRY] }; } });
+  const { server, port } = await promise;
+  try {
+    await request(port, { path: "/api/devices", headers: auth });
+    const failed = await request(port, { method: "POST", path: "/api/devices/dev-1/report", headers: json, body: {} });
+    assert.strictEqual(failed.status, 502);
+    assert.match(JSON.parse(failed.text).error, /Wyze said no/);
+    fail = false;
+    assert.strictEqual((await request(port, { method: "POST", path: "/api/devices/dev-1/report", headers: json, body: {} })).status, 200);
+    assert.strictEqual((await request(port, { method: "POST", path: "/api/devices/dev-9/report", headers: json, body: {} })).status, 404);
+    assert.strictEqual((await request(port, { method: "GET", path: "/api/devices/dev-1/report", headers: auth })).status, 405);
+    assert.strictEqual((await request(port, { method: "POST", path: "/api/devices/dev-1/report", headers: { ...json, origin: "http://evil.example.com" }, body: {} })).status, 403);
+  } finally { await server.stop(); }
+});
+
+test("a device report and a camera test never run at the same time", async () => {
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const { promise } = startOthers({ deviceReport: async (opts) => { await gate; return { generated: "now", versions: opts.versions, devices: [ENTRY] }; } });
+  const { server, port } = await promise;
+  try {
+    await request(port, { path: "/api/devices", headers: auth });
+    const first = request(port, { method: "POST", path: "/api/devices/dev-1/report", headers: json, body: {} });
+    await new Promise((r) => setTimeout(r, 40));
+    const second = await request(port, { method: "POST", path: "/api/devices/dev-2/report", headers: json, body: {} });
+    assert.strictEqual(second.status, 409);
+    release();
+    assert.strictEqual((await first).status, 200);
+  } finally { release(); await server.stop(); }
+});

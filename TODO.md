@@ -4,7 +4,7 @@
 
 Goal: when someone reports a device that is missing or only partly works, we ask them to run one command and paste the result, instead of writing a new probe for each model. `scripts/probe-camera-properties.js` already does part of this for cameras (property list and device info, MACs replaced by `camera-1`, `camera-2`).
 
-Done and committed on `2.x`, not pushed (2026-11-13): `scripts/device-report.js` and `scripts/device-report-lib.js`, `tests/device-report.test.js`, the section in `scripts/README.md`, and a "Reporting a device" section in `docs/README.md`. `_deviceMgmtGetIotProp` takes an optional third argument, the model whose property list to use. A live read-only run on this account covered 10 devices, and a check against the device list found no MAC, name, IP, Wi-Fi name, serial or P2P id in the output.
+Done and committed on `2.x`, not pushed (2026-11-13): `scripts/device-report.js` and `src/deviceReport.js`, `tests/device-report.test.js`, the section in `scripts/README.md`, and a "Reporting a device" section in `docs/README.md`. `_deviceMgmtGetIotProp` takes an optional third argument, the model whose property list to use. A live read-only run on this account covered 10 devices, and a check against the device list found no MAC, name, IP, Wi-Fi name, serial or P2P id in the output.
 
 Still to do:
 - Add a line to the next release's `CHANGELOG.md` section and release notes (the script and the new argument). It ships in the release after beta.4.

@@ -1,5 +1,5 @@
-// Builds the report for scripts/device-report.js. Kept apart from the script so
-// the tests can run it against a stand-in client, with no network.
+// Builds the report for scripts/device-report.js and the camera test page's "other devices" tab. Kept apart
+// from them so the tests can run it against a stand-in client, with no network.
 //
 // Read-only: the only client methods called are the four in READ_METHODS.
 
@@ -133,7 +133,7 @@ function readOnly(client) {
   });
 }
 
-const { cameraLocalSkipReason: localSkipReason } = require("../src/tutk/client");
+const { cameraLocalSkipReason: localSkipReason } = require("./tutk/client");
 
 async function localSection(d, probe, literals) {
   const why = localSkipReason(d);
@@ -151,17 +151,18 @@ async function localSection(d, probe, literals) {
  * @param {object} opts
  * @param {object} opts.client a logged-in WyzeAPI (or a stand-in with the READ_METHODS)
  * @param {string[]} [opts.models] only these model codes; empty means every device
+ * @param {(device: object) => boolean} [opts.select] only the devices this returns true for (one device, for the test page)
  * @param {object} [opts.versions] shown at the end, for example { "wyze-api": "2.0.0" }
  * @param {object} [opts.routing] { devicemgmt: (model) => bool, runAction: (model) => bool }
  * @param {(camera: object) => Promise<object>} [opts.localProbe] for each camera that has the dtls flag
  *   and an address, opens a read-only local session and returns what it answered. It gets the raw device
  *   (with its keys), so what it returns is scrubbed here like everything else. Left out unless asked for.
  */
-async function buildReport({ client: rawClient, models = [], versions = {}, routing = {}, localProbe = null }) {
+async function buildReport({ client: rawClient, models = [], select = null, versions = {}, routing = {}, localProbe = null }) {
   const client = readOnly(rawClient);
   const wanted = models.map((m) => m.toUpperCase());
   const all = await client.getDeviceList();
-  const devices = all.filter((d) => !wanted.length || wanted.includes(String(d.product_model).toUpperCase()));
+  const devices = all.filter((d) => (!wanted.length || wanted.includes(String(d.product_model).toUpperCase())) && (!select || select(d)));
 
   const literals = literalsOf(all);
   const report = { generated: new Date().toISOString(), versions, devices: [] };

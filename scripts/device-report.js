@@ -23,7 +23,7 @@
 const fs = require("fs");
 const path = require("path");
 
-const { buildReport } = require("./device-report-lib");
+const { buildReport } = require("../src/deviceReport");
 
 const args = process.argv.slice(2);
 function option(name) {

@@ -178,5 +178,5 @@ With `--local` the script also contacts each camera on your home network and add
 - **Time:** about 15 to 20 seconds for a camera that answers most commands, up to about 40 if it answers few.
 - **Safe to use anywhere:** it opens no connection unless you pass `--local`.
 
-The code is in `device-report-lib.js`; its tests are in `tests/device-report.test.js`.
+The code is in `src/deviceReport.js`; its tests are in `tests/device-report.test.js`.
 
