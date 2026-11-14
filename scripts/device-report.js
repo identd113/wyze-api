@@ -1,7 +1,7 @@
 // Read-only report on the devices of a Wyze account, for bug reports about a device
 // that is missing or only partly works. Not part of `npm test` (it needs the network
 // and your login). Run it yourself and paste the file it writes into the issue:
-//   node scripts/device-report.js [--model CODE[,CODE...]] [--out FILE]
+//   node scripts/device-report.js [--model CODE[,CODE...]] [--out FILE] [--local]
 //
 // Without --model it covers every device. It writes JSON (default
 // ./wyze-device-report.json). Only read calls are made: the device list, each device's
@@ -9,6 +9,13 @@
 // sets, switches, deletes or logs out. MAC addresses, device names, IP addresses, the
 // Wi-Fi name and account identifiers are removed from the output; read the file once
 // before you post it.
+//
+// --local (opt in) also contacts each camera directly on your home network, with the
+// read-only TUTK client in future/tutk/spike/. It needs to run on the same network as the
+// cameras. It authenticates and then asks a fixed list of get commands (night vision,
+// IR LED, status light, video settings, battery use, ...); it sends no setting. The file
+// records what each camera answered, or why it could not be asked. Each camera takes up to
+// about 40 seconds if it answers little.
 //
 // Login comes from USERNAME, PASSWORD, KEY_ID and API_KEY in the environment or in
 // the .env file next to the package, as with the other scripts.
@@ -24,10 +31,11 @@ function option(name) {
   return i === -1 ? undefined : args[i + 1];
 }
 if (args.includes("--help") || args.includes("-h")) {
-  console.log("Usage: node scripts/device-report.js [--model CODE[,CODE...]] [--out FILE]");
+  console.log("Usage: node scripts/device-report.js [--model CODE[,CODE...]] [--out FILE] [--local]");
   process.exit(0);
 }
 const models = (option("--model") || "").split(",").map((m) => m.trim()).filter(Boolean);
+const withLocal = args.includes("--local");
 const outFile = option("--out") || path.join(process.cwd(), "wyze-device-report.json");
 
 const envPath = path.join(__dirname, "..", ".env");
@@ -59,6 +67,7 @@ const wyze = new WyzeAPI({
     client: wyze,
     models,
     versions: { "wyze-api": require("../package.json").version, node: process.version },
+    localProbe: withLocal ? (camera) => require("../future/tutk/spike/tutk-spike").probeCamera(camera) : null,
     routing: {
       devicemgmt: (m) => wyze.cameraUsesDeviceMgmt(m),
       runAction: (m) => require("../src/types").DeviceModels.CAMERA_LIGHT_RUN_ACTION.includes(m),

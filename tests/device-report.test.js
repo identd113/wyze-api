@@ -5,7 +5,7 @@
 const test = require("node:test");
 const assert = require("node:assert");
 
-const { buildReport, scrub, readOnly, READ_METHODS, DEVICEMGMT_FALLBACK_MODEL } = require("../scripts/device-report-lib");
+const { buildReport, scrub, readOnly, localSkipReason, READ_METHODS, DEVICEMGMT_FALLBACK_MODEL } = require("../scripts/device-report-lib");
 const WyzeAPI = require("../src/index");
 
 const MAC = "AABBCCDDEEFF";
@@ -123,4 +123,73 @@ test("property values are scrubbed too", async () => {
   const { flattenProperties } = require("../scripts/device-report-lib");
   const out = flattenProperties({ property_list: [{ pid: "P1", pvalue: "10.0.0.9" }, { pid: "P2", pvalue: "2" }] }, []);
   assert.deepStrictEqual(out, { P1: "<ip>", P2: "2" });
+});
+
+// ---- --local: the read-only TUTK probe ----
+
+const LOCAL_CAMERA = {
+  ...DEVICES[0],
+  device_params: { ...DEVICES[0].device_params, dtls: 1 },
+};
+
+test("without a probe the report has no local section", async () => {
+  const { client } = fakeClient();
+  const report = await buildReport({ client });
+  assert.strictEqual(report.devices[0].local, undefined);
+});
+
+test("the probe is called for a camera with the dtls flag, with its keys, and only for cameras", async () => {
+  const { client } = fakeClient({ getDeviceList: async () => [LOCAL_CAMERA, DEVICES[1]] });
+  const seen = [];
+  const report = await buildReport({
+    client,
+    localProbe: async (camera) => { seen.push(camera); return { reachable: true, authenticated: true }; },
+  });
+  assert.strictEqual(seen.length, 1, "the bulb is not probed");
+  assert.deepStrictEqual(Object.keys(seen[0]).sort(), ["enr", "host", "mac", "model", "uid"]);
+  assert.strictEqual(seen[0].host, "192.168.1.50");
+  assert.deepStrictEqual(report.devices[0].local, { reachable: true, authenticated: true });
+  assert.strictEqual(report.devices[1].local, undefined);
+});
+
+test("what the probe returns is scrubbed like the rest of the report", async () => {
+  const { client } = fakeClient({ getDeviceList: async () => [LOCAL_CAMERA] });
+  const report = await buildReport({
+    client,
+    localProbe: async () => ({
+      camera: { firmware: "4.53.2.1" },
+      note: `reached 192.168.1.50 as ${MAC} (Backyard) with SECRETENR`,
+      answers: { K10040: { answer: { bytes: 1, hex: "03", value: 3 } } },
+    }),
+  });
+  const text = JSON.stringify(report);
+  for (const secret of [MAC, "192.168.1.50", "SECRETENR", "Backyard", "ABCDEFGHIJKLMNOPQRST"]) assert.ok(!text.includes(secret), `leaked ${secret}`);
+  assert.strictEqual(report.devices[0].local.camera.firmware, "4.53.2.1", "a firmware version is kept");
+  assert.strictEqual(report.devices[0].local.answers.K10040.answer.value, 3);
+});
+
+test("a probe that throws is recorded, and a camera that cannot be probed says why", async () => {
+  const noDtls = { ...DEVICES[0], device_params: { ...DEVICES[0].device_params } };
+  const { client } = fakeClient({ getDeviceList: async () => [LOCAL_CAMERA, noDtls] });
+  let calls = 0;
+  const report = await buildReport({ client, localProbe: async () => { calls++; throw new Error(`no answer from 192.168.1.50`); } });
+  assert.strictEqual(calls, 1, "the camera without the dtls flag is not probed");
+  assert.match(report.devices[0].local.error, /no answer from <(id|ip)>/); // the camera's own address is a known value, so it shows as <id>
+  assert.match(report.devices[1].local.skipped, /dtls/);
+  assert.match(localSkipReason({ device_params: { dtls: 1 } }), /IP address/);
+  assert.match(localSkipReason({ device_params: { dtls: 1, ip: "10.0.0.2" } }), /missing a key or id/);
+  assert.strictEqual(localSkipReason(LOCAL_CAMERA), "");
+});
+
+test("the TUTK probe can only send get commands", () => {
+  const { DEFAULT_PROBE_CODES, READ_ONLY_COMMANDS } = require("../future/tutk/spike/tutk-spike");
+  const messages = require("../future/tutk/lib/messages");
+  const names = Object.keys(messages).filter((n) => /^K\d+/.test(n));
+  for (const code of Object.keys(READ_ONLY_COMMANDS).map(Number)) {
+    const matching = names.filter((n) => n.startsWith(`K${code}`));
+    assert.ok(matching.length > 0, `K${code} has no message class`);
+    // every class that shares the code must be a get or a check; a set, format, take-photo, reset or start must not
+    for (const name of matching) assert.ok(/^K\d+(Get|Check)/.test(name), `${name} is not a get command`);
+  }
+  for (const code of DEFAULT_PROBE_CODES) assert.ok(READ_ONLY_COMMANDS[code], `K${code} is probed but not in the read-only list`);
 });

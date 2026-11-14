@@ -301,8 +301,17 @@ class DtlsClient {
     this.keys = null;
     this.appData = [];
     this.appWaiters = [];
-    this.done = new Promise((res, rej) => { this.finish = res; this.fail = rej; });
+    this.done = new Promise((res, rej) => {
+      this.finish = res;
+      this.fail = (e) => { clearTimeout(this.timer); rej(e); };
+    });
     this.done.catch(() => {});
+  }
+
+  /** Stops the retransmit timer; call it when the session is closed. */
+  close() {
+    this.closed = true;
+    clearTimeout(this.timer);
   }
 
   start() {
@@ -336,7 +345,10 @@ class DtlsClient {
     this.retries = 0;
     clearTimeout(this.timer);
     const fire = () => {
-      for (const d of this.flight) this.send(d);
+      if (this.closed) return;
+      for (const d of this.flight) {
+        try { this.send(d); } catch (_) { /* the socket may already be closed */ }
+      }
       this.timer = setTimeout(() => {
         if (++this.retries > 20) return this.fail(new Error(`DTLS handshake: no reply in state ${this.state}`));
         vlog(`DTLS retransmit #${this.retries} (${this.state})`);
@@ -581,7 +593,10 @@ class Session {
 
   hmacKey() { return Buffer.concat([this.uid, this.authKey]); }
 
-  raw(buf) { this.socket.send(buf, this.port, this.host); }
+  raw(buf) {
+    if (this.closedSocket) return;
+    try { this.socket.send(buf, this.port, this.host, () => {}); } catch (_) { /* socket closed */ }
+  }
   write(buf) { this.raw(this.isCC51 ? buf : transCodeBlob(buf)); }
 
   // ---- packet builders ----
@@ -761,6 +776,7 @@ class Session {
   }
 
   close() {
+    this.closedSocket = true;
     try { this.socket.close(); } catch (_) { /* already closed */ }
   }
 }
@@ -1098,7 +1114,73 @@ async function main() {
   }
 }
 
-main().then((code) => process.exit(code), (e) => {
-  console.error(`\nFAILED: ${e.message}`);
-  process.exit(1);
-});
+/**
+ * Everything device-report.js needs from one camera, without printing anything: can it be reached, does
+ * the DTLS session and the K10000 to K10003 authentication work, and what do the read-only commands in
+ * `codes` answer. It never sends a setting. The result holds no address, id or key.
+ */
+const DEFAULT_PROBE_CODES = [10020, 10030, 10040, 10044, 10050, 10070, 10074, 10200, 10290, 10446, 10448, 10604, 10620, 10624, 10632, 10640, 10720, 10788, 10820];
+
+function answerSummary(buf) {
+  const text = buf.toString("latin1");
+  const brace = text.search(/[{[]/);
+  if (brace >= 0) {
+    try { return redact(JSON.parse(text.slice(brace))); } catch (_) { /* not JSON */ }
+  }
+  // Bytes are spaced apart, so a short answer never looks like a MAC address to the report's scrubber.
+  const out = { bytes: buf.length, hex: buf.subarray(0, 32).toString("hex").replace(/(..)(?=.)/g, "$1 ") };
+  if (buf.length === 1) out.value = buf[0];
+  if (buf.length === 4) out.uint32 = buf.readUInt32LE(0);
+  return out;
+}
+
+async function probeCamera({ host, port = 32761, uid, enr, mac, timeoutMs = 8000, queryTimeoutMs = 2000, codes = DEFAULT_PROBE_CODES }) {
+  const result = { reachable: false, sessionForm: null, dtlsHandshake: false, avLogin: false, authenticated: false };
+  const session = new Session({ host, port, uid, authKey: calculateAuthKey(enr, mac), enr });
+  let dtls = null;
+  let av = null;
+  const within = (promise, label) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error(`timeout: ${label}`)), timeoutMs))]);
+  try {
+    await session.connect(timeoutMs);
+    result.reachable = true;
+    result.sessionForm = session.isCC51 ? "CC51" : "IOTC";
+    dtls = new DtlsClient((d) => session.sendDtls(d), derivePsk(enr));
+    session.attach(dtls);
+    dtls.start();
+    await within(dtls.done, "DTLS handshake");
+    result.dtlsHandshake = true;
+    av = new AvChannel(dtls, enr);
+    await av.login(timeoutMs);
+    result.avLogin = true;
+    const auth = await av.authenticate(timeoutMs);
+    result.authenticated = true;
+    result.challengeStatus = auth.status;
+    const basic = auth.info && auth.info.cameraInfo && auth.info.cameraInfo.basicInfo;
+    if (basic) result.camera = { firmware: basic.firmware, model: basic.model, hardware: basic.hardware };
+    result.answers = {};
+    for (const code of codes) {
+      if (!READ_ONLY_COMMANDS[code]) continue; // only get commands are ever sent
+      try {
+        result.answers[`K${code}`] = { meaning: READ_ONLY_COMMANDS[code], answer: answerSummary(await av.query(code, queryTimeoutMs)) };
+      } catch (e) {
+        result.answers[`K${code}`] = { meaning: READ_ONLY_COMMANDS[code], answer: null };
+      }
+    }
+  } catch (e) {
+    result.error = e.message;
+  } finally {
+    if (av) av.close();
+    if (dtls) dtls.close();
+    session.close();
+  }
+  return result;
+}
+
+module.exports = { probeCamera, DEFAULT_PROBE_CODES, READ_ONLY_COMMANDS };
+
+if (require.main === module) {
+  main().then((code) => process.exit(code), (e) => {
+    console.error(`\nFAILED: ${e.message}`);
+    process.exit(1);
+  });
+}

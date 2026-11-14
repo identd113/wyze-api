@@ -133,14 +133,38 @@ function readOnly(client) {
   });
 }
 
+// Why a camera cannot be probed over the local network, or "" when it can
+function localSkipReason(d) {
+  const p = d.device_params || {};
+  if (p.dtls !== 1) return "the camera does not report the dtls flag, and only the DTLS session is built";
+  if (!p.ip) return "the Wyze device list has no IP address for it";
+  if (!d.enr || !p.p2p_id || !d.mac) return "the Wyze device list is missing a key or id the local session needs";
+  return "";
+}
+
+async function localSection(d, probe, literals) {
+  const why = localSkipReason(d);
+  if (why) return { skipped: why };
+  const p = d.device_params;
+  try {
+    const result = await probe({ host: p.ip, uid: p.p2p_id, enr: d.enr, mac: d.mac, model: d.product_model });
+    return scrub(result, literals);
+  } catch (e) {
+    return { error: scrubString(String(e && e.message ? e.message : e), literals) };
+  }
+}
+
 /**
  * @param {object} opts
  * @param {object} opts.client a logged-in WyzeAPI (or a stand-in with the READ_METHODS)
  * @param {string[]} [opts.models] only these model codes; empty means every device
  * @param {object} [opts.versions] shown at the end, for example { "wyze-api": "2.0.0" }
  * @param {object} [opts.routing] { devicemgmt: (model) => bool, runAction: (model) => bool }
+ * @param {(camera: object) => Promise<object>} [opts.localProbe] for each camera that has the dtls flag
+ *   and an address, opens a read-only local session and returns what it answered. It gets the raw device
+ *   (with its keys), so what it returns is scrubbed here like everything else. Left out unless asked for.
  */
-async function buildReport({ client: rawClient, models = [], versions = {}, routing = {} }) {
+async function buildReport({ client: rawClient, models = [], versions = {}, routing = {}, localProbe = null }) {
   const client = readOnly(rawClient);
   const wanted = models.map((m) => m.toUpperCase());
   const all = await client.getDeviceList();
@@ -172,9 +196,12 @@ async function buildReport({ client: rawClient, models = [], versions = {}, rout
         ...(dm.ok ? { capabilities: summarizeCapabilities(dm.result, literals) } : { error: dm.error, httpStatus: dm.httpStatus, response: dm.response }),
       };
     }
+    if (localProbe && String(d.product_type).toLowerCase() === "camera") {
+      entry.local = await localSection(d, localProbe, literals);
+    }
     report.devices.push(entry);
   }
   return report;
 }
 
-module.exports = { READ_METHODS, DEVICEMGMT_FALLBACK_MODEL, scrub, scrubString, flattenProperties, readOnly, buildReport };
+module.exports = { localSkipReason, READ_METHODS, DEVICEMGMT_FALLBACK_MODEL, scrub, scrubString, flattenProperties, readOnly, buildReport };
