@@ -123,3 +123,25 @@ their homebridge config, with a clear log message if the auto-fetch
 fails and the plugin falls back to cloud streaming.
 
 For now, the script is a standalone CLI for early testing.
+
+## `device-report.js`
+
+A read-only report on the devices of a Wyze account, for bug reports about a device that is missing or only partly works. Run it yourself and paste the file into the issue.
+
+```bash
+# From a checkout of wyze-api (it needs the repo's src/ and a login):
+node scripts/device-report.js                      # every device
+node scripts/device-report.js --model HL_CFL2      # only this model code (comma-separate several)
+node scripts/device-report.js --out my-report.json # default: ./wyze-device-report.json
+```
+
+Login comes from `USERNAME`, `PASSWORD`, `KEY_ID` and `API_KEY` in the environment or in `.env` (the same as the other scripts here).
+
+For each device it records the model, type, firmware, the property list (`P1056 = 2`, and so on) and the device info. For cameras it also records whether the devicemgmt API answers and which capabilities it lists. A camera with no devicemgmt property list of its own is asked with the Floodlight Pro list (`LD_CFP`), and the report says so. It also records which API path this version of the library uses for the device.
+
+It only reads. The code reaches the client through a view that offers four read methods, and a test fails if that grows. It never sets, switches, deletes or logs out.
+
+MAC addresses, device names, IP addresses, the Wi-Fi name, serial numbers, account identifiers, thumbnail URLs and the time zone are removed. Any value the device list gives for a device (such as its P2P id) is also removed wherever another answer repeats it. Read the file once before you post it, and add the plugin version, which it cannot see.
+
+The code is in `device-report-lib.js`; its tests are in `tests/device-report.test.js`.
+

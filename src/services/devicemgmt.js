@@ -71,10 +71,12 @@ module.exports = {
    * Cam Pro, OG, Pan v4). Returns the raw response; see
    * `_deviceMgmtParseState` for the normalized view.
    */
-  async _deviceMgmtGetIotProp(deviceMac, deviceModel) {
-    const capabilities = devicemgmtProps[deviceModel];
+  async _deviceMgmtGetIotProp(deviceMac, deviceModel, propsModel = deviceModel) {
+    // propsModel lets scripts/device-report.js ask a model with no list of its own
+    // using another model's list. The request still names the real model.
+    const capabilities = devicemgmtProps[propsModel];
     if (!capabilities) {
-      throw new Error(`_deviceMgmtGetIotProp: no property list for model ${deviceModel}`);
+      throw new Error(`_deviceMgmtGetIotProp: no property list for model ${propsModel}`);
     }
     await this.maybeLogin();
     const payload = {

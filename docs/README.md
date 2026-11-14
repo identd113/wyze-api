@@ -32,3 +32,7 @@ Notes for people working on `wyze-api` or building on it. The user-facing guide 
 - Tests are in [`../tests/`](../tests/) and run with `npm test`. They need no network and no credentials. [`compat-1x.test.js`](../tests/compat-1x.test.js) checks that 2.x still offers everything 1.1.15 did.
 - Parked experiments are in [`../future/`](../future/README.md), with their own tests (`npm run test:future`).
 - The probe scripts that produced the endpoint notes are in [`../scripts/`](../scripts/README.md).
+
+## Reporting a device
+
+If a device is missing or only partly works, run `node scripts/device-report.js` from a checkout of this repo and paste the file it writes into the issue. It only reads, and it removes MAC addresses, names, IP addresses and account identifiers. See [`../scripts/README.md`](../scripts/README.md#device-reportjs).
