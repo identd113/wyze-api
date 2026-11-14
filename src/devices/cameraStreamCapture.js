@@ -924,6 +924,7 @@ async function _startRtpForwarding({
     log("debug", `forwarding track kind=${track.kind}`);
     if (track.kind === "video") {
       videoTrackInfo = { receiver: pc.getReceivers().find((r) => r.kind === "video"), ssrc: track.ssrc };
+      if (track.codec?.payloadType != null) videoPayloadType = track.codec.payloadType;
       // Ask the camera to emit a keyframe immediately so HomeKit doesn't have
       // to wait for the next natural IDR. Keep prodding until we've actually
       // captured SPS+PPS — some firmwares send P-frames first and ignore the
