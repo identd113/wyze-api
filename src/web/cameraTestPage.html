@@ -43,6 +43,8 @@
   summary { cursor: pointer; color: var(--muted); }
   .footer { margin-top: 18px; }
   .nv { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; }
+  .issue { margin-top: 10px; }
+  .issue a { color: var(--accent); }
 </style>
 </head>
 <body>
@@ -170,6 +172,18 @@
     box.append(line, row, confirmRow, out);
   }
 
+  // The link opens a GitHub issue form with this test's findings filled in. Nothing is sent from here: GitHub shows
+  // the form, and you read it and decide. Only a github.com address from the server is ever used.
+  function showIssueLink(card, url) {
+    const box = card.querySelector(".issue");
+    box.replaceChildren();
+    if (!url || !url.startsWith("https://github.com/")) return;
+    box.append(
+      el("a", { href: url, target: "_blank", rel: "noopener noreferrer", textContent: "Report this camera on GitHub" }),
+      el("span", { className: "meta", textContent: " Opens a form with the model, firmware and these findings filled in. Nothing is sent until you submit it there. Attach the downloaded results if asked." }),
+    );
+  }
+
   async function runTest(card, cam, button) {
     const steps = card.querySelector(".steps");
     const answers = card.querySelector(".answers");
@@ -178,6 +192,7 @@
     note.textContent = "Testing... this can take 15 to 40 seconds.";
     answers.replaceChildren();
     card.querySelector(".nv").replaceChildren();
+    card.querySelector(".issue").replaceChildren();
     const live = {};
     renderSteps(steps, live);
     let asked = 0;
@@ -188,6 +203,7 @@
       const decoder = new TextDecoder();
       let buffer = "";
       let final = null;
+      let issueUrl = null;
       for (;;) {
         const { value, done } = await reader.read();
         if (done) break;
@@ -198,7 +214,7 @@
           buffer = buffer.slice(nl + 1);
           if (msg.event === "step") {
             if (/^K\d+$/.test(msg.step)) { asked += 1; note.textContent = `Asked ${asked} commands...`; } else { live[msg.step] = true; renderSteps(steps, live); }
-          } else if (msg.event === "done") final = msg.result;
+          } else if (msg.event === "done") { final = msg.result; issueUrl = msg.issueUrl || null; }
         }
       }
       if (!final) throw new Error("the test ended without a result");
@@ -207,6 +223,7 @@
       renderAnswers(answers, final);
       if (final.error) { note.className = "note bad"; note.textContent = `Stopped: ${final.error}`; } else { note.className = "note"; note.textContent = ""; }
       if (final.authenticated) nightControls(card, cam, final);
+      showIssueLink(card, issueUrl);
       $("download").disabled = false;
     } catch (e) {
       note.className = "note bad";
@@ -225,7 +242,8 @@
       el("ul", { className: "steps" }),
       el("div", { className: "note" }),
       el("div", { className: "answers" }),
-      el("div", { className: "nv" }));
+      el("div", { className: "nv" }),
+      el("div", { className: "issue" }));
     if (cam.reason) { test.disabled = true; card.querySelector(".note").textContent = `Cannot be tested here: ${cam.reason}.`; }
     test.onclick = () => runTest(card, cam, test);
     return card;

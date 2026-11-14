@@ -185,3 +185,33 @@ test("repeated wrong tokens are blocked", async () => {
     assert.strictEqual((await request(port, { path: "/api/cameras", headers: auth })).status, 429, "even the right token is blocked for a while");
   } finally { await server.stop(); }
 });
+
+test("with an issue form, the camera list and a finished test carry a prefilled GitHub link", async () => {
+  const issueForm = {
+    url: "https://github.com/example/plugin/issues/new", template: "new-device.yml", origin: "camera-test-page", plugin: "9.9.9", kind: "Camera or doorbell",
+    deviceLabel: (m) => (m === "HL_DB2" ? "Doorbells - Video Doorbell v2 (HL_DB2)" : undefined),
+  };
+  const { server, port } = await start({ issueForm });
+  try {
+    const list = JSON.parse((await request(port, { path: "/api/cameras", headers: auth })).text).cameras;
+    const before = new URL(list[0].issueUrl).searchParams;
+    assert.strictEqual(before.get("device"), "Doorbells - Video Doorbell v2 (HL_DB2)");
+    assert.strictEqual(before.get("blob"), null);
+    const res = await request(port, { method: "POST", path: "/api/cameras/cam-1/test", headers: auth });
+    const done = res.text.trim().split("\n").map((l) => JSON.parse(l)).find((l) => l.event === "done");
+    const after = new URL(done.issueUrl).searchParams;
+    assert.strictEqual(JSON.parse(after.get("blob")).product_model, "HL_DB2");
+    assert.strictEqual(JSON.parse(after.get("blob")).camera_test_page.nightVision, "auto");
+    for (const secret of [MAC, "192.168.1.50", "SECRETENR", "ABCDEFGHIJKLMNOPQRST"]) assert.ok(!decodeURIComponent(done.issueUrl).includes(secret), `leaked ${secret}`);
+  } finally { await server.stop(); }
+});
+
+test("without an issue form there is no link", async () => {
+  const { server, port } = await start();
+  try {
+    const list = JSON.parse((await request(port, { path: "/api/cameras", headers: auth })).text).cameras;
+    assert.strictEqual(list[0].issueUrl, null);
+    const res = await request(port, { method: "POST", path: "/api/cameras/cam-1/test", headers: auth });
+    assert.strictEqual(res.text.trim().split("\n").map((l) => JSON.parse(l)).find((l) => l.event === "done").issueUrl, null);
+  } finally { await server.stop(); }
+});

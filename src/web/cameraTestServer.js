@@ -34,6 +34,7 @@ const os = require("os");
 const path = require("path");
 
 const tutk = require("../tutk/client");
+const { buildIssueUrl } = require("./issueLink");
 
 const MIN_PORT = 1024;
 const MAX_PORT = 65535;
@@ -120,10 +121,12 @@ function page(nonce) {
  * @param {Function} [opts.setNightVision] default tutk.setNightVision
  * @param {boolean} [opts.ephemeral] tests only: let the system pick a port
  * @param {boolean} [opts.privateClientsOnly] default true
+ * @param {object} [opts.issueForm] { url, template, origin, plugin, kind, deviceLabel(model) }: when given, a finished
+ *   test comes with a link that opens that GitHub issue form with the test's findings filled in (see issueLink.js)
  */
 function createCameraTestServer({
   client, port, log = {}, host = "0.0.0.0", token = crypto.randomBytes(18).toString("hex"),
-  probe = tutk.probeCamera, setNightVision = tutk.setNightVision, ephemeral = false, privateClientsOnly = true,
+  probe = tutk.probeCamera, setNightVision = tutk.setNightVision, ephemeral = false, privateClientsOnly = true, issueForm = null,
 }) {
   if (!client || typeof client.getDeviceList !== "function") throw new Error("createCameraTestServer needs a client with getDeviceList()");
   if (!ephemeral) {
@@ -152,6 +155,7 @@ function createCameraTestServer({
       model: d.product_model,
       firmware: d.firmware_ver,
       reason: tutk.cameraLocalSkipReason(d) || null,
+      issueUrl: buildIssueUrl(issueForm, { model: d.product_model, firmware: d.firmware_ver }, null),
     }));
   }
 
@@ -256,7 +260,7 @@ function createCameraTestServer({
         say("info", `testing ${cam.nickname} (${cam.product_model})`);
         try {
           const result = await probe({ ...target, onStep: (step) => send({ event: "step", step }) });
-          send({ event: "done", result });
+          send({ event: "done", result, issueUrl: buildIssueUrl(issueForm, { model: cam.product_model, firmware: cam.firmware_ver }, result) });
           say("info", `${cam.nickname}: ${result.authenticated ? "authenticated" : `failed (${result.error || "no answer"})`}`);
         } catch (e) {
           send({ event: "done", result: { error: e.message } });
