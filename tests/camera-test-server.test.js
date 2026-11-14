@@ -404,6 +404,7 @@ test("the Test button collects a report for that one device and returns steps, t
     const blob = JSON.parse(link.searchParams.get("blob"));
     assert.strictEqual(blob.product_model, "CO_AP1", "the form's check finds the model code first");
     assert.deepStrictEqual(blob.device_report.propertyList, { P3: "1", P5: "2", P1301: "40" }, "the report fits, so it is in the link");
+    assert.match(link.searchParams.get("details"), /^Wyze lists it as type AirPurifier, model CO_AP1, firmware 1\.2\.3\. Collected/);
     assert.match(link.searchParams.get("details"), /3 properties in the property list/);
     assert.match(link.searchParams.get("details"), /from https:\/\/api\.example\.test\/app\/v2\/device\/get_property_list and https:\/\/api\.example\.test\/app\/v2\/device\/get_device_Info/);
     assert.deepStrictEqual(blob.endpoints, ENTRY.endpoints, "the form's device information box names the endpoints too");
