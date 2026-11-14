@@ -1092,6 +1092,17 @@ async function setNightVision({ host, port = 32761, uid, enr, mac, value, timeou
   }
 }
 
+/** Reads night vision: "on", "off" or "auto". Sends nothing but the read. */
+async function readNightVision({ host, port = 32761, uid, enr, mac, timeoutMs = 8000 }) {
+  const open = await openCamera({ host, port, uid, enr, mac, timeoutMs });
+  try {
+    const value = await open.av.getNightVision(timeoutMs);
+    return NV_NAMES[value] || String(value);
+  } finally {
+    open.close();
+  }
+}
+
 /**
  * Why a device from the Wyze device list cannot be reached with this client, or "" when it can. The client
  * speaks the DTLS form of the protocol, which cameras mark with `device_params.dtls = 1`.
@@ -1105,6 +1116,6 @@ function cameraLocalSkipReason(d) {
 }
 
 module.exports = {
-  cameraLocalSkipReason, Session, DtlsClient, AvChannel, openCamera, probeCamera, setNightVision, calculateAuthKey, derivePsk,
+  cameraLocalSkipReason, Session, DtlsClient, AvChannel, openCamera, probeCamera, setNightVision, readNightVision, calculateAuthKey, derivePsk,
   READ_ONLY_COMMANDS, DEFAULT_PROBE_CODES, NV_NAMES, NV_VALUES, redact, describePayload, answerSummary,
 };

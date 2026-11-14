@@ -1145,6 +1145,46 @@ module.exports = class WyzeAPI {
     return response.data;
   }
 
+  // ---- Camera night vision, over the local network (the Wyze cloud does not expose it) ----
+  // The camera is asked directly (see src/tutk/client.js), so this only works from the same network as the camera,
+  // for a camera whose device list entry has the dtls flag, an IP and its keys. One conversation per camera at a
+  // time: the camera serves a few sessions, and a second at once only fails.
+
+  async _localCamera(mac) {
+    const tutk = require("./tutk/client");
+    const device = (await this.getDeviceList()).find((d) => d.mac === mac);
+    if (!device) throw new Error("no such camera on this account");
+    const why = tutk.cameraLocalSkipReason(device);
+    if (why) throw new Error(`night vision cannot be reached: ${why}`);
+    return { tutk, target: { host: device.device_params.ip, uid: device.device_params.p2p_id, enr: device.enr, mac: device.mac } };
+  }
+
+  _oneAtATime(mac, job) {
+    this._nightVisionBusy = this._nightVisionBusy || new Map();
+    const run = (this._nightVisionBusy.get(mac) || Promise.resolve()).then(job);
+    const tail = run.catch(() => {});
+    this._nightVisionBusy.set(mac, tail);
+    tail.then(() => { if (this._nightVisionBusy.get(mac) === tail) this._nightVisionBusy.delete(mac); });
+    return run;
+  }
+
+  /** The camera's night vision: "on", "off" or "auto". */
+  async getCameraNightVision(mac) {
+    return this._oneAtATime(mac, async () => {
+      const { tutk, target } = await this._localCamera(mac);
+      return tutk.readNightVision(target);
+    });
+  }
+
+  /** Sets night vision to "on", "off" or "auto" and reads it back: { before, after, matches }. */
+  async setCameraNightVision(mac, value) {
+    if (!["on", "off", "auto"].includes(String(value).toLowerCase())) throw new Error("night vision must be on, off or auto");
+    return this._oneAtATime(mac, async () => {
+      const { tutk, target } = await this._localCamera(mac);
+      return tutk.setNightVision({ ...target, value: String(value).toLowerCase() });
+    });
+  }
+
   async getObjectListSafe() {
     try {
       return await this.getObjectList();
