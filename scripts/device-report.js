@@ -11,7 +11,7 @@
 // before you post it.
 //
 // --local (opt in) also contacts each camera directly on your home network, with the
-// read-only TUTK client in future/tutk/spike/. It needs to run on the same network as the
+// read-only TUTK client in src/tutk/client.js. It needs to run on the same network as the
 // cameras. It authenticates and then asks a fixed list of get commands (night vision,
 // IR LED, status light, video settings, battery use, ...); it sends no setting. The file
 // records what each camera answered, or why it could not be asked. Each camera takes up to
@@ -67,7 +67,7 @@ const wyze = new WyzeAPI({
     client: wyze,
     models,
     versions: { "wyze-api": require("../package.json").version, node: process.version },
-    localProbe: withLocal ? (camera) => require("../future/tutk/spike/tutk-spike").probeCamera(camera) : null,
+    localProbe: withLocal ? (camera) => require("../src/tutk/client").probeCamera(camera) : null,
     routing: {
       devicemgmt: (m) => wyze.cameraUsesDeviceMgmt(m),
       runAction: (m) => require("../src/types").DeviceModels.CAMERA_LIGHT_RUN_ACTION.includes(m),

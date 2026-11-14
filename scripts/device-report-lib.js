@@ -133,14 +133,7 @@ function readOnly(client) {
   });
 }
 
-// Why a camera cannot be probed over the local network, or "" when it can
-function localSkipReason(d) {
-  const p = d.device_params || {};
-  if (p.dtls !== 1) return "the camera does not report the dtls flag, and only the DTLS session is built";
-  if (!p.ip) return "the Wyze device list has no IP address for it";
-  if (!d.enr || !p.p2p_id || !d.mac) return "the Wyze device list is missing a key or id the local session needs";
-  return "";
-}
+const { cameraLocalSkipReason: localSkipReason } = require("../src/tutk/client");
 
 async function localSection(d, probe, literals) {
   const why = localSkipReason(d);

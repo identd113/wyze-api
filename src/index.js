@@ -1408,3 +1408,11 @@ module.exports.IrrigationSoilType = types.IrrigationSoilType;
 module.exports.propertyIds = types.propertyIds;
 module.exports.WyzeAccessoryModels = types.WyzeAccessoryModels;
 module.exports.DeviceModels = types.DeviceModels;
+
+// The browser test page for cameras. Loaded on first use so importing the library stays light.
+for (const name of ["createCameraTestServer", "validateWebPort"]) {
+  Object.defineProperty(module.exports, name, {
+    enumerable: true,
+    get: () => require("./web/cameraTestServer")[name],
+  });
+}

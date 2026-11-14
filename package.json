@@ -12,6 +12,7 @@
     "lint": "eslint src scripts tests --max-warnings=0",
     "test:future": "node --test future/*/test/*.test.js",
     "fetch-wyze-sdk": "node scripts/fetch-wyze-sdk.js",
+    "camera-test": "node scripts/camera-test-web.js",
     "tutk-smoke": "future/tutk/docker/run-tutk-smoke.sh",
     "tutk-smoke-real": "future/tutk/docker/run-real-camera-smoke.sh"
   },

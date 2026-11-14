@@ -182,7 +182,7 @@ test("a probe that throws is recorded, and a camera that cannot be probed says w
 });
 
 test("the TUTK probe can only send get commands", () => {
-  const { DEFAULT_PROBE_CODES, READ_ONLY_COMMANDS } = require("../future/tutk/spike/tutk-spike");
+  const { DEFAULT_PROBE_CODES, READ_ONLY_COMMANDS } = require("../src/tutk/client");
   const messages = require("../future/tutk/lib/messages");
   const names = Object.keys(messages).filter((n) => /^K\d+/.test(n));
   for (const code of Object.keys(READ_ONLY_COMMANDS).map(Number)) {

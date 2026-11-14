@@ -124,6 +124,27 @@ fails and the plugin falls back to cloud streaming.
 
 For now, the script is a standalone CLI for early testing.
 
+## `camera-test-web.js`
+
+A web page for testing your Wyze cameras from a browser. Run it on a computer on the same network as the cameras, for example the machine that runs Homebridge, and open the link it prints.
+
+```bash
+node scripts/camera-test-web.js              # port 8099
+node scripts/camera-test-web.js --port 9000  # 1024 to 65535
+```
+
+Login comes from `USERNAME`, `PASSWORD`, `KEY_ID` and `API_KEY` in the environment or in `.env`. The script prints a link ending in `?token=...`; open it from a browser on the same network. The page lists the account's cameras. **Test** asks one camera directly over the local network (the read-only TUTK commands described under `--local` below) and shows each step as it passes and what the camera answered. After a test, **Off / Auto / On** set night vision; each asks you to confirm first. **Download results** saves the answers as JSON (no addresses, ids or keys).
+
+A browser cannot speak the camera protocol, so the server does the talking. It can change a camera setting, so it is not open to the world:
+
+- Every request needs the random token (new at every start). It is checked in constant time, and eight wrong tokens block the sender for ten minutes.
+- Only clients on the local network are served (loopback and private addresses). A request that carries a proxy header (`X-Forwarded-For`, `CF-Connecting-IP` and so on) is refused, so it does not work behind a tunnel or reverse proxy, on purpose.
+- The `Host` header must be an IP address, `localhost`, a name without dots or a `.local` name, and a request from a page on another origin is refused. That stops a web page on the internet from reaching it through your browser.
+- One test or change runs at a time. A change needs `confirm: true` in the request, which the page sends only after you press Confirm.
+- It is plain HTTP, meant for your own network. Do not forward the port to the internet.
+
+The port: 0 means off (the script refuses it), and 1 to 1023 is refused because those need root. The same checks are exported for other programs: `WyzeAPI.validateWebPort(value)` and `WyzeAPI.createCameraTestServer({ client, port, log })`; the Homebridge plugin uses them to start the page from its config. The server is in `src/web/cameraTestServer.js`, the page in `src/web/cameraTestPage.html`, and the tests in `tests/camera-test-server.test.js`.
+
 ## `device-report.js`
 
 A read-only report on the devices of a Wyze account, for bug reports about a device that is missing or only partly works. Run it yourself and paste the file into the issue.
@@ -148,7 +169,7 @@ MAC addresses, device names, IP addresses, the Wi-Fi name, serial numbers, accou
 
 With `--local` the script also contacts each camera on your home network and adds a `local` section per camera. Run it from a computer on the same network as the cameras; with no route to them the section says it got no reply.
 
-- **What it does:** it opens a session with the camera (UDP discovery, then a DTLS 1.2 handshake, then the camera's challenge login), using the pure-JavaScript client in `future/tutk/spike/tutk-spike.js`. Then it asks a fixed list of get commands: camera settings, night vision, IR LED, status light, video settings, overlays, motion, battery use and similar. For each it records what the camera answered, or `null` if it did not answer. A wired camera gives no battery data, so those two answer `null`.
+- **What it does:** it opens a session with the camera (UDP discovery, then a DTLS 1.2 handshake, then the camera's challenge login), using the pure-JavaScript client in `src/tutk/client.js`. Then it asks a fixed list of get commands: camera settings, night vision, IR LED, status light, video settings, overlays, motion, battery use and similar. For each it records what the camera answered, or `null` if it did not answer. A wired camera gives no battery data, so those two answer `null`.
 - **What it records:** which steps worked (reachable, handshake, login, authentication), the form of the session (`CC51` or `IOTC`), the camera's own firmware and model, and the answers. It never records an address, id or key.
 - **It only reads.** The client sends the login and get commands only. Anything else is refused by name, and a test checks that every command on the list is a get or a check.
 - **Which cameras:** those the Wyze device list marks with the `dtls` flag and gives an IP address (all four cameras tested here do). Others get a `skipped` line saying why. Cameras on the Gwell protocol (OG, Pan v4) are not covered.

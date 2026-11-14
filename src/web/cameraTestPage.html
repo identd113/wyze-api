@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wyze camera test</title>
+<style nonce="__NONCE__">
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --text: #1c2430; --muted: #5d6877; --line: #dfe3e9;
+    --accent: #1e66d0; --accent-text: #ffffff; --ok: #1a7f37; --bad: #b3261e; --warn: #8a5a00;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12161c; --card: #1b212a; --text: #e6eaf0; --muted: #98a3b3; --line: #2c3541;
+      --accent: #5b9bf0; --accent-text: #0b1118; --ok: #5fd07c; --bad: #ff8a80; --warn: #e5b45a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 20px 16px 48px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  p.lead { color: var(--muted); margin: 0 0 18px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; }
+  .head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; justify-content: space-between; }
+  .name { font-weight: 600; font-size: 17px; }
+  .meta { color: var(--muted); font-size: 13px; }
+  button { font: inherit; border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 8px; padding: 7px 14px; cursor: pointer; }
+  button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; align-items: center; }
+  .steps { list-style: none; padding: 0; margin: 12px 0 0; }
+  .steps li { padding: 2px 0; color: var(--muted); }
+  .steps li.ok { color: var(--ok); }
+  .steps li.bad { color: var(--bad); }
+  .note { color: var(--warn); font-size: 13px; margin-top: 8px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
+  th, td { text-align: left; padding: 5px 8px 5px 0; border-top: 1px solid var(--line); vertical-align: top; word-break: break-word; }
+  th { color: var(--muted); font-weight: 500; width: 42%; }
+  .none { color: var(--muted); }
+  .good { color: var(--ok); }
+  .bad { color: var(--bad); }
+  details { margin-top: 8px; }
+  summary { cursor: pointer; color: var(--muted); }
+  .footer { margin-top: 18px; }
+  .nv { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Wyze camera test</h1>
+  <p class="lead">Asks each camera directly over your home network. A test only reads. Changing night vision asks you to confirm first.</p>
+  <div id="status" class="card" hidden></div>
+  <div id="cameras"></div>
+  <div class="footer row">
+    <button id="download" disabled>Download results (JSON)</button>
+    <span class="meta">The file has no addresses, ids or keys.</span>
+  </div>
+</main>
+<script nonce="__NONCE__">
+(() => {
+  "use strict";
+  const params = new URLSearchParams(location.search);
+  const token = params.get("token") || "";
+  history.replaceState(null, "", location.pathname); // keep the token out of the address bar
+  const results = {};
+  const $ = (id) => document.getElementById(id);
+  const el = (tag, props = {}, ...kids) => {
+    const e = Object.assign(document.createElement(tag), props);
+    for (const k of kids) e.append(k);
+    return e;
+  };
+
+  const PARAM_NAMES = {
+    1: "Status light", 2: "Night vision", 3: "Bitrate", 4: "Resolution", 5: "Frame rate", 6: "Flip (horizontal)",
+    7: "Flip (vertical)", 8: "Timestamp overlay", 13: "Motion alarm", 14: "Motion level", 15: "Sound alarm",
+    16: "Sound level", 17: "Smoke alarm", 18: "CO alarm", 21: "Motion tagging", 22: "Time zone (hours)",
+  };
+  const NIGHT = { 1: "on", 2: "off", 3: "auto" };
+  const STEPS = [["reachable", "Camera answered on the network"], ["dtlsHandshake", "Secure session (DTLS) opened"], ["avLogin", "Logged in"], ["authenticated", "Authenticated"]];
+
+  async function api(path, options = {}) {
+    const res = await fetch(path, { ...options, headers: { "X-Test-Token": token, ...(options.headers || {}) } });
+    return res;
+  }
+
+  function showStatus(text, bad) {
+    const s = $("status");
+    s.hidden = !text;
+    s.textContent = text || "";
+    s.className = "card" + (bad ? " bad" : "");
+  }
+
+  function describe(code, answer) {
+    if (answer === null || answer === undefined) return el("span", { className: "none", textContent: "no answer" });
+    if (code === "K10040" && answer.value !== undefined) return document.createTextNode(`${NIGHT[answer.value] || "unknown"} (${answer.value})`);
+    if (code === "K10090" && answer.uint32 !== undefined) return document.createTextNode(new Date(answer.uint32 * 1000).toLocaleString());
+    if (answer.value !== undefined) return document.createTextNode(`value ${answer.value}`);
+    if (answer.hex !== undefined) return document.createTextNode(`${answer.bytes} bytes: ${answer.hex}`);
+    return document.createTextNode(JSON.stringify(answer));
+  }
+
+  function renderAnswers(box, result) {
+    box.replaceChildren();
+    if (!result.answers) return;
+    const table = el("table");
+    const rest = [];
+    for (const [code, item] of Object.entries(result.answers)) {
+      if (code === "K10020" && item.answer && typeof item.answer === "object") {
+        const inner = el("table");
+        for (const [id, value] of Object.entries(item.answer)) {
+          if (PARAM_NAMES[id]) inner.append(el("tr", {}, el("th", { textContent: `${PARAM_NAMES[id]} (${id})` }), el("td", { textContent: String(value) })));
+          else rest.push(`${id}=${value}`);
+        }
+        table.append(el("tr", {}, el("th", { textContent: `${item.meaning} (${code})` }), el("td", {}, inner,
+          rest.length ? el("details", {}, el("summary", { textContent: `${rest.length} other values` }), document.createTextNode(rest.join(", "))) : "")));
+        continue;
+      }
+      table.append(el("tr", {}, el("th", { textContent: `${item.meaning} (${code})` }), el("td", {}, describe(code, item.answer))));
+    }
+    box.append(table);
+  }
+
+  function renderSteps(list, result) {
+    list.replaceChildren();
+    for (const [key, label] of STEPS) {
+      const li = el("li", { textContent: label });
+      if (result[key]) { li.className = "ok"; li.textContent = `✓ ${label}${key === "reachable" && result.sessionForm ? ` (${result.sessionForm} form)` : ""}`; }
+      else li.textContent = `· ${label}`;
+      list.append(li);
+    }
+  }
+
+  function nightControls(card, cam, result) {
+    const box = card.querySelector(".nv");
+    box.replaceChildren();
+    const current = result.answers && result.answers.K10040 && result.answers.K10040.answer;
+    if (!current || current.value === undefined) return;
+    const line = el("div", { textContent: `Night vision now: ${NIGHT[current.value] || current.value}` });
+    const out = el("div", { className: "meta" });
+    const row = el("div", { className: "row" });
+    const confirmRow = el("div", { className: "row" });
+    const buttons = ["off", "auto", "on"].map((v) => el("button", { textContent: v[0].toUpperCase() + v.slice(1), onclick: () => ask(v) }));
+    function ask(value) {
+      confirmRow.replaceChildren(
+        el("span", { textContent: `Set night vision to ${value} on ${cam.name}?` }),
+        el("button", { className: "primary", textContent: "Confirm", onclick: () => go(value) }),
+        el("button", { textContent: "Cancel", onclick: () => confirmRow.replaceChildren() }),
+      );
+    }
+    async function go(value) {
+      confirmRow.replaceChildren();
+      buttons.forEach((b) => { b.disabled = true; });
+      out.textContent = "Setting...";
+      try {
+        const res = await api(`/api/cameras/${cam.id}/night-vision`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ value, confirm: true }) });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || res.statusText);
+        out.className = data.matches ? "meta good" : "meta bad";
+        out.textContent = `${data.before} → ${data.after}${data.matches ? "" : " (the camera did not report the value that was set)"}`;
+        if (result.answers.K10040) result.answers.K10040.answer = { bytes: 1, hex: "0" + ({ on: 1, off: 2, auto: 3 })[data.after], value: ({ on: 1, off: 2, auto: 3 })[data.after] };
+        line.textContent = `Night vision now: ${data.after}`;
+      } catch (e) {
+        out.className = "meta bad";
+        out.textContent = `Failed: ${e.message}`;
+      } finally {
+        buttons.forEach((b) => { b.disabled = false; });
+      }
+    }
+    row.append(...buttons);
+    box.append(line, row, confirmRow, out);
+  }
+
+  async function runTest(card, cam, button) {
+    const steps = card.querySelector(".steps");
+    const answers = card.querySelector(".answers");
+    const note = card.querySelector(".note");
+    button.disabled = true;
+    note.textContent = "Testing... this can take 15 to 40 seconds.";
+    answers.replaceChildren();
+    card.querySelector(".nv").replaceChildren();
+    const live = {};
+    renderSteps(steps, live);
+    let asked = 0;
+    try {
+      const res = await api(`/api/cameras/${cam.id}/test`, { method: "POST" });
+      if (!res.ok) throw new Error((await res.json()).error || res.statusText);
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let final = null;
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let nl;
+        while ((nl = buffer.indexOf("\n")) >= 0) {
+          const msg = JSON.parse(buffer.slice(0, nl));
+          buffer = buffer.slice(nl + 1);
+          if (msg.event === "step") {
+            if (/^K\d+$/.test(msg.step)) { asked += 1; note.textContent = `Asked ${asked} commands...`; } else { live[msg.step] = true; renderSteps(steps, live); }
+          } else if (msg.event === "done") final = msg.result;
+        }
+      }
+      if (!final) throw new Error("the test ended without a result");
+      results[cam.id] = { model: cam.model, firmware: cam.firmware, result: final };
+      renderSteps(steps, final);
+      renderAnswers(answers, final);
+      if (final.error) { note.className = "note bad"; note.textContent = `Stopped: ${final.error}`; } else { note.className = "note"; note.textContent = ""; }
+      if (final.authenticated) nightControls(card, cam, final);
+      $("download").disabled = false;
+    } catch (e) {
+      note.className = "note bad";
+      note.textContent = `Failed: ${e.message}`;
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  function renderCamera(cam) {
+    const test = el("button", { className: "primary", textContent: "Test" });
+    const card = el("div", { className: "card" },
+      el("div", { className: "head" },
+        el("div", {}, el("div", { className: "name", textContent: cam.name }), el("div", { className: "meta", textContent: `${cam.model} · firmware ${cam.firmware}` })),
+        test),
+      el("ul", { className: "steps" }),
+      el("div", { className: "note" }),
+      el("div", { className: "answers" }),
+      el("div", { className: "nv" }));
+    if (cam.reason) { test.disabled = true; card.querySelector(".note").textContent = `Cannot be tested here: ${cam.reason}.`; }
+    test.onclick = () => runTest(card, cam, test);
+    return card;
+  }
+
+  $("download").onclick = () => {
+    const blob = new Blob([JSON.stringify({ generated: new Date().toISOString(), cameras: Object.values(results) }, null, 2)], { type: "application/json" });
+    const a = el("a", { href: URL.createObjectURL(blob), download: "wyze-camera-test.json" });
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  (async () => {
+    if (!token) return showStatus("Open the link from the log. It ends with ?token=...", true);
+    try {
+      const res = await api("/api/cameras");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || res.statusText);
+      if (!data.cameras.length) return showStatus("No cameras on this account.");
+      $("cameras").replaceChildren(...data.cameras.map(renderCamera));
+    } catch (e) {
+      showStatus(`Could not load the cameras: ${e.message}`, true);
+    }
+  })();
+})();
+</script>
+</body>
+</html>

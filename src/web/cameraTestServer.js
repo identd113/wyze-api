@@ -1,0 +1,323 @@
+"use strict";
+
+/**
+ * A small web page for testing a Wyze account's cameras from a browser.
+ *
+ * It exists because a browser cannot speak the camera protocol (UDP, DTLS): the server does, and the page
+ * shows the steps and answers. The server has to run on a computer on the same network as the cameras, for
+ * example the machine that runs Homebridge.
+ *
+ * What it can do
+ *   - list the account's cameras (name, model, firmware, and whether the local session can reach them);
+ *   - run the read-only test of one camera, with progress, and show what it answered;
+ *   - set night vision (on, off, auto) on one camera, only when the request says `confirm: true`.
+ *
+ * How it is protected. It can change a camera setting, so it is not open to the world:
+ *   - every request must carry the random token (header `X-Test-Token`; the page takes it from the link);
+ *   - only clients on the same network are served: loopback and private addresses, never a public one, and
+ *     never a request that carries a proxy header (so it does not work behind a tunnel or a reverse proxy);
+ *   - the `Host` header must be an IP address, `localhost`, a name without dots or a `.local` name, which
+ *     stops a web page on the internet from reaching it through DNS rebinding;
+ *   - a browser page on another origin is refused (`Origin` and `Sec-Fetch-Site` are checked);
+ *   - one test or change runs at a time, and repeated wrong tokens are blocked for a while.
+ * Plain HTTP on your own network: do not forward the port to the internet.
+ *
+ * The port. 0 or unset means the server is off. A port from 1 to 1023 is refused, because those need
+ * root on most systems. Use validateWebPort() for a value from a config file.
+ */
+
+const crypto = require("crypto");
+const fs = require("fs");
+const http = require("http");
+const net = require("net");
+const os = require("os");
+const path = require("path");
+
+const tutk = require("../tutk/client");
+
+const MIN_PORT = 1024;
+const MAX_PORT = 65535;
+const MAX_BODY = 2048;
+const AUTH_FAILURES_BEFORE_BLOCK = 8;
+const AUTH_BLOCK_MS = 10 * 60 * 1000;
+const PROXY_HEADERS = ["x-forwarded-for", "x-forwarded-host", "x-forwarded-proto", "forwarded", "x-real-ip", "cf-connecting-ip", "cf-ray", "via"];
+
+/**
+ * Checks a port from a config file. Returns { enabled: false } for 0 or an unset value, and
+ * { enabled: true, port } for a good one; { enabled: false, error } when the value is not usable.
+ */
+function validateWebPort(value) {
+  if (value === undefined || value === null || value === "" || value === 0 || value === "0") return { enabled: false };
+  const port = typeof value === "number" ? value : /^\d+$/.test(String(value).trim()) ? Number(String(value).trim()) : NaN;
+  if (!Number.isInteger(port)) return { enabled: false, error: `web server port must be a whole number, not ${JSON.stringify(value)}` };
+  if (port < 0 || port > MAX_PORT) return { enabled: false, error: `web server port must be 0 (off) or ${MIN_PORT} to ${MAX_PORT}, not ${port}` };
+  if (port < MIN_PORT) return { enabled: false, error: `web server port ${port} is below ${MIN_PORT}, which needs root; use ${MIN_PORT} or higher, or 0 to turn it off` };
+  return { enabled: true, port };
+}
+
+// ---- who may talk to it ----
+
+function isPrivateAddress(address) {
+  let a = String(address || "");
+  if (a.startsWith("::ffff:")) a = a.slice(7); // an IPv4 client on a dual-stack socket
+  if (net.isIPv4(a)) {
+    const [p, q] = a.split(".").map(Number);
+    return p === 127 || p === 10 || (p === 172 && q >= 16 && q <= 31) || (p === 192 && q === 168) || (p === 169 && q === 254);
+  }
+  if (net.isIPv6(a)) {
+    const lower = a.toLowerCase();
+    return lower === "::1" || /^f[cd][0-9a-f]{2}:/.test(lower) || /^fe[89ab][0-9a-f]:/.test(lower);
+  }
+  return false;
+}
+
+function isAllowedHost(hostHeader) {
+  if (!hostHeader) return false;
+  let host = hostHeader;
+  if (host.startsWith("[")) host = host.slice(1, host.indexOf("]")); // [::1]:8099
+  else if (host.includes(":") && net.isIPv4(host.split(":")[0])) host = host.split(":")[0];
+  else if (host.split(":").length === 2) host = host.split(":")[0];
+  host = host.toLowerCase();
+  if (net.isIP(host)) return true;
+  if (host === "localhost" || host.endsWith(".local")) return true;
+  return /^[a-z0-9-]+$/.test(host); // a single name, such as the computer's host name
+}
+
+function sameOrigin(req) {
+  const origin = req.headers.origin;
+  if (origin && origin !== `http://${req.headers.host}`) return false;
+  const site = req.headers["sec-fetch-site"];
+  if (site && site !== "same-origin" && site !== "none") return false;
+  return true;
+}
+
+function lanAddresses() {
+  const out = [];
+  for (const list of Object.values(os.networkInterfaces())) {
+    for (const i of list || []) if (i.family === "IPv4" && !i.internal) out.push(i.address);
+  }
+  return out;
+}
+
+// ---- the page ----
+
+let pageTemplate = null;
+function page(nonce) {
+  if (!pageTemplate) pageTemplate = fs.readFileSync(path.join(__dirname, "cameraTestPage.html"), "utf8");
+  return pageTemplate.replace(/__NONCE__/g, nonce);
+}
+
+// ---- the server ----
+
+/**
+ * @param {object} opts
+ * @param {object} opts.client a logged-in WyzeAPI (it needs getDeviceList())
+ * @param {number} opts.port 1024 to 65535 (0 only with `ephemeral: true`, for tests)
+ * @param {{info?: Function, warn?: Function, error?: Function}} [opts.log]
+ * @param {string} [opts.host] the address to listen on; default every address
+ * @param {string} [opts.token] default: random
+ * @param {Function} [opts.probe] default tutk.probeCamera
+ * @param {Function} [opts.setNightVision] default tutk.setNightVision
+ * @param {boolean} [opts.ephemeral] tests only: let the system pick a port
+ * @param {boolean} [opts.privateClientsOnly] default true
+ */
+function createCameraTestServer({
+  client, port, log = {}, host = "0.0.0.0", token = crypto.randomBytes(18).toString("hex"),
+  probe = tutk.probeCamera, setNightVision = tutk.setNightVision, ephemeral = false, privateClientsOnly = true,
+}) {
+  if (!client || typeof client.getDeviceList !== "function") throw new Error("createCameraTestServer needs a client with getDeviceList()");
+  if (!ephemeral) {
+    const v = validateWebPort(port);
+    if (!v.enabled) throw new Error(v.error || "web server port is 0 (off)");
+    port = v.port;
+  }
+  const say = (level, msg) => { if (typeof log[level] === "function") log[level](`[Web] ${msg}`); };
+  const tokenBuf = Buffer.from(token);
+  const failures = new Map(); // address -> { count, until }
+  let busy = false;
+  let cameras = []; // the last device list, in the order shown
+
+  const tokenOk = (given) => {
+    if (typeof given !== "string") return false;
+    const b = Buffer.from(given);
+    return b.length === tokenBuf.length && crypto.timingSafeEqual(b, tokenBuf);
+  };
+
+  async function loadCameras() {
+    const list = await client.getDeviceList();
+    cameras = list.filter((d) => String(d.product_type).toLowerCase() === "camera");
+    return cameras.map((d, i) => ({
+      id: `cam-${i + 1}`,
+      name: d.nickname,
+      model: d.product_model,
+      firmware: d.firmware_ver,
+      reason: tutk.cameraLocalSkipReason(d) || null,
+    }));
+  }
+
+  const findCamera = async (id) => {
+    if (!cameras.length) await loadCameras();
+    const m = /^cam-(\d+)$/.exec(id);
+    return m ? cameras[Number(m[1]) - 1] : undefined;
+  };
+
+  const secure = (res, extra = {}) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("X-Frame-Options", "DENY");
+    res.setHeader("Referrer-Policy", "no-referrer");
+    for (const [k, v] of Object.entries(extra)) res.setHeader(k, v);
+  };
+  const sendJson = (res, status, body) => {
+    secure(res, { "Content-Type": "application/json; charset=utf-8" });
+    res.writeHead(status);
+    res.end(JSON.stringify(body));
+  };
+  const sendText = (res, status, text) => {
+    secure(res, { "Content-Type": "text/plain; charset=utf-8" });
+    res.writeHead(status);
+    res.end(text);
+  };
+
+  function readJson(req) {
+    return new Promise((resolve, reject) => {
+      if (!/^application\/json\b/i.test(req.headers["content-type"] || "")) return reject(Object.assign(new Error("send JSON"), { status: 415 }));
+      let size = 0;
+      const chunks = [];
+      req.on("data", (c) => {
+        size += c.length;
+        if (size > MAX_BODY) { reject(Object.assign(new Error("body too large"), { status: 413 })); req.destroy(); return; }
+        chunks.push(c);
+      });
+      req.on("end", () => {
+        try { resolve(chunks.length ? JSON.parse(Buffer.concat(chunks).toString("utf8")) : {}); } catch (_) { reject(Object.assign(new Error("not valid JSON"), { status: 400 })); }
+      });
+      req.on("error", reject);
+    });
+  }
+
+  async function handle(req, res) {
+    const address = req.socket.remoteAddress;
+    const url = new URL(req.url, "http://placeholder");
+
+    if (privateClientsOnly && !isPrivateAddress(address)) return sendText(res, 403, "Only clients on the local network are served.");
+    if (PROXY_HEADERS.some((h) => req.headers[h] !== undefined)) return sendText(res, 403, "This page does not work behind a proxy or tunnel.");
+    if (!isAllowedHost(req.headers.host)) return sendText(res, 403, "Open this page by the computer's IP address or its local name.");
+
+    const block = failures.get(address);
+    if (block && block.until > Date.now() && block.count >= AUTH_FAILURES_BEFORE_BLOCK) return sendText(res, 429, "Too many wrong tokens. Try again later.");
+
+    const isApi = url.pathname.startsWith("/api/");
+    const given = isApi ? req.headers["x-test-token"] : url.searchParams.get("token");
+    if (!tokenOk(given)) {
+      const f = failures.get(address) || { count: 0, until: 0 };
+      f.count = f.until > Date.now() ? f.count + 1 : 1;
+      f.until = Date.now() + AUTH_BLOCK_MS;
+      failures.set(address, f);
+      say("warn", `refused a request from ${address}: missing or wrong token`);
+      return sendText(res, 401, "Open the link printed in the log. It ends with ?token=...");
+    }
+    failures.delete(address);
+
+    if (req.method === "GET" && url.pathname === "/") {
+      const nonce = crypto.randomBytes(12).toString("base64");
+      secure(res, {
+        "Content-Type": "text/html; charset=utf-8",
+        "Content-Security-Policy": `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'nonce-${nonce}'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
+      });
+      res.writeHead(200);
+      return res.end(page(nonce));
+    }
+
+    if (!isApi) return sendText(res, 404, "Not found");
+    if (!sameOrigin(req)) return sendText(res, 403, "Cross-origin request refused.");
+
+    if (req.method === "GET" && url.pathname === "/api/cameras") {
+      try { return sendJson(res, 200, { cameras: await loadCameras() }); } catch (e) {
+        say("error", `could not read the device list: ${e.message}`);
+        return sendJson(res, 502, { error: "could not read the device list from Wyze" });
+      }
+    }
+
+    const m = /^\/api\/cameras\/(cam-\d+)\/(test|night-vision)$/.exec(url.pathname);
+    if (m && req.method === "POST") {
+      const cam = await findCamera(m[1]);
+      if (!cam) return sendJson(res, 404, { error: "no such camera" });
+      const why = tutk.cameraLocalSkipReason(cam);
+      if (why) return sendJson(res, 422, { error: `cannot test this camera: ${why}` });
+      if (busy) return sendJson(res, 409, { error: "another test is running; wait for it to finish" });
+      const target = { host: cam.device_params.ip, uid: cam.device_params.p2p_id, enr: cam.enr, mac: cam.mac };
+
+      if (m[2] === "test") {
+        busy = true;
+        secure(res, { "Content-Type": "application/x-ndjson; charset=utf-8" });
+        res.writeHead(200);
+        const send = (obj) => { if (!res.writableEnded) res.write(`${JSON.stringify(obj)}\n`); };
+        say("info", `testing ${cam.nickname} (${cam.product_model})`);
+        try {
+          const result = await probe({ ...target, onStep: (step) => send({ event: "step", step }) });
+          send({ event: "done", result });
+          say("info", `${cam.nickname}: ${result.authenticated ? "authenticated" : `failed (${result.error || "no answer"})`}`);
+        } catch (e) {
+          send({ event: "done", result: { error: e.message } });
+        } finally {
+          busy = false;
+          res.end();
+        }
+        return undefined;
+      }
+
+      let body;
+      try { body = await readJson(req); } catch (e) { return sendJson(res, e.status || 400, { error: e.message }); }
+      if (body.confirm !== true) return sendJson(res, 400, { error: "changing a setting needs confirm: true" });
+      if (!["on", "off", "auto"].includes(body.value)) return sendJson(res, 400, { error: "value must be on, off or auto" });
+      busy = true;
+      say("info", `setting night vision of ${cam.nickname} to ${body.value}`);
+      try {
+        const result = await setNightVision({ ...target, value: body.value });
+        say("info", `${cam.nickname}: night vision ${result.before} -> ${result.after}${result.matches ? "" : " (did not match)"}`);
+        return sendJson(res, 200, result);
+      } catch (e) {
+        say("warn", `${cam.nickname}: night vision change failed: ${e.message}`);
+        return sendJson(res, 502, { error: e.message });
+      } finally {
+        busy = false;
+      }
+    }
+    return sendText(res, 404, "Not found");
+  }
+
+  const server = http.createServer((req, res) => {
+    handle(req, res).catch((e) => {
+      say("error", `request failed: ${e.message}`);
+      if (!res.headersSent) sendJson(res, 500, { error: "internal error" });
+      else res.end();
+    });
+  });
+  server.headersTimeout = 10000;
+  server.requestTimeout = 120000;
+
+  return {
+    token,
+    /** Starts listening. Resolves to { port, urls } where each url includes the token. */
+    start() {
+      return new Promise((resolve, reject) => {
+        server.once("error", reject);
+        server.listen(ephemeral ? 0 : port, host, () => {
+          server.off("error", reject);
+          const actual = server.address().port;
+          const hosts = host === "0.0.0.0" || host === "::" ? ["localhost", ...lanAddresses()] : [host];
+          resolve({ port: actual, urls: hosts.map((h) => `http://${h}:${actual}/?token=${token}`) });
+        });
+      });
+    },
+    stop() {
+      return new Promise((resolve) => {
+        server.close(() => resolve());
+        server.closeAllConnections?.();
+      });
+    },
+  };
+}
+
+module.exports = { createCameraTestServer, validateWebPort, isPrivateAddress, isAllowedHost, MIN_PORT, MAX_PORT };
