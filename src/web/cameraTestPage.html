@@ -43,6 +43,13 @@
   summary { cursor: pointer; color: var(--muted); }
   .footer { margin-top: 18px; }
   .nv { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; }
+  .field { padding: 10px 0; border-top: 1px solid var(--line); }
+  .field:first-of-type { margin-top: 10px; }
+  .field label { font-weight: 500; display: flex; align-items: center; gap: 8px; }
+  .field input[type=number] { width: 9em; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; }
+  .field .state { margin: 4px 0 0; font-size: 13px; color: var(--muted); }
+  .field .pending { color: var(--warn); }
+  .field .changed { color: var(--accent); }
   .issue { margin-top: 10px; }
   .issue a { color: var(--accent); }
 </style>
@@ -52,6 +59,14 @@
   <h1>Wyze camera test</h1>
   <p class="lead">Asks each camera directly over your home network. A test only reads. Changing night vision asks you to confirm first.</p>
   <div id="status" class="card" hidden></div>
+  <section id="settings" class="card" hidden>
+    <div class="head">
+      <div><div class="name">Settings</div><div class="meta" id="settings-file"></div></div>
+      <div class="row"><button id="settings-reload">Reload from file</button><button id="settings-save" class="primary" disabled>Save</button></div>
+    </div>
+    <div id="settings-fields"></div>
+    <div id="settings-note" class="note"></div>
+  </section>
   <div id="cameras"></div>
   <div class="footer row">
     <button id="download" disabled>Download results (JSON)</button>
@@ -184,6 +199,88 @@
     );
   }
 
+  // ---- settings: read from, and written to, the host's config file; this page keeps no copy ----
+  const dirty = new Map();
+
+  function effective(f) { return f.value === null ? f.default : f.value; }
+  function show(v, f) { return v === null || v === undefined ? `not set (default ${f.default === undefined ? "none" : f.default})` : String(v); }
+
+  function renderSettings(data) {
+    $("settings").hidden = false;
+    $("settings-file").textContent = `Read from and saved to ${data.file}`;
+    const box = $("settings-fields");
+    box.replaceChildren();
+    dirty.clear();
+    $("settings-save").disabled = true;
+    for (const f of data.fields) {
+      const id = `setting-${f.key}`;
+      const state = el("div", { className: "state" });
+      const refresh = () => {
+        const parts = [`Saved: ${show(f.value, f)}`, `running: ${show(f.running, f)}`];
+        state.replaceChildren(document.createTextNode(parts.join(" · ")));
+        if (f.pending) state.append(el("span", { className: "pending", textContent: " · restart Homebridge to apply" }));
+        if (dirty.has(f.key)) state.append(el("span", { className: "changed", textContent: " · not saved yet" }));
+      };
+      let control;
+      if (f.type === "boolean") {
+        control = el("input", { type: "checkbox", id, checked: Boolean(effective(f)) });
+        control.onchange = () => { control.checked === Boolean(effective(f)) ? dirty.delete(f.key) : dirty.set(f.key, control.checked); changed(); refresh(); };
+      } else {
+        control = el("input", { type: "number", id, value: f.value === null ? "" : String(f.value), placeholder: f.default === undefined ? "" : String(f.default) });
+        if (f.minimum !== undefined) control.min = String(f.minimum);
+        if (f.maximum !== undefined) control.max = String(f.maximum);
+        control.oninput = () => {
+          const v = control.value.trim() === "" ? null : Number(control.value);
+          v === f.value ? dirty.delete(f.key) : dirty.set(f.key, v);
+          changed(); refresh();
+        };
+      }
+      const label = el("label", { htmlFor: id }, control, document.createTextNode(f.title));
+      refresh();
+      box.append(el("div", { className: "field" }, label, state,
+        f.description ? el("details", {}, el("summary", { textContent: "What it does" }), el("div", { className: "meta", textContent: f.description })) : ""));
+    }
+  }
+
+  function changed() { $("settings-save").disabled = dirty.size === 0; }
+
+  async function loadSettings(message) {
+    try {
+      const res = await api("/api/settings");
+      if (res.status === 404) { $("settings").hidden = true; return; }
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || res.statusText);
+      renderSettings(data.settings);
+      $("settings-note").className = "note";
+      $("settings-note").textContent = message || "";
+    } catch (e) {
+      $("settings").hidden = false;
+      $("settings-note").className = "note bad";
+      $("settings-note").textContent = `Could not read the settings: ${e.message}`;
+    }
+  }
+
+  async function saveSettings() {
+    const changes = Object.fromEntries(dirty);
+    $("settings-save").disabled = true;
+    $("settings-note").className = "note";
+    $("settings-note").textContent = "Saving...";
+    try {
+      const res = await api("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ changes }) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || res.statusText);
+      // Read the file again, so what is shown is what the file holds.
+      await loadSettings(`Saved to the config file${data.restartNeeded ? ". Restart Homebridge to apply it." : "."}`);
+    } catch (e) {
+      $("settings-note").className = "note bad";
+      $("settings-note").textContent = `Not saved: ${e.message}`;
+      changed();
+    }
+  }
+
+  $("settings-save").onclick = saveSettings;
+  $("settings-reload").onclick = () => loadSettings("Reloaded from the file.");
+
   async function runTest(card, cam, button) {
     const steps = card.querySelector(".steps");
     const answers = card.querySelector(".answers");
@@ -258,6 +355,7 @@
 
   (async () => {
     if (!token) return showStatus("Open the link from the log. It ends with ?token=...", true);
+    loadSettings(); // the settings are the host's own file, so they do not wait for Wyze
     try {
       const res = await api("/api/cameras");
       const data = await res.json();

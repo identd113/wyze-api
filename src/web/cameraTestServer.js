@@ -121,12 +121,17 @@ function page(nonce) {
  * @param {Function} [opts.setNightVision] default tutk.setNightVision
  * @param {boolean} [opts.ephemeral] tests only: let the system pick a port
  * @param {boolean} [opts.privateClientsOnly] default true
+ * @param {{describe: Function, save: Function}} [opts.settings] the host's settings, kept in its own config file. describe()
+ *   resolves to { file, fields: [{ key, title, type, description, default, minimum, maximum, value, running, pending }] }
+ *   read from that file now; save(changes) writes the changes to it and resolves to { saved, restartNeeded }, and
+ *   rejects with an error that has `.status = 400` for a value it refuses. The page keeps no copy: after every save
+ *   it reads the file again. Without it the page has no settings panel.
  * @param {object} [opts.issueForm] { url, template, origin, plugin, kind, deviceLabel(model) }: when given, a finished
  *   test comes with a link that opens that GitHub issue form with the test's findings filled in (see issueLink.js)
  */
 function createCameraTestServer({
   client, port, log = {}, host = "0.0.0.0", token = crypto.randomBytes(18).toString("hex"),
-  probe = tutk.probeCamera, setNightVision = tutk.setNightVision, ephemeral = false, privateClientsOnly = true, issueForm = null,
+  probe = tutk.probeCamera, setNightVision = tutk.setNightVision, ephemeral = false, privateClientsOnly = true, issueForm = null, settings = null,
 }) {
   if (!client || typeof client.getDeviceList !== "function") throw new Error("createCameraTestServer needs a client with getDeviceList()");
   if (!ephemeral) {
@@ -200,6 +205,14 @@ function createCameraTestServer({
     });
   }
 
+  // One write at a time, so two saves cannot interleave in the file.
+  let saving = Promise.resolve();
+  function saveSettings(changes) {
+    const run = saving.then(() => settings.save(changes));
+    saving = run.catch(() => {});
+    return run;
+  }
+
   async function handle(req, res) {
     const address = req.socket.remoteAddress;
     const url = new URL(req.url, "http://placeholder");
@@ -241,6 +254,30 @@ function createCameraTestServer({
         say("error", `could not read the device list: ${e.message}`);
         return sendJson(res, 502, { error: "could not read the device list from Wyze" });
       }
+    }
+
+    if (url.pathname === "/api/settings") {
+      if (!settings) return sendJson(res, 404, { error: "this page has no settings" });
+      if (req.method === "GET") {
+        try { return sendJson(res, 200, { settings: await settings.describe() }); } catch (e) {
+          say("warn", `could not read the settings: ${e.message}`);
+          return sendJson(res, 502, { error: e.message });
+        }
+      }
+      if (req.method === "PUT") {
+        let body;
+        try { body = await readJson(req); } catch (e) { return sendJson(res, e.status || 400, { error: e.message }); }
+        try {
+          const result = await saveSettings(body.changes);
+          say("info", `settings saved: ${Object.keys(result.saved).join(", ")}`);
+          return sendJson(res, 200, result);
+        } catch (e) {
+          if (e.status === 400) return sendJson(res, 400, { error: e.message });
+          say("warn", `could not save the settings: ${e.message}`);
+          return sendJson(res, 502, { error: e.message });
+        }
+      }
+      return sendText(res, 405, "Method not allowed");
     }
 
     const m = /^\/api\/cameras\/(cam-\d+)\/(test|night-vision)$/.exec(url.pathname);

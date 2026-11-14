@@ -215,3 +215,91 @@ test("without an issue form there is no link", async () => {
     assert.strictEqual(res.text.trim().split("\n").map((l) => JSON.parse(l)).find((l) => l.event === "done").issueUrl, null);
   } finally { await server.stop(); }
 });
+
+// ---- the settings panel: the host's config file is the only copy ----
+
+function fakeSettings() {
+  const file = { warmLiveView: false };
+  const calls = { describe: 0, save: [] };
+  return {
+    file, calls,
+    describe: async () => { calls.describe += 1; return { file: "config.json", fields: [{ key: "warmLiveView", title: "Quick Live View", type: "boolean", value: file.warmLiveView, running: false, pending: file.warmLiveView !== false, default: false }] }; },
+    save: async (changes) => {
+      calls.save.push(changes);
+      if (changes.bad) throw Object.assign(new Error("Quick Live View must be true or false"), { status: 400 });
+      if (changes.broken) throw new Error("could not write config.json (EACCES)");
+      Object.assign(file, changes);
+      return { saved: changes, restartNeeded: true };
+    },
+  };
+}
+
+test("without settings there is no settings route", async () => {
+  const { server, port } = await start();
+  try {
+    assert.strictEqual((await request(port, { path: "/api/settings", headers: auth })).status, 404);
+    assert.strictEqual((await request(port, { method: "PUT", path: "/api/settings", headers: json, body: { changes: { a: 1 } } })).status, 404);
+  } finally { await server.stop(); }
+});
+
+test("the settings are read from the host every time, and a save goes straight to the host and is read back", async () => {
+  const settings = fakeSettings();
+  const { server, port } = await start({ settings });
+  try {
+    assert.strictEqual((await request(port, { path: "/api/settings" })).status, 401, "needs the token");
+    const first = JSON.parse((await request(port, { path: "/api/settings", headers: auth })).text).settings;
+    assert.strictEqual(first.fields[0].value, false);
+    settings.file.warmLiveView = true; // changed in the file by someone else
+    const second = JSON.parse((await request(port, { path: "/api/settings", headers: auth })).text).settings;
+    assert.strictEqual(second.fields[0].value, true, "read again from the file, not remembered");
+    assert.strictEqual(settings.calls.describe, 2);
+    const saved = await request(port, { method: "PUT", path: "/api/settings", headers: json, body: { changes: { warmLiveView: false } } });
+    assert.strictEqual(saved.status, 200);
+    assert.deepStrictEqual(JSON.parse(saved.text), { saved: { warmLiveView: false }, restartNeeded: true });
+    assert.deepStrictEqual(settings.calls.save, [{ warmLiveView: false }]);
+    assert.strictEqual(settings.file.warmLiveView, false);
+  } finally { await server.stop(); }
+});
+
+test("a refused value is a 400 with the host's message, a failed write is a 502, and neither changes the file", async () => {
+  const settings = fakeSettings();
+  const { server, port } = await start({ settings });
+  try {
+    const bad = await request(port, { method: "PUT", path: "/api/settings", headers: json, body: { changes: { bad: true } } });
+    assert.strictEqual(bad.status, 400);
+    assert.match(JSON.parse(bad.text).error, /must be true or false/);
+    const broken = await request(port, { method: "PUT", path: "/api/settings", headers: json, body: { changes: { broken: true } } });
+    assert.strictEqual(broken.status, 502);
+    assert.deepStrictEqual(settings.file, { warmLiveView: false });
+  } finally { await server.stop(); }
+});
+
+test("a settings save needs the token, JSON, and the same origin", async () => {
+  const settings = fakeSettings();
+  const { server, port } = await start({ settings });
+  try {
+    const body = { changes: { warmLiveView: true } };
+    assert.strictEqual((await request(port, { method: "PUT", path: "/api/settings", headers: { "content-type": "application/json" }, body })).status, 401);
+    assert.strictEqual((await request(port, { method: "PUT", path: "/api/settings", headers: auth, body: JSON.stringify(body) })).status, 415);
+    assert.strictEqual((await request(port, { method: "PUT", path: "/api/settings", headers: { ...json, origin: "http://evil.example.com" }, body })).status, 403);
+    assert.strictEqual((await request(port, { method: "PUT", path: "/api/settings", headers: { ...json, "sec-fetch-site": "cross-site" }, body })).status, 403);
+    assert.strictEqual((await request(port, { method: "POST", path: "/api/settings", headers: json, body })).status, 405);
+    assert.deepStrictEqual(settings.calls.save, [], "nothing reached the host");
+  } finally { await server.stop(); }
+});
+
+test("two saves at the same time are written one after the other", async () => {
+  let active = 0;
+  let overlapped = false;
+  const settings = {
+    describe: async () => ({ file: "config.json", fields: [] }),
+    save: async (changes) => { active += 1; if (active > 1) overlapped = true; await new Promise((r) => setTimeout(r, 60)); active -= 1; return { saved: changes, restartNeeded: true }; },
+  };
+  const { server, port } = await start({ settings });
+  try {
+    const put = (n) => request(port, { method: "PUT", path: "/api/settings", headers: json, body: { changes: { n } } });
+    const results = await Promise.all([put(1), put(2), put(3)]);
+    assert.deepStrictEqual(results.map((r) => r.status), [200, 200, 200]);
+    assert.strictEqual(overlapped, false);
+  } finally { await server.stop(); }
+});

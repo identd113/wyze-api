@@ -143,6 +143,8 @@ A browser cannot speak the camera protocol, so the server does the talking. It c
 - One test or change runs at a time. A change needs `confirm: true` in the request, which the page sends only after you press Confirm.
 - It is plain HTTP, meant for your own network. Do not forward the port to the internet.
 
+When the host program gives it settings (the Homebridge plugin does), the page also has a **Settings** panel. The host's own config file is the only copy of those settings: the page reads them from the file every time it loads, and every change is written straight back to the file, so the page, the Homebridge settings screen and anyone editing the JSON always agree. Each setting shows what the file holds next to what is running now, and says "restart Homebridge to apply" when they differ. After a save the page reads the file again. The host decides which settings can be changed and checks each value (see `settings` in `src/web/cameraTestServer.js`); the standalone script has no config file, so it shows no panel.
+
 The port: 0 means off (the script refuses it), and 1 to 1023 is refused because those need root. The same checks are exported for other programs: `WyzeAPI.validateWebPort(value)` and `WyzeAPI.createCameraTestServer({ client, port, log })`; the Homebridge plugin uses them to start the page from its config. The server is in `src/web/cameraTestServer.js`, the page in `src/web/cameraTestPage.html`, and the tests in `tests/camera-test-server.test.js`.
 
 ## `device-report.js`
