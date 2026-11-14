@@ -75,7 +75,7 @@
   .field { padding: 10px 0; border-top: 1px solid var(--line); }
   .field:first-of-type { margin-top: 10px; }
   .fieldhead { display: flex; align-items: center; gap: 8px; }
-  .field label { font-weight: 500; display: flex; align-items: center; gap: 8px; }
+  .field .label { font-weight: 500; }
   .info { position: relative; display: inline-flex; vertical-align: middle; }
   .info button { width: 18px; height: 18px; padding: 0; border-radius: 50%; border: 1px solid var(--muted); background: transparent; color: var(--muted); font: italic 700 12px/16px Georgia, serif; cursor: help; }
   .info button:hover, .info button:focus-visible, .info.open button { color: var(--accent-text); background: var(--accent); border-color: var(--accent); outline: none; }
@@ -86,7 +86,7 @@
   .field .pending { color: var(--warn); }
   .field .changed { color: var(--accent); }
   .pills { display: flex; flex-wrap: wrap; gap: 14px 8px; margin: 14px 0 6px; }
-  .pill { position: relative; border-radius: 999px; padding: 4px 14px; font-size: 14px; background: transparent; }
+  .pill { position: relative; display: inline-block; border: 1px solid var(--line); border-radius: 999px; padding: 4px 14px; font-size: 14px; background: transparent; }
   .pill[aria-pressed=true] { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
   .pill .ai { position: absolute; top: -9px; right: 8px; padding: 0 5px; font-size: 10px; font-weight: 700; line-height: 16px; color: #fff; background: #1f7fbf; border-radius: 8px; }
   .pill .tag { margin-left: 6px; font-size: 11px; opacity: .85; }
@@ -119,10 +119,10 @@
     </div>
     <section id="sensors" class="panel" role="tabpanel" aria-labelledby="tab-sensors" hidden>
       <h1>Sensors</h1>
-      <p class="lead">What each camera was found to have, and which sensors it gets in HomeKit. <span id="sensors-info"></span></p>
+      <p class="lead">What each camera was found to have, and which sensors it gets in HomeKit. To change them, use the plugin's settings in Homebridge. <span id="sensors-info"></span></p>
       <div class="card">
         <div class="head">
-          <div class="meta">Click a sensor to turn it on (filled) or off (outlined).</div>
+          <div class="meta">Filled is on, outlined is off.</div>
           <div class="row"><button id="sensors-reload">Reload from file</button></div>
         </div>
         <div id="sensors-plans"></div>
@@ -132,11 +132,11 @@
     </section>
     <section id="settings" class="panel" role="tabpanel" aria-labelledby="tab-settings" hidden>
       <h1>Settings</h1>
-      <p class="lead">The plugin's Advanced options, read from and saved to Homebridge's config file.</p>
+      <p class="lead">The plugin's Advanced options as Homebridge's config file holds them. To change one, use the plugin's settings in Homebridge.</p>
       <div class="card">
         <div class="head">
           <div class="meta" id="settings-file"></div>
-          <div class="row"><button id="settings-reload">Reload from file</button><button id="settings-save" class="primary" disabled>Save</button></div>
+          <div class="row"><button id="settings-reload">Reload from file</button></div>
         </div>
         <div id="settings-fields"></div>
         <div id="settings-note" class="note"></div>
@@ -299,58 +299,25 @@
     );
   }
 
-  // ---- settings: read from, and written to, the host's config file; this page keeps no copy ----
-  const dirty = new Map();
-
-  function effective(f) { return f.value === null ? f.default : f.value; }
-  function show(v, f) { return v === null || v === undefined ? `not set (default ${f.default === undefined ? "none" : f.default})` : String(v); }
+  // ---- settings: shown as the host's config file holds them. This page only reads them; they are changed in the host's own settings. ----
+  const show = (v, f) => (v === null || v === undefined ? `not set (default ${f.default === undefined ? "none" : f.default})` : String(v));
 
   function renderSettings(data) {
     $("settings").hidden = false;
-    $("settings-file").textContent = `Read from and saved to ${data.file}`;
+    $("settings-file").textContent = `Read from ${data.file}`;
     const waiting = data.fields.filter((f) => f.pending).length;
     setCount("count-settings", waiting ? `${waiting} to restart` : "", waiting);
-    const box = $("settings-fields");
-    box.replaceChildren();
-    dirty.clear();
-    $("settings-save").disabled = true;
-    for (const f of data.fields) {
-      const id = `setting-${f.key}`;
-      const state = el("div", { className: "state" });
-      const refresh = () => {
-        const parts = [`Saved: ${show(f.value, f)}`, `running: ${show(f.running, f)}`];
-        state.replaceChildren(document.createTextNode(parts.join(" · ")), document.createTextNode(" "),
-          info("Saved is what the config file holds now. Running is what the plugin is using. Most options are read when Homebridge starts, so a saved change shows here as saved, and running catches up after a restart.", "What saved and running mean"));
-        if (f.pending) state.append(el("span", { className: "pending", textContent: " · restart Homebridge to apply" }));
-        if (dirty.has(f.key)) state.append(el("span", { className: "changed", textContent: " · not saved yet" }));
-      };
-      let control;
-      if (f.type === "boolean") {
-        control = el("input", { type: "checkbox", id, checked: Boolean(effective(f)) });
-        control.onchange = () => { control.checked === Boolean(effective(f)) ? dirty.delete(f.key) : dirty.set(f.key, control.checked); changed(); refresh(); };
-      } else {
-        control = el("input", { type: "number", id, value: f.value === null ? "" : String(f.value), placeholder: f.default === undefined ? "" : String(f.default) });
-        if (f.minimum !== undefined) control.min = String(f.minimum);
-        if (f.maximum !== undefined) control.max = String(f.maximum);
-        control.oninput = () => {
-          const v = control.value.trim() === "" ? null : Number(control.value);
-          v === f.value ? dirty.delete(f.key) : dirty.set(f.key, v);
-          changed(); refresh();
-        };
-      }
-      const label = el("label", { htmlFor: id }, control, document.createTextNode(f.title));
+    $("settings-fields").replaceChildren(...data.fields.map((f) => {
       const extra = [];
       if (f.default !== undefined) extra.push(`Default: ${f.default}.`);
       if (f.minimum !== undefined && f.maximum !== undefined) extra.push(`Allowed: ${f.minimum} to ${f.maximum}.`);
       const more = [f.description, extra.join(" ")].filter(Boolean).join(" ");
-      refresh();
-      box.append(el("div", { className: "field" },
-        el("div", { className: "fieldhead" }, label, more ? info(more, `About ${f.title}`) : ""),
-        state));
-    }
+      const state = el("div", { className: "state" }, document.createTextNode(`Saved: ${show(f.value, f)} \u00b7 running: ${show(f.running, f)}`), document.createTextNode(" "),
+        info("Saved is what the config file holds now. Running is what the plugin is using. Most options are read when Homebridge starts, so a saved change shows here as saved, and running catches up after a restart.", "Saved and running"));
+      if (f.pending) state.append(el("span", { className: "pending", textContent: " \u00b7 restart Homebridge to apply" }));
+      return el("div", { className: "field" }, el("div", { className: "fieldhead" }, el("span", { className: "label", textContent: f.title }), more ? info(more, `About ${f.title}`) : ""), state);
+    }));
   }
-
-  function changed() { $("settings-save").disabled = dirty.size === 0; }
 
   async function loadSettings(message) {
     try {
@@ -367,163 +334,33 @@
       $("settings-note").textContent = `Could not read the settings: ${e.message}`;
     }
   }
-
-  async function saveSettings() {
-    const changes = Object.fromEntries(dirty);
-    $("settings-save").disabled = true;
-    $("settings-note").className = "note";
-    $("settings-note").textContent = "Saving...";
-    try {
-      const res = await api("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ changes }) });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || res.statusText);
-      // Read the file again, so what is shown is what the file holds.
-      await loadSettings(`Saved to the config file${data.restartNeeded ? ". Restart Homebridge to apply it." : "."}`);
-    } catch (e) {
-      $("settings-note").className = "note bad";
-      $("settings-note").textContent = `Not saved: ${e.message}`;
-      changed();
-    }
-  }
-
-  $("settings-save").onclick = saveSettings;
   $("settings-reload").onclick = () => loadSettings("Reloaded from the file.");
 
-  async function runTest(card, cam, button) {
-    const steps = card.querySelector(".steps");
-    const answers = card.querySelector(".answers");
-    const note = card.querySelector(".note");
-    button.disabled = true;
-    note.textContent = "Testing... this can take 15 to 40 seconds.";
-    answers.replaceChildren();
-    card.querySelector(".nv").replaceChildren();
-    card.querySelector(".issue").replaceChildren();
-    const live = {};
-    renderSteps(steps, live);
-    let asked = 0;
-    try {
-      const res = await api(`/api/cameras/${cam.id}/test`, { method: "POST" });
-      if (!res.ok) throw new Error((await res.json()).error || res.statusText);
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let final = null;
-      let issueUrl = null;
-      for (;;) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        let nl;
-        while ((nl = buffer.indexOf("\n")) >= 0) {
-          const msg = JSON.parse(buffer.slice(0, nl));
-          buffer = buffer.slice(nl + 1);
-          if (msg.event === "step") {
-            if (/^K\d+$/.test(msg.step)) { asked += 1; note.textContent = `Asked ${asked} commands...`; } else { live[msg.step] = true; renderSteps(steps, live); }
-          } else if (msg.event === "done") { final = msg.result; issueUrl = msg.issueUrl || null; }
-        }
-      }
-      if (!final) throw new Error("the test ended without a result");
-      results[cam.id] = { model: cam.model, firmware: cam.firmware, result: final };
-      renderSteps(steps, final);
-      renderAnswers(answers, final);
-      if (final.error) { note.className = "note bad"; note.textContent = `Stopped: ${final.error}`; } else { note.className = "note"; note.textContent = ""; }
-      if (final.authenticated) nightControls(card, cam, final);
-      showIssueLink(card, issueUrl);
-      $("download").disabled = false;
-    } catch (e) {
-      note.className = "note bad";
-      note.textContent = `Failed: ${e.message}`;
-    } finally {
-      button.disabled = false;
-    }
-  }
-
-  function renderCamera(cam) {
-    const test = el("button", { className: "primary", textContent: "Test" });
-    const card = el("div", { className: "card" },
-      el("div", { className: "head" },
-        el("div", {}, el("div", { className: "name", textContent: cam.name }), el("div", { className: "meta", textContent: `${cam.model} · firmware ${cam.firmware}` })),
-        test),
-      el("ul", { className: "steps" }),
-      el("div", { className: "note" }),
-      el("div", { className: "answers" }),
-      el("div", { className: "nv" }),
-      el("div", { className: "issue" }));
-    if (cam.reason) { test.disabled = true; card.querySelector(".note").textContent = `Cannot be tested here: ${cam.reason}.`; }
-    test.onclick = () => runTest(card, cam, test);
-    return card;
-  }
-
-  $("download").onclick = () => {
-    const blob = new Blob([JSON.stringify({ generated: new Date().toISOString(), cameras: Object.values(results) }, null, 2)], { type: "application/json" });
-    const a = el("a", { href: URL.createObjectURL(blob), download: "wyze-camera-test.json" });
-    a.click();
-    URL.revokeObjectURL(a.href);
-  };
-
-  // ---- detected sensors: what each camera has, and which sensors to switch on; read from and saved to the config file ----
+  // ---- detected sensors: shown as the config file holds them. This page only reads them; sensors are chosen in the host's own settings. ----
   function renderSensorCard(cam) {
-    const ticks = new Map();
     const box = el("div", { className: "field" });
     box.append(el("div", { className: "head" }, el("div", {}, el("span", { className: "name", textContent: cam.name }),
       cam.model ? el("span", { className: "meta", textContent: ` ${cam.model}` }) : "")));
     if (cam.plan) box.append(el("div", { className: `meta ${cam.planActive ? "" : "note"}`, textContent: cam.plan }));
     box.append(el("div", { className: "meta", textContent: cam.setting }));
-    const save = el("button", { className: "primary", textContent: "Save these to the config", disabled: true });
-    const pills = el("div", { className: "pills" });
-    const main = cam.items.filter((i) => !i.other);
-    const other = cam.items.filter((i) => i.other);
-    const makePill = (item) => {
-      const pill = el("button", { type: "button", className: "pill", disabled: item.blocked });
-      const paint = () => {
-        const on = ticks.has(item.key) ? ticks.get(item.key) : item.checked;
-        pill.setAttribute("aria-pressed", on ? "true" : "false");
-        pill.title = `${item.label}: ${on ? "on" : "off"} (click to change)`;
-      };
-      pill.onclick = () => {
-        const now = ticks.has(item.key) ? ticks.get(item.key) : item.checked;
-        if (now === !item.checked) ticks.delete(item.key); else ticks.set(item.key, !now);
-        paint();
-        save.disabled = ticks.size === 0;
-      };
-      pill.append(el("span", { textContent: item.label }));
-      if (item.ai) pill.append(el("span", { className: "ai", textContent: "AI" }));
-      if (item.tag) pill.append(el("span", { className: "tag", textContent: item.tag }));
-      paint();
-      return pill;
+    const pill = (item) => {
+      const p = el("span", { className: "pill", title: `${item.label}: ${item.checked ? "on" : "off"}` });
+      p.setAttribute("aria-pressed", item.checked ? "true" : "false");
+      p.append(el("span", { textContent: item.label }));
+      if (item.ai) p.append(el("span", { className: "ai", textContent: "AI" }));
+      if (item.tag) p.append(el("span", { className: "tag", textContent: item.tag }));
+      return p;
     };
-    pills.append(...main.map(makePill));
-    box.append(pills);
+    const main = cam.items.filter((i) => !i.other);
+    box.append(el("div", { className: "pills" }, ...main.map(pill)));
     for (const item of main.filter((i) => i.blocked)) box.append(el("p", { className: "sensor-warn", textContent: `${item.label}: ${item.warning}` }));
     if (!cam.items.some((i) => i.ai)) box.append(el("div", { className: "meta", textContent: "No AI labels found on this camera's events." }));
+    const other = cam.items.filter((i) => i.other);
     if (other.length) {
-      box.append(el("div", { className: "meta", textContent: "Other labels. No sensor type for these yet, so turning one on only saves the name." }));
-      box.append(el("div", { className: "pills" }, ...other.map(makePill)));
+      box.append(el("div", { className: "meta", textContent: "Other labels. No sensor type for these yet." }));
+      box.append(el("div", { className: "pills" }, ...other.map(pill)));
     }
     if (cam.unnamed.length) box.append(el("div", { className: "meta", textContent: `Labels with no name here: ${cam.unnamed.join(", ")}. They get no sensor.` }));
-    const row = el("div", { className: "row" }, save);
-    const send = async (body, button) => {
-      button.disabled = true;
-      $("sensors-note").className = "note";
-      $("sensors-note").textContent = "Saving...";
-      try {
-        const res = await api("/api/sensors", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: cam.id, ...body }) });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || res.statusText);
-        await loadSensors(`Saved for ${cam.name}${data.restartNeeded ? ". Restart Homebridge to apply it." : "."}`);
-      } catch (e) {
-        button.disabled = false;
-        $("sensors-note").className = "note bad";
-        $("sensors-note").textContent = e.message.startsWith("Not saved") ? e.message : `Not saved: ${e.message}`;
-      }
-    };
-    save.onclick = () => send({ ticks: Object.fromEntries(ticks) }, save);
-    if (cam.notAuto) {
-      const back = el("button", { textContent: "Back to automatic" });
-      back.onclick = () => send({ auto: true }, back);
-      row.append(back);
-    }
-    box.append(row);
     return box;
   }
 
@@ -551,7 +388,7 @@
     }
   }
   $("sensors-reload").onclick = () => loadSensors("Reloaded from the file.");
-  $("sensors-info").append(info("Which sensors each camera gets in HomeKit. Automatic gives Motion and Sound where the camera reports them, plus Person, Vehicle, Pet and Package when your Wyze plan has AI detection. Face is never automatic. A change is written to config.json and applies after Homebridge restarts. Reload re-reads the file, so edits made elsewhere show here.", "About detected sensors"));
+  $("sensors-info").append(info("Which sensors each camera gets in HomeKit. Automatic gives Motion and Sound where the camera reports them, plus Person, Vehicle, Pet and Package when your Wyze plan has AI detection. Face is never automatic. This page only shows them. Change them in Homebridge: Plugins, Wyze Smart Home, Settings. Reload re-reads the file.", "About detected sensors"));
 
   // ---- sections: tabs down the side. A section the host does not provide (it hides itself) loses its tab. ----
   const tabs = [...document.querySelectorAll(".nav [role=tab]")];

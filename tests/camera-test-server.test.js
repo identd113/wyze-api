@@ -5,6 +5,8 @@
 const test = require("node:test");
 const assert = require("node:assert");
 const http = require("node:http");
+const fs = require("node:fs");
+const path = require("node:path");
 
 const { createCameraTestServer, validateWebPort, isPrivateAddress, isAllowedHost } = require("../src/web/cameraTestServer");
 const WyzeAPI = require("../src/index");
@@ -216,95 +218,74 @@ test("without an issue form there is no link", async () => {
   } finally { await server.stop(); }
 });
 
-// ---- the settings panel: the host's config file is the only copy ----
+// ---- the settings and sensors tabs: read-only views of the host's config file ----
 
 function fakeSettings() {
   const file = { warmLiveView: false };
-  const calls = { describe: 0, save: [] };
+  const calls = { describe: 0 };
   return {
     file, calls,
     describe: async () => { calls.describe += 1; return { file: "config.json", fields: [{ key: "warmLiveView", title: "Quick Live View", type: "boolean", value: file.warmLiveView, running: false, pending: file.warmLiveView !== false, default: false }] }; },
-    save: async (changes) => {
-      calls.save.push(changes);
-      if (changes.bad) throw Object.assign(new Error("Quick Live View must be true or false"), { status: 400 });
-      if (changes.broken) throw new Error("could not write config.json (EACCES)");
-      Object.assign(file, changes);
-      return { saved: changes, restartNeeded: true };
-    },
   };
 }
 
-test("without settings there is no settings route", async () => {
-  const { server, port } = await start();
+function fakeSensors() {
+  const calls = { describe: 0 };
+  return {
+    calls,
+    describe: async () => { calls.describe += 1; return { plans: [], cameras: [{ id: "AA", name: "Yard", model: "HL_CAM3", plan: "", planActive: false, setting: "Automatic", notAuto: false, items: [], unnamed: [] }] }; },
+  };
+}
+
+test("without settings or sensors there are no such routes", async () => {
+  const { server, port } = await start({});
   try {
     assert.strictEqual((await request(port, { path: "/api/settings", headers: auth })).status, 404);
-    assert.strictEqual((await request(port, { method: "PUT", path: "/api/settings", headers: json, body: { changes: { a: 1 } } })).status, 404);
+    assert.strictEqual((await request(port, { path: "/api/sensors", headers: auth })).status, 404);
   } finally { await server.stop(); }
 });
 
-test("the settings are read from the host every time, and a save goes straight to the host and is read back", async () => {
+test("the settings and sensors are read from the host every time, and need the token", async () => {
   const settings = fakeSettings();
-  const { server, port } = await start({ settings });
+  const sensors = fakeSensors();
+  const { server, port } = await start({ settings, sensors });
   try {
-    assert.strictEqual((await request(port, { path: "/api/settings" })).status, 401, "needs the token");
+    assert.strictEqual((await request(port, { path: "/api/settings" })).status, 401);
+    assert.strictEqual((await request(port, { path: "/api/sensors" })).status, 401);
     const first = JSON.parse((await request(port, { path: "/api/settings", headers: auth })).text).settings;
     assert.strictEqual(first.fields[0].value, false);
     settings.file.warmLiveView = true; // changed in the file by someone else
     const second = JSON.parse((await request(port, { path: "/api/settings", headers: auth })).text).settings;
-    assert.strictEqual(second.fields[0].value, true, "read again from the file, not remembered");
-    assert.strictEqual(settings.calls.describe, 2);
-    const saved = await request(port, { method: "PUT", path: "/api/settings", headers: json, body: { changes: { warmLiveView: false } } });
-    assert.strictEqual(saved.status, 200);
-    assert.deepStrictEqual(JSON.parse(saved.text), { saved: { warmLiveView: false }, restartNeeded: true });
-    assert.deepStrictEqual(settings.calls.save, [{ warmLiveView: false }]);
-    assert.strictEqual(settings.file.warmLiveView, false);
+    assert.strictEqual(second.fields[0].value, true);
+    assert.strictEqual(settings.calls.describe, 2, "no copy kept between reads");
+    await request(port, { path: "/api/sensors", headers: auth });
+    const read = JSON.parse((await request(port, { path: "/api/sensors", headers: auth })).text).sensors;
+    assert.strictEqual(read.cameras[0].name, "Yard");
+    assert.strictEqual(sensors.calls.describe, 2);
   } finally { await server.stop(); }
 });
 
-test("a refused value is a 400 with the host's message, a failed write is a 502, and neither changes the file", async () => {
-  const settings = fakeSettings();
+test("the page cannot change the settings or the sensors: only reads are served", async () => {
+  const { server, port } = await start({ settings: fakeSettings(), sensors: fakeSensors() });
+  try {
+    for (const route of ["/api/settings", "/api/sensors"]) {
+      for (const method of ["PUT", "POST", "DELETE", "PATCH"]) {
+        const res = await request(port, { method, path: route, headers: json, body: { changes: { warmLiveView: true }, id: "AA", auto: true } });
+        assert.strictEqual(res.status, 405, `${method} ${route}`);
+      }
+    }
+  } finally { await server.stop(); }
+});
+
+test("a read that fails is a 502 with the reason", async () => {
+  const settings = { describe: async () => { throw new Error("could not read config.json (EACCES)"); } };
   const { server, port } = await start({ settings });
   try {
-    const bad = await request(port, { method: "PUT", path: "/api/settings", headers: json, body: { changes: { bad: true } } });
-    assert.strictEqual(bad.status, 400);
-    assert.match(JSON.parse(bad.text).error, /must be true or false/);
-    const broken = await request(port, { method: "PUT", path: "/api/settings", headers: json, body: { changes: { broken: true } } });
-    assert.strictEqual(broken.status, 502);
-    assert.deepStrictEqual(settings.file, { warmLiveView: false });
+    const res = await request(port, { path: "/api/settings", headers: auth });
+    assert.strictEqual(res.status, 502);
+    assert.match(JSON.parse(res.text).error, /EACCES/);
   } finally { await server.stop(); }
 });
-
-test("a settings save needs the token, JSON, and the same origin", async () => {
-  const settings = fakeSettings();
-  const { server, port } = await start({ settings });
-  try {
-    const body = { changes: { warmLiveView: true } };
-    assert.strictEqual((await request(port, { method: "PUT", path: "/api/settings", headers: { "content-type": "application/json" }, body })).status, 401);
-    assert.strictEqual((await request(port, { method: "PUT", path: "/api/settings", headers: auth, body: JSON.stringify(body) })).status, 415);
-    assert.strictEqual((await request(port, { method: "PUT", path: "/api/settings", headers: { ...json, origin: "http://evil.example.com" }, body })).status, 403);
-    assert.strictEqual((await request(port, { method: "PUT", path: "/api/settings", headers: { ...json, "sec-fetch-site": "cross-site" }, body })).status, 403);
-    assert.strictEqual((await request(port, { method: "POST", path: "/api/settings", headers: json, body })).status, 405);
-    assert.deepStrictEqual(settings.calls.save, [], "nothing reached the host");
-  } finally { await server.stop(); }
-});
-
-test("two saves at the same time are written one after the other", async () => {
-  let active = 0;
-  let overlapped = false;
-  const settings = {
-    describe: async () => ({ file: "config.json", fields: [] }),
-    save: async (changes) => { active += 1; if (active > 1) overlapped = true; await new Promise((r) => setTimeout(r, 60)); active -= 1; return { saved: changes, restartNeeded: true }; },
-  };
-  const { server, port } = await start({ settings });
-  try {
-    const put = (n) => request(port, { method: "PUT", path: "/api/settings", headers: json, body: { changes: { n } } });
-    const results = await Promise.all([put(1), put(2), put(3)]);
-    assert.deepStrictEqual(results.map((r) => r.status), [200, 200, 200]);
-    assert.strictEqual(overlapped, false);
-  } finally { await server.stop(); }
-});
-
-// ---- the page itself ----
 
 test("the page's script is valid, and the page uses nothing its security policy blocks", async () => {
   const { server, port } = await start();
@@ -323,71 +304,10 @@ test("the page's script is valid, and the page uses nothing its security policy 
   } finally { await server.stop(); }
 });
 
-// ---- the sensors panel: the same rules as the settings panel, and the same file ----
 
-function fakeSensors() {
-  const calls = { describe: 0, save: [] };
-  return {
-    calls,
-    describe: async () => { calls.describe += 1; return { plans: [], cameras: [{ id: "AA", name: "Yard", model: "HL_CAM3", plan: "", planActive: false, setting: "Automatic", notAuto: false, items: [], unnamed: [] }] }; },
-    save: async (id, choice) => {
-      calls.save.push({ id, ...choice });
-      if (id === "bad") throw Object.assign(new Error("Not saved: nope"), { status: 400 });
-      if (id === "broken") throw new Error("could not write config.json (EACCES)");
-      return { saved: true, restartNeeded: true };
-    },
-  };
-}
-
-test("without sensors there is no sensors route", async () => {
-  const { server, port } = await start({});
-  try {
-    assert.strictEqual((await request(port, { path: "/api/sensors", headers: auth })).status, 404);
-    assert.strictEqual((await request(port, { method: "PUT", path: "/api/sensors", headers: json, body: { id: "AA", auto: true } })).status, 404);
-  } finally { await server.stop(); }
-});
-
-test("the sensors are read from the host every time, and a save goes straight to the host", async () => {
-  const sensors = fakeSensors();
-  const { server, port } = await start({ sensors });
-  try {
-    assert.strictEqual((await request(port, { path: "/api/sensors" })).status, 401, "needs the token");
-    await request(port, { path: "/api/sensors", headers: auth });
-    const read = JSON.parse((await request(port, { path: "/api/sensors", headers: auth })).text).sensors;
-    assert.strictEqual(read.cameras[0].name, "Yard");
-    assert.strictEqual(sensors.calls.describe, 2, "no copy kept between reads");
-    const saved = await request(port, { method: "PUT", path: "/api/sensors", headers: json, body: { id: "AA", ticks: { person: false } } });
-    assert.strictEqual(saved.status, 200);
-    assert.deepStrictEqual(sensors.calls.save, [{ id: "AA", ticks: { person: false }, auto: false }]);
-    await request(port, { method: "PUT", path: "/api/sensors", headers: json, body: { id: "AA", auto: true } });
-    assert.strictEqual(sensors.calls.save[1].auto, true);
-  } finally { await server.stop(); }
-});
-
-test("a refused sensors choice is a 400 with the reason, and a failed write is a 502", async () => {
-  const { server, port } = await start({ sensors: fakeSensors() });
-  try {
-    const bad = await request(port, { method: "PUT", path: "/api/sensors", headers: json, body: { id: "bad", ticks: {} } });
-    assert.strictEqual(bad.status, 400);
-    assert.match(JSON.parse(bad.text).error, /Not saved: nope/);
-    assert.strictEqual((await request(port, { method: "PUT", path: "/api/sensors", headers: json, body: { id: "broken", auto: true } })).status, 502);
-    assert.strictEqual((await request(port, { method: "POST", path: "/api/sensors", headers: json, body: {} })).status, 405);
-    assert.strictEqual((await request(port, { method: "PUT", path: "/api/sensors", headers: { ...json, origin: "http://evil.example.com" }, body: { id: "AA", auto: true } })).status, 403);
-  } finally { await server.stop(); }
-});
-
-test("a settings save and a sensors save never write the file at the same time", async () => {
-  let active = 0;
-  let overlapped = false;
-  const slow = async (value) => { active += 1; if (active > 1) overlapped = true; await new Promise((r) => setTimeout(r, 50)); active -= 1; return value; };
-  const settings = { describe: async () => ({ file: "config.json", fields: [] }), save: (changes) => slow({ saved: changes, restartNeeded: true }) };
-  const sensors = { describe: async () => ({ plans: [], cameras: [] }), save: () => slow({ saved: true, restartNeeded: true }) };
-  const { server, port } = await start({ settings, sensors });
-  try {
-    await Promise.all([
-      request(port, { method: "PUT", path: "/api/settings", headers: json, body: { changes: { n: 1 } } }),
-      request(port, { method: "PUT", path: "/api/sensors", headers: json, body: { id: "AA", auto: true } }),
-    ]);
-    assert.strictEqual(overlapped, false);
-  } finally { await server.stop(); }
+test("the page itself never writes settings: it has no save button and sends no PUT", () => {
+  const html = fs.readFileSync(path.join(__dirname, "../src/web/cameraTestPage.html"), "utf8");
+  assert.ok(!html.includes('"PUT"'));
+  assert.ok(!html.includes("settings-save"));
+  assert.ok(!html.includes("/api/sensors\", {"));
 });
