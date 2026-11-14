@@ -201,13 +201,14 @@ function createCameraTestServer({
   // What the report found, as short lines for the page.
   function reportSteps(entry) {
     const steps = [];
+    const ep = entry.endpoints || {};
     const answered = (part) => part && !part.error && !part.skipped;
-    steps.push({ name: "Property list", ok: answered(entry.propertyList), detail: answered(entry.propertyList) ? `${Object.keys(entry.propertyList).length} properties` : (entry.propertyList && entry.propertyList.error) || "no answer" });
-    steps.push({ name: "Device info", ok: answered(entry.deviceInfo), detail: answered(entry.deviceInfo) ? "answered" : (entry.deviceInfo && entry.deviceInfo.error) || "no answer" });
-    if (entry.devicemgmt) steps.push({ name: "Devicemgmt read", ok: !!entry.devicemgmt.answered, detail: entry.devicemgmt.answered ? `${Object.keys(entry.devicemgmt.capabilities || {}).length} capabilities` : entry.devicemgmt.error || "no answer" });
+    steps.push({ name: "Property list", endpoint: ep.propertyList, ok: answered(entry.propertyList), detail: answered(entry.propertyList) ? `${Object.keys(entry.propertyList).length} properties` : (entry.propertyList && entry.propertyList.error) || "no answer" });
+    steps.push({ name: "Device info", endpoint: ep.deviceInfo, ok: answered(entry.deviceInfo), detail: answered(entry.deviceInfo) ? "answered" : (entry.deviceInfo && entry.deviceInfo.error) || "no answer" });
+    if (entry.devicemgmt) steps.push({ name: "Devicemgmt read", endpoint: ep.devicemgmt, ok: !!entry.devicemgmt.answered, detail: entry.devicemgmt.answered ? `${Object.keys(entry.devicemgmt.capabilities || {}).length} capabilities` : entry.devicemgmt.error || "no answer" });
     if (entry.local) {
       const ok = !!(entry.local.authenticated);
-      steps.push({ name: "Direct local session", ok, detail: entry.local.skipped ? entry.local.skipped : ok ? `${Object.values(entry.local.answers || {}).filter((a) => a.answer).length} commands answered` : entry.local.error || "did not authenticate" });
+      steps.push({ name: "Direct local session", endpoint: ep.local, ok, detail: entry.local.skipped ? entry.local.skipped : ok ? `${Object.values(entry.local.answers || {}).filter((a) => a.answer).length} commands answered` : entry.local.error || "did not authenticate" });
     }
     return steps;
   }

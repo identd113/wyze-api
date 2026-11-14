@@ -3,6 +3,18 @@
 //
 // Read-only: the only client methods called are the four in READ_METHODS.
 
+const constants = require("./constants");
+
+// The calls a report makes, so the report says which endpoint each answer came from. The paths are the ones the client
+// uses for getPropertyList and getDeviceInfo (a test keeps them in step), and the devicemgmt host and path of
+// _deviceMgmtGetIotProp. Every one is a read.
+const ENDPOINTS = {
+  propertyList: `POST ${constants.apiBaseUrl}/app/v2/device/get_property_list`,
+  deviceInfo: `POST ${constants.apiBaseUrl}/app/v2/device/get_device_Info`,
+  devicemgmt: `POST ${constants.devicemgmtBaseUrl}/device-management/api/device-property/get_iot_prop`,
+  local: "directly to the camera on your network (UDP port 32761, the TUTK protocol), read-only get commands",
+};
+
 const READ_METHODS = ["getDeviceList", "getPropertyList", "getDeviceInfo", "_deviceMgmtGetIotProp"];
 
 // Models without a property list of their own are asked with this one (Floodlight Pro).
@@ -174,6 +186,7 @@ async function buildReport({ client: rawClient, models = [], select = null, vers
     if (routing.devicemgmt) entry.libraryUsesDevicemgmt = !!routing.devicemgmt(d.product_model);
     if (routing.runAction) entry.libraryUsesRunActionForLight = !!routing.runAction(d.product_model);
 
+    entry.endpoints = { propertyList: ENDPOINTS.propertyList, deviceInfo: ENDPOINTS.deviceInfo };
     const props = await attempt(() => client.getPropertyList(d.mac, d.product_model), literals);
     entry.propertyList = props.ok ? flattenProperties(props.result, literals) : { error: props.error, httpStatus: props.httpStatus };
 
@@ -183,6 +196,7 @@ async function buildReport({ client: rawClient, models = [], select = null, vers
     if (String(d.product_type).toLowerCase() === "camera") {
       const ownList = !!(routing.devicemgmt && routing.devicemgmt(d.product_model));
       const propsModel = ownList ? d.product_model : DEVICEMGMT_FALLBACK_MODEL;
+      entry.endpoints.devicemgmt = ENDPOINTS.devicemgmt;
       const dm = await attempt(() => client._deviceMgmtGetIotProp(d.mac, d.product_model, propsModel), literals);
       entry.devicemgmt = {
         propertyListUsed: propsModel,
@@ -191,6 +205,7 @@ async function buildReport({ client: rawClient, models = [], select = null, vers
       };
     }
     if (localProbe && String(d.product_type).toLowerCase() === "camera") {
+      entry.endpoints.local = ENDPOINTS.local;
       entry.local = await localSection(d, localProbe, literals);
     }
     report.devices.push(entry);
@@ -198,4 +213,4 @@ async function buildReport({ client: rawClient, models = [], select = null, vers
   return report;
 }
 
-module.exports = { localSkipReason, READ_METHODS, DEVICEMGMT_FALLBACK_MODEL, scrub, scrubString, flattenProperties, readOnly, buildReport };
+module.exports = { ENDPOINTS, localSkipReason, READ_METHODS, DEVICEMGMT_FALLBACK_MODEL, scrub, scrubString, flattenProperties, readOnly, buildReport };

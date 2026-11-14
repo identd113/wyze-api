@@ -92,6 +92,7 @@
   .pill .ai { position: absolute; top: -9px; right: 8px; padding: 0 5px; font-size: 10px; font-weight: 700; line-height: 16px; color: #fff; background: #1f7fbf; border-radius: 8px; }
   .pill .tag { margin-left: 6px; font-size: 11px; opacity: .85; }
   .sensor-warn { margin: 6px 0 0; padding-left: 8px; border-left: 3px solid var(--warn); font-size: 13px; }
+  .endpoint { font-family: ui-monospace, Menlo, monospace; font-size: 12px; word-break: break-all; }
   .issue { margin-top: 10px; }
   .issue a { color: var(--accent); }
 </style>
@@ -491,7 +492,7 @@
         const res = await api(`/api/devices/${dev.id}/report`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || res.statusText);
-        steps.replaceChildren(...data.steps.map((st) => el("li", { className: st.ok ? "ok" : "bad", textContent: `${st.ok ? "✓" : "✗"} ${st.name}: ${st.detail}` })));
+        steps.replaceChildren(...data.steps.map((st) => el("li", { className: st.ok ? "ok" : "bad" }, document.createTextNode(`${st.ok ? "✓" : "✗"} ${st.name}: ${st.detail}`), st.endpoint ? el("div", { className: "meta endpoint", textContent: st.endpoint }) : "")));
         const download = el("button", { textContent: "Download report (JSON)" });
         download.onclick = () => {
           const blob = new Blob([JSON.stringify(data.report, null, 2)], { type: "application/json" });

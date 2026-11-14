@@ -193,3 +193,26 @@ test("the TUTK probe can only send get commands", () => {
   }
   for (const code of DEFAULT_PROBE_CODES) assert.ok(READ_ONLY_COMMANDS[code], `K${code} is probed but not in the read-only list`);
 });
+
+test("each section of the report says which endpoint it came from, and the paths are the ones the client calls", async () => {
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const { ENDPOINTS } = require("../src/deviceReport");
+  const source = fs.readFileSync(path.join(__dirname, "../src/index.js"), "utf8");
+  assert.ok(source.includes('"app/v2/device/get_property_list"') && ENDPOINTS.propertyList.endsWith("/app/v2/device/get_property_list"));
+  assert.ok(source.includes('"app/v2/device/get_device_Info"') && ENDPOINTS.deviceInfo.endsWith("/app/v2/device/get_device_Info"));
+  const devicemgmt = fs.readFileSync(path.join(__dirname, "../src/services/devicemgmt.js"), "utf8");
+  assert.ok(devicemgmt.includes("/device-management/api/device-property/get_iot_prop") && ENDPOINTS.devicemgmt.endsWith("/device-management/api/device-property/get_iot_prop"));
+  assert.match(ENDPOINTS.propertyList, /^POST https:\/\/api\.wyzecam\.com\//);
+  assert.match(ENDPOINTS.devicemgmt, /^POST https:\/\/devicemgmt-service-beta\.wyze\.com\//);
+});
+
+test("the report records the endpoint of each answer: the cloud calls for every device, devicemgmt for a camera, and the local session when asked", async () => {
+  const { client } = fakeClient();
+  const report = await buildReport({ client, routing: { devicemgmt: () => true }, localProbe: async () => ({ authenticated: true, answers: {} }) });
+  const [camera, bulb] = report.devices;
+  assert.deepStrictEqual(Object.keys(bulb.endpoints), ["propertyList", "deviceInfo"]);
+  assert.match(bulb.endpoints.propertyList, /^POST https:\/\/api\.wyzecam\.com\/app\/v2\/device\/get_property_list$/);
+  assert.ok(camera.endpoints.devicemgmt.includes("get_iot_prop"));
+  assert.ok(camera.endpoints.local.includes("32761"), "a local session notes its port, and that it is not a cloud call");
+});

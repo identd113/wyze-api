@@ -98,13 +98,15 @@ function buildDeviceIssueUrl(form, device, report) {
   const make = (extra) => `${form.url}?${[...fields, ...extra].map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join("&")}`;
   if (!report) return make([]);
 
+  const endpoints = report.endpoints || null;
   const props = report.propertyList && !report.propertyList.error ? Object.keys(report.propertyList).length : 0;
   const caps = report.devicemgmt && report.devicemgmt.answered ? Object.keys(report.devicemgmt.capabilities || {}) : [];
-  const sentence = `Collected with the camera test page (read only): ${props ? `${props} properties in the property list` : "no property list"}`
+  const sentence = `Collected with the camera test page (read only${endpoints && endpoints.propertyList ? `, from ${endpoints.propertyList.replace(/^POST /, "")} and ${(endpoints.deviceInfo || "").replace(/^POST /, "")}` : ""}): ${props ? `${props} properties in the property list` : "no property list"}`
     + `${report.deviceInfo && !report.deviceInfo.error ? "; device info answered" : "; device info did not answer"}`
     + `${report.devicemgmt ? (report.devicemgmt.answered ? `; devicemgmt answered with ${caps.length} capabilities` : "; devicemgmt did not answer") : ""}.`;
   const summary = {
     ...head,
+    ...(endpoints ? { endpoints } : {}),
     device_report: {
       property_count: props,
       device_info_answered: !!(report.deviceInfo && !report.deviceInfo.error),
@@ -113,7 +115,7 @@ function buildDeviceIssueUrl(form, device, report) {
     },
   };
   const candidates = [
-    [["details", sentence], ["blob", JSON.stringify({ ...head, device_report: report })]],
+    [["details", sentence], ["blob", JSON.stringify({ ...head, ...(endpoints ? { endpoints } : {}), device_report: report })]],
     [["details", sentence], ["blob", JSON.stringify(summary)]],
     [["blob", JSON.stringify(summary)]],
     [["blob", JSON.stringify(head)]],

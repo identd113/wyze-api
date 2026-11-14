@@ -334,6 +334,7 @@ const THINGS = [
 const issueForm = { url: "https://github.com/example/plugin/issues/new", template: "new-device.yml", origin: "camera-test-page", plugin: "2.0.0", deviceLabel: (m) => (m === "WLPP1" ? "Plugs and switches - Plug (WLPP1)" : undefined) };
 const ENTRY = {
   label: "device-1", model: "CO_AP1", type: "AirPurifier", firmware: "1.2.3",
+  endpoints: { propertyList: "POST https://api.example.test/app/v2/device/get_property_list", deviceInfo: "POST https://api.example.test/app/v2/device/get_device_Info" },
   propertyList: { P3: "1", P5: "2", P1301: "40" }, deviceInfo: { power: 1 },
 };
 
@@ -395,6 +396,8 @@ test("the Test button collects a report for that one device and returns steps, t
     assert.deepStrictEqual(calls.report, [{ selected: ["CO_AP1"], versions: { plugin: "2.0.0" }, hasProbe: true }]);
     assert.deepStrictEqual(body.steps.map((s) => [s.name, s.ok]), [["Property list", true], ["Device info", true]]);
     assert.strictEqual(body.steps[0].detail, "3 properties");
+    assert.strictEqual(body.steps[0].endpoint, "POST https://api.example.test/app/v2/device/get_property_list", "each step says which endpoint it asked");
+    assert.strictEqual(body.steps[1].endpoint, "POST https://api.example.test/app/v2/device/get_device_Info");
     assert.strictEqual(body.report.device.model, "CO_AP1");
     const link = new URL(body.issueUrl);
     assert.strictEqual(link.searchParams.get("model"), "CO_AP1");
@@ -402,6 +405,8 @@ test("the Test button collects a report for that one device and returns steps, t
     assert.strictEqual(blob.product_model, "CO_AP1", "the form's check finds the model code first");
     assert.deepStrictEqual(blob.device_report.propertyList, { P3: "1", P5: "2", P1301: "40" }, "the report fits, so it is in the link");
     assert.match(link.searchParams.get("details"), /3 properties in the property list/);
+    assert.match(link.searchParams.get("details"), /from https:\/\/api\.example\.test\/app\/v2\/device\/get_property_list and https:\/\/api\.example\.test\/app\/v2\/device\/get_device_Info/);
+    assert.deepStrictEqual(blob.endpoints, ENTRY.endpoints, "the form's device information box names the endpoints too");
     assert.ok(body.issueUrl.length <= 7000);
   } finally { await server.stop(); }
 });
