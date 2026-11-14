@@ -25,3 +25,23 @@ Waiting on the reporter: plugin and `wyze-api` versions, a debug log, and whethe
 3. If the device answers, add `HL_CFL2` to `CAMERA_DEVICEMGMT` with the capability names it reports (and a `devicemgmtProps.js` entry), plus tests, then ask the reporter to confirm the light switches. Note in `docs/camera-properties.md` what `P1056` does on this model.
 4. If it does not answer, ask for a capture of the Wyze app's traffic for one light toggle and look for the call it makes.
 5. In the plugin, once the library change ships: bump `wyze-api`, run `npm run known-models`, check the README row for `HL_CFL2`, and close #16 when the reporter confirms.
+
+## Night vision: ask an owner of a devicemgmt camera (2026-11-14)
+
+The Doorbell v2 (`HL_DB2`) does not report night vision anywhere in the cloud (`docs/camera-properties.md`). The devicemgmt property lists for the Floodlight Pro (`LD_CFP`), Battery Cam Pro (`AN_RSCW`), OG (`GW_GC1`, `GW_GC2`) and Pan v4 (`HL_PAN4`) do name `night-shot`, `night-shot-state` and `infrared-mode`, but nobody here owns one to test.
+
+- When an owner reports one of those models, ask them to run `scripts/device-report.js` with night vision set to Off, then On, then Auto, and compare the three reports for `night-shot`, `night-shot-state` and `infrared-mode`.
+- If one of them changes, add night vision reading (and a setting, if `run_action` takes it) for that model.
+- If none changes, night vision stays on the camera and needs TUTK (`K10040` / `K10042`), which only runs on Linux.
+
+## TUTK in JavaScript: what is left (2026-11-14)
+
+Phase 1 and 2 work: `future/tutk/spike/tutk-spike.js` authenticates against all four cameras (pure JavaScript, no native library) and reads and sets night vision. See `docs/camera-properties.md`.
+
+- Read the two Cam v3s with `--query` (they answered the same way for night vision, but `K10020` and the others are unread), and add anything new to the doc.
+- Set night vision on a Cam v3, once, with `--restore` (only the Doorbell v2 and the Cam v2 have had a write).
+- Ask an owner of a battery camera (Outdoor v1/v2, Battery Cam Pro) to run `--query 10448,10446,10020`: the wired cameras give no battery data, so battery is untested.
+- Build the module: a `wyze-api` method (`getStats`, night vision get/set), keeping the spike as the reference. Decide how the plugin exposes night vision (HomeKit has no standard Off/Auto/On control).
+- Map the rest of the `K10020` params by changing one setting in the Wyze app at a time and diffing.
+- Not built: the pre-DTLS session (cameras without the `dtls` flag), local video and audio, and cameras on the Gwell protocol (OG, Pan v4).
+- Licence: the spike credits go2rtc (MIT). Our older `future/tutk/lib` was ported from docker-wyze-bridge (AGPL-3.0); check what that means before a release.
