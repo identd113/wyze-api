@@ -2,7 +2,7 @@
 
 ## Symptom
 
-Reported upstream as [homebridge-wyze-smart-home#307](https://github.com/jfarmer08/homebridge-wyze-smart-home/issues/307).
+Reported upstream as [homebridge-wyze-smart-home#307](https://github.com/wyze-smart-home/homebridge-wyze-smart-home/issues/307).
 Users on Node.js v24.18.0+ see requests fail with:
 
 ```

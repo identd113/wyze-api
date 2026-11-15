@@ -2,7 +2,7 @@
 
 Wyze Robot Vacuum (`JA_RO2`). Communicates with the **Venus** service (`wyze-venus-service-vn.wyzecam.com`) using a separate auth/signing scheme from the rest of the library.
 
-Added in **v1.1.11**. Resolves [#4](https://github.com/jfarmer08/wyze-api/issues/4). Patterned after [shauntarves/wyze-sdk's vacuums client](https://github.com/shauntarves/wyze-sdk/blob/master/wyze_sdk/api/devices/vacuums.py) but reshaped to this repo's thin-wrapper conventions plus device-object/pure-accessor helper layers.
+Added in **v1.1.11**. Resolves [#4](https://github.com/wyze-smart-home/wyze-api/issues/4). Patterned after [shauntarves/wyze-sdk's vacuums client](https://github.com/shauntarves/wyze-sdk/blob/master/wyze_sdk/api/devices/vacuums.py) but reshaped to this repo's thin-wrapper conventions plus device-object/pure-accessor helper layers.
 
 ## Quickstart
 

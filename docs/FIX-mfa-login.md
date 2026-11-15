@@ -4,7 +4,7 @@ Written when the fix landed on the 1.x line (v1.1.16). 2.x goes further: it can 
 
 ## Symptom
 
-Reported upstream as [homebridge-wyze-smart-home#306](https://github.com/jfarmer08/homebridge-wyze-smart-home/issues/306)
+Reported upstream as [homebridge-wyze-smart-home#306](https://github.com/wyze-smart-home/homebridge-wyze-smart-home/issues/306)
 ("Does not support 2FA?"). Users with 2FA enabled on their Wyze account can't get the plugin to
 log in. Example log from the report (plugin v0.5.58, wyze-api pinned via that release):
 

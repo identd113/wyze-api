@@ -11,7 +11,7 @@ next `maybeLogin()` finds nothing to reload and falls through to a real login. C
 
 ## Symptom
 
-Reported upstream as [homebridge-wyze-smart-home#268](https://github.com/jfarmer08/homebridge-wyze-smart-home/issues/268),
+Reported upstream as [homebridge-wyze-smart-home#268](https://github.com/wyze-smart-home/homebridge-wyze-smart-home/issues/268),
 specifically the later comments on that thread (August and September 2025):
 
 ```
@@ -24,7 +24,7 @@ This repeats forever on every poll cycle. Credentials are valid (confirmed by us
 apiKey/keyId, disabling 2FA, even reinstalling the OS) — none of that helps. The only fix
 users found was manually deleting `wyze-{uuid}.json` from Homebridge's persist directory,
 after which login succeeds immediately with the *same* credentials that were failing moments
-before. Also plausibly related to [homebridge-wyze-smart-home#306](https://github.com/jfarmer08/homebridge-wyze-smart-home/issues/306)
+before. Also plausibly related to [homebridge-wyze-smart-home#306](https://github.com/wyze-smart-home/homebridge-wyze-smart-home/issues/306)
 (see "Related" below), though #306's primary cause is the separate missing-MFA issue fixed
 in `FIX-mfa-login.md`.
 
