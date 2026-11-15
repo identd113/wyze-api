@@ -2,8 +2,9 @@ const test = require("node:test");
 const assert = require("node:assert");
 const { RtpReorderBuffer, seqDelta } = require("../src/devices/rtpReorderBuffer");
 
-const pkt = (seq, ts, fill = 1, len = 160) => ({
-  header: { sequenceNumber: seq, timestamp: ts, payloadType: 96, ssrc: 7 },
+// payload type 0 is PCMU, the codec the camera audio uses and the one whose silence is known
+const pkt = (seq, ts, fill = 1, len = 160, payloadType = 0) => ({
+  header: { sequenceNumber: seq, timestamp: ts, payloadType, ssrc: 7 },
   payload: Buffer.alloc(len, fill),
 });
 const makePacket = (template, seq, ts, payload) => ({
@@ -122,4 +123,23 @@ test("too many held packets forces the gap to be resolved", () => {
   buf.push(pkt(4, 480), 2);
   buf.push(pkt(5, 640), 3); // third held packet hits the cap
   assert.deepStrictEqual(seqs(), [1, 2, 3, 4, 5]);
+});
+
+test("a missing PCMA packet is replaced by A-law silence", () => {
+  const { buf, out } = make();
+  buf.push(pkt(10, 0, 1, 160, 8), 0);
+  buf.push(pkt(12, 320, 1, 160, 8), 20);
+  buf.tick(200);
+  const filler = out.find((p) => p.synthetic);
+  assert.ok(filler && filler.payload.every((b) => b === 0xd5));
+});
+
+test("a missing packet of another codec (Opus or a dynamic type) is jumped, not filled with an invalid frame", () => {
+  const { buf, out, seqs } = make();
+  buf.push(pkt(10, 0, 1, 160, 96), 0);
+  buf.push(pkt(12, 960, 1, 160, 96), 20);
+  buf.tick(200);
+  assert.ok(!out.some((p) => p.synthetic), "no made-up packet");
+  assert.deepStrictEqual(seqs(), [10, 12]);
+  assert.strictEqual(buf.stats.jumped, 1);
 });

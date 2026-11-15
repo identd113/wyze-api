@@ -352,7 +352,7 @@ function createCameraTestServer({
           select: (d) => d.mac === device.mac,
           versions,
           routing: { devicemgmt: (m) => (typeof client.cameraUsesDeviceMgmt === "function" ? client.cameraUsesDeviceMgmt(m) : false) },
-          localProbe: probe,
+          localProbe: (camera) => oneAtATime(camera.mac, () => probe(camera)),
         });
         const entry = report.devices[0];
         if (!entry) return sendJson(res, 404, { error: "that device is no longer on the account" });

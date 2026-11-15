@@ -33,6 +33,18 @@ const { propertyIds: PIDs } = types;
 
 const { WyzeLogger, LEVELS: LOG_LEVELS } = require("./util/wyzeLogger");
 
+// A failed login or refresh, in words. The reply is an axios response, which has circular references and cannot be
+// turned into JSON whole (doing so threw a TypeError that hid the real failure), so only its useful parts are used.
+function describeResult(result) {
+  let text;
+  try {
+    text = JSON.stringify({ ok: result?.ok, status: result?.status, data: result?.data, error: result?.error });
+  } catch (_) {
+    text = String(result?.error?.message || result?.status || "no details");
+  }
+  return sanitizeLogMessage(text);
+}
+
 module.exports = class WyzeAPI {
   // The optional second arg is ignored — kept only so existing callers
   // that pass a homebridge log don't break. The API uses its own
@@ -484,9 +496,7 @@ module.exports = class WyzeAPI {
 
       if (!result.ok || !result.data.access_token) {
         throw new Error(
-          `Invalid credentials, please check username/password, keyId/apiKey - ${sanitizeLogMessage(JSON.stringify(
-            result
-          ))}`
+          `Invalid credentials, please check username/password, keyId/apiKey - ${describeResult(result)}`
         );
       }
       // Login is a noteworthy lifecycle event — surface at info so users
@@ -737,9 +747,7 @@ module.exports = class WyzeAPI {
           await this._updateTokens(result.data.data);
           return; // Exit if successful.
         } else {
-          throw new Error(
-            `Failed to refresh access token - ${sanitizeLogMessage(JSON.stringify(result))}`
-          );
+          throw new Error(`Failed to refresh access token - ${describeResult(result)}`);
         }
       } catch (error) {
         attempt += 1;
@@ -786,9 +794,10 @@ module.exports = class WyzeAPI {
       // Persist the updated tokens to storage.
       await this._persistTokens();
     } catch (error) {
-      // Handle errors during token persistence.
-      this.log.error(`Error updating tokens: ${error.message}`);
-      throw new Error(`Failed to update tokens: ${error.message}`);
+      // The new tokens are already in memory and good for this run. A disk that cannot be written (read-only, full) must
+      // not count as a failed login or refresh: that would send the consumed refresh token again, then log in afresh,
+      // which a one-time 2FA code cannot do twice.
+      this.log.error(`Could not save the login to disk (${error.message}); it works until this program restarts.`);
     }
   }
 
@@ -1139,6 +1148,7 @@ module.exports = class WyzeAPI {
 
     const response = await axios.post(url, payloadStr, {
       headers: { "Content-Type": "application/json" },
+      timeout: 10_000, // a bulb that never answers must not hang the caller
     });
 
           this.log.debug(`localBulbCommand response from ${deviceMac}: ${JSON.stringify(response.data)}`);

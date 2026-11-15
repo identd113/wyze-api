@@ -78,6 +78,7 @@ const REDACT_KEYS = [
   "fordAppSecret", "fordAppKey",
   "oliveSigningSecret", "oliveAppId",
   "authApiKey",
+  "auth_token", "signaling_url", "credential",
 ];
 
 const MAX_LOG_LINE = 2000;

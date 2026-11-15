@@ -429,6 +429,9 @@ function localIpAddress() {
 // refreshed on every stream, and only change if the camera's video settings change.
 // A keyframe older than this is old for a picture: another one is asked for.
 const STALE_KEYFRAME_MS = 4000;
+// A warm session that keeps receiving P-frames but no new keyframe would hand back one arbitrarily old picture. Past this age
+// there is no picture from the warm session at all, and the caller takes a fresh one.
+const MAX_WARM_KEYFRAME_AGE_MS = 60_000;
 const SPROP_CACHE_TTL_MS = 30 * 60_000;
 const spropCache = new Map();
 function rememberSprop(key, sprop) {
@@ -670,8 +673,10 @@ async function captureStreamFrame({
     const requestKeyframe = () => {
       if (videoReceiver && videoSsrc) videoReceiver.sendRtcpPLI(videoSsrc).catch(() => {});
     };
-    const currentSprop = () => answerSprop
-      || (capturedSps && capturedPps ? `${capturedSps.toString("base64")},${capturedPps.toString("base64")}` : null)
+    // The SPS and PPS the camera actually sent in the stream are what its keyframes need, so they come before the ones in the
+    // answer SDP (which can be stale or mismatched, for example after a resolution change) and before what was remembered.
+    const currentSprop = () => (capturedSps && capturedPps ? `${capturedSps.toString("base64")},${capturedPps.toString("base64")}` : null)
+      || answerSprop
       || recallSprop(sessionKey);
     const decodeLatest = () => {
       if (decoding || done || aborted || !keyframes.latest) return;
@@ -682,6 +687,14 @@ async function captureStreamFrame({
         done = true;
         settleOutcome.resolve(jpeg);
       }, (err) => {
+        // ffmpeg that cannot start (not found, not executable) will not start for the next keyframe either: fail now with
+        // the reason, instead of letting every picture run into "capture timed out".
+        if (err && (err.code === "ENOENT" || err.code === "EACCES")) {
+          done = true;
+          log("error", `ffmpeg cannot run (${err.code}): ${err.message}`);
+          settleOutcome.reject(new Error(`ffmpeg cannot run (${err.code}): install ffmpeg or reinstall ffmpeg-static`));
+          return;
+        }
         // Not fatal: the next complete keyframe is tried (the clock still runs).
         log("debug", `keyframe could not be decoded: ${err.message}`);
       }).finally(() => { decoding = false; });
@@ -1151,6 +1164,7 @@ async function _startRtpForwarding({
     const ageMs = Date.now() - keyframe.at;
     // The camera sends a keyframe every couple of seconds; if the latest is much older, ask for one.
     if (ageMs > STALE_KEYFRAME_MS) requestKeyframe();
+    if (ageMs > MAX_WARM_KEYFRAME_AGE_MS) return null;
     return { buffer: await decodeKeyframe({ packets: keyframe.packets, sprop: spropParameterSets }), ageMs };
   };
 

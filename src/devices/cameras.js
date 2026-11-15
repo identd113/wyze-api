@@ -4,6 +4,20 @@ const constants = require("../constants");
 const cameraStreamCapture = require("./cameraStreamCapture");
 const { EventAlarmType, AiEventTag } = require("../types");
 
+// A get-streams answer carries the signed signaling URL, an auth token and the TURN credentials in `params`; those must
+// not reach a log or an error message, so they are replaced before one is built from the answer.
+function withoutStreamSecrets(answer) {
+  try {
+    const copy = JSON.parse(JSON.stringify(answer ?? null));
+    for (const item of Array.isArray(copy?.data) ? copy.data : []) {
+      if (item && typeof item === "object" && "params" in item) item.params = "[hidden]";
+    }
+    return copy;
+  } catch (_) {
+    return "[unreadable]";
+  }
+}
+
 // `sv` the Wyze app sends with app/v2/device/get_event_list (from wyze-sdk).
 const SV_GET_EVENT_LIST = "bdcb412e230049c0be0916e75022d3f3";
 
@@ -97,7 +111,7 @@ module.exports = {
       await this._checkRateLimit(response.headers);
 
       const data = response.data;
-              this.log.debug(`API response cameraGetStreamInfo: ${JSON.stringify(data)}`);
+              this.log.debug(`API response cameraGetStreamInfo: ${JSON.stringify(withoutStreamSecrets(data))}`);
 
       const code = data?.code;
       const errorMessage = data?.msg || data?.description || "";
@@ -113,18 +127,18 @@ module.exports = {
           throw new Error(`Wyze API rate limited (${code}): ${errorMessage}`);
         }
         if (String(code) === constants.deviceOfflineCode) {
-          throw new Error(`Camera is offline: ${JSON.stringify(data)}`);
+          throw new Error(`Camera is offline: ${JSON.stringify(withoutStreamSecrets(data))}`);
         }
         throw new Error(`Wyze API Error (${code}) - ${errorMessage}`);
       }
 
       if (!Array.isArray(data.data) || data.data.length !== 1) {
-        throw new Error(`Unexpected response from cameraGetStreamInfo: ${JSON.stringify(data)}`);
+        throw new Error(`Unexpected response from cameraGetStreamInfo: ${JSON.stringify(withoutStreamSecrets(data))}`);
       }
 
       const entry = data.data[0];
       if (!entry.property) {
-        throw new Error(`Unexpected response from cameraGetStreamInfo: ${JSON.stringify(entry)}`);
+        throw new Error(`Unexpected response from cameraGetStreamInfo: ${JSON.stringify(withoutStreamSecrets({ data: [entry] }))}`);
       }
       // Cameras in WebRTC-only mode report iot-state=0 but still return a valid
       // signaling URL. Only block if there's genuinely no way to reach the camera.

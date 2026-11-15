@@ -35,9 +35,11 @@ const PRIVATE_KEY = new RegExp(
 const MAC_COLON = /\b[0-9A-Fa-f]{2}([:-])[0-9A-Fa-f]{2}(?:\1[0-9A-Fa-f]{2}){4}\b/g;
 const MAC_PLAIN = /(?<![0-9A-Za-z])[0-9A-Fa-f]{12}(?![0-9A-Za-z])/g;
 const MAC_AFTER_UNDERSCORE = /(?<=_)[0-9A-Fa-f]{12}(?![0-9A-Za-z])/g;
+const IPV6 = /(?:[0-9a-f]{1,4}:){7}[0-9a-f]{1,4}|(?:[0-9a-f]{1,4}:){1,7}:(?:[0-9a-f]{1,4}(?::[0-9a-f]{1,4}){0,6})?|::(?:[0-9a-f]{1,4}(?::[0-9a-f]{1,4}){0,6})/gi;
 const IPV4 = /(?<![\d.])(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)(?![\d.])/g;
 // A version number such as 4.53.2.1 has the shape of an IPv4 address. Under these keys it is kept.
-const VERSION_KEY = /(^|_)(fw|firmware|ver|version)(_|$)|ver$/;
+// A key such as "fw_ver", "version" or "hwver". "server" and "driver" also end in "ver" and are not versions.
+const VERSION_KEY = /(^|_)(fw|firmware|ver|version)(_|$)|(hw|sw|fw)ver$/;
 
 // Values the device list itself gives for this account (MAC, name, Wi-Fi name, IP, serial,
 // P2P id), found wherever they turn up in another answer. Short ones are ignored.
@@ -63,7 +65,8 @@ function scrubString(s, literals = [], keepVersions = false) {
   out = out
     .replace(MAC_COLON, "<mac>")
     .replace(MAC_AFTER_UNDERSCORE, "<mac>")
-    .replace(MAC_PLAIN, "<mac>");
+    .replace(MAC_PLAIN, "<mac>")
+    .replace(IPV6, "<ip>"); // never a version, so it is hidden even where versions are kept
   return keepVersions ? out : out.replace(IPV4, "<ip>");
 }
 

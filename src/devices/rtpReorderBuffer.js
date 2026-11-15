@@ -37,7 +37,7 @@ class RtpReorderBuffer {
    * @param {number} [opts.maxConceal=10] — most silent packets inserted for one gap;
    *        a longer gap is jumped over instead of filled
    * @param {number} [opts.maxHeld=60] — safety cap on held packets
-   * @param {number} [opts.silenceByte=0xff] — PCMU silence (mu-law zero)
+   * @param {number} [opts.silenceByte=0xff] — PCMU silence (mu-law zero). PCMA uses 0xd5; other codecs are not concealed
    */
   constructor({ send, makePacket, maxWaitMs = 80, maxConceal = 10, maxHeld = 60, silenceByte = 0xff }) {
     this.send = send;
@@ -51,6 +51,13 @@ class RtpReorderBuffer {
     this.lastTemplate = null;
     this.nextTs = null; // timestamp the next packet should carry
     this.stats = { received: 0, inOrder: 0, reordered: 0, duplicate: 0, late: 0, concealed: 0, jumped: 0 };
+  }
+
+  /** The byte that is silence for this RTP payload type, or null when it is not a codec whose silence is known. */
+  silenceFor(payloadType) {
+    if (payloadType === 0) return this.silenceByte; // PCMU: mu-law zero, 0xff
+    if (payloadType === 8) return 0xd5; // PCMA: A-law zero
+    return null;
   }
 
   /** True while packets are being held (the caller should keep calling `tick`). */
@@ -123,13 +130,16 @@ class RtpReorderBuffer {
         (best, s) => (seqDelta(s, this.nextSeq) < seqDelta(best, this.nextSeq) ? s : best)
       );
       const gap = seqDelta(nearest, this.nextSeq);
-      if (gap > this.maxConceal || !this.lastTemplate) {
+      // Silence is only known for the 8 kHz G.711 codecs, one byte per sample (PCMU and PCMA). For anything else (Opus, a
+      // dynamic payload type) a made-up packet would be an invalid frame with a wrong timestamp step, so the gap is jumped.
+      const silenceByte = this.lastTemplate ? this.silenceFor(this.lastTemplate.header.payloadType) : null;
+      if (gap > this.maxConceal || !this.lastTemplate || silenceByte === null) {
         this.stats.jumped += 1;
         this.nextSeq = nearest;
         continue;
       }
       const size = this.lastTemplate.payload.length;
-      const silence = Buffer.alloc(size, this.silenceByte);
+      const silence = Buffer.alloc(size, silenceByte);
       this.stats.concealed += 1;
       const filler = this.makePacket(this.lastTemplate, this.nextSeq, this.nextTs, silence);
       this.nextSeq = (this.nextSeq + 1) % SEQ_MOD;

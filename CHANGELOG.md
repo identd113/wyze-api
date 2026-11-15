@@ -13,6 +13,16 @@ Everything since the last published beta, **2.0.0-beta.3**. A `2.0.0-beta.4` was
 - **`scripts/device-report.js`** does the same from the command line for anyone with a checkout, with `--local` for a read-only ask of each camera on the home network.
 - **Pictures are captured from one whole keyframe** piped to ffmpeg, not from UDP packets, so a picture no longer depends on a free local port.
 
+**Fixed (found in a full code audit before this release)**
+- **A failed login or token refresh now says why.** The error text was built from a whole HTTP response, which cannot be turned into text, so a wrong password or a rate limit showed up as a "circular structure" TypeError and the real message was lost.
+- **A disk that cannot be written no longer fails a login.** The new tokens work from memory; the refresh used to be retried with the already-used token, then a fresh login, which a one-time 2FA code cannot do twice. The log says the login could not be saved.
+- **The stream address, token and TURN credentials stay out of errors and logs.** An unexpected get-streams answer put them in the error text and in the debug log; `auth_token`, `signaling_url` and `credential` are also redacted in any log line.
+- **A missing or broken ffmpeg now fails a picture at once with the reason,** instead of every picture waiting 20 seconds for "capture timed out".
+- **A picture uses the stream's own SPS/PPS first,** then the answer's, which can be stale after a resolution change. A warm session gives no picture from a keyframe more than a minute old.
+- **Audio gaps are only filled with silence for G.711 (PCMU and PCMA).** Opus and other codecs were given invalid made-up packets.
+- **A bulb command to the local network times out after 10 seconds** instead of waiting forever.
+- **The device report hides a server address (`server`, `dns_server`) and any IPv6 address,** and keeps firmware versions.
+
 **Carried over from 2.0.0-beta.4 (tagged, not on npm)**
 
 - **Development: `npm run lint`** (ESLint on `src`, `scripts` and `tests`) and a lint job in CI. Nothing about the published package changes.
