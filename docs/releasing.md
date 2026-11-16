@@ -28,6 +28,20 @@ How a release gets to npm, and the order to do things in. The plugin ([homebridg
 
 Then release the plugin (see its `docs/releasing.md`). Its workflow refuses to publish until a `wyze-api` that satisfies its declared range is on npm.
 
+## Getting the release into the upstream repository
+
+`2.x` lives in our fork; the `wyze-smart-home` organization's repository is upstream (its default branch is `main`, and `2.0.0` is the branch ours came from). To bring a release over:
+
+1. Cut `release/<version>` from `2.x`, as above, and open the pull request from that branch to upstream `2.0.0`.
+2. Merge it with a **merge commit** (or fast-forward), never a squash or rebase. Those rewrite the commits, so the tags would point at commits that are not in upstream's history and the two repositories' histories would diverge.
+3. Bring `2.x` back level: `git fetch upstream`, then `git merge --ff-only upstream/2.0.0` on `2.x`.
+
+**Tags.** Pushing a branch or merging a pull request never deletes or moves a tag, and never copies one. Tags travel only when you push or fetch them:
+- Our release tags (for example `v2.0.0-beta.3`) are on our fork only. Push one to upstream with `git push upstream <tag>` (after the merge, so its commit is in upstream's history).
+- Upstream's tags (for example `v2.0.0-beta.1`, `v2.0.0-beta.2`, and the 1.x ones) are missing from our fork. Bring them over with `git fetch upstream --tags`, then `git push origin --tags` for the ones you want.
+- Only deliberate commands delete tags: `git push --mirror`, `git push --delete <tag>`, `git fetch --prune-tags`. Do not use them on the release tags.
+- The GitHub Release creates its tag on the branch it targets (`release/<version>`), so do it after the release branch exists.
+
 ## After
 
 - Install both from the registry into a scratch Homebridge, start it, and check the log for errors.
