@@ -93,6 +93,19 @@ test("the page needs the token and is sent with a nonce policy", async () => {
   } finally { await server.stop(); }
 });
 
+test("the sidebar links to the project home and shows the versions it was given", async () => {
+  const { server, port } = await start({ versions: { plugin: "2.1.0-beta.1", "wyze-api": "<2.1.0>" } });
+  try {
+    const res = await request(port, { path: "/?token=test-token-1234" });
+    assert.match(res.headers["content-security-policy"], /img-src data:/, "the embedded logo is allowed, nothing else");
+    assert.ok(res.text.includes('href="https://github.com/wyze-smart-home/homebridge-wyze-smart-home"'), "project home link");
+    assert.ok(res.text.includes('href="https://github.com/wyze-smart-home/homebridge-wyze-smart-home/issues/new/choose"'), "issue link");
+    assert.ok(res.text.includes("plugin 2.1.0-beta.1 · wyze-api &lt;2.1.0&gt;"), "versions are shown and escaped");
+    assert.ok(!/__(PROJECT_HOME|VERSIONS|NONCE)__/.test(res.text), "no placeholder is left behind");
+    assert.ok(/rel="noopener noreferrer"/.test(res.text));
+  } finally { await server.stop(); }
+});
+
 test("the camera list carries names and models but no address, id or key", async () => {
   const { server, port } = await start();
   try {

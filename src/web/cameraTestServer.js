@@ -106,9 +106,18 @@ function lanAddresses() {
 // ---- the page ----
 
 let pageTemplate = null;
-function page(nonce) {
+// The project's home on GitHub, linked from the page's sidebar.
+const PROJECT_HOME = "https://github.com/wyze-smart-home/homebridge-wyze-smart-home";
+
+const escapeHtml = (text) => String(text).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+
+function page(nonce, versions = {}) {
   if (!pageTemplate) pageTemplate = fs.readFileSync(path.join(__dirname, "cameraTestPage.html"), "utf8");
-  return pageTemplate.replace(/__NONCE__/g, nonce);
+  const versionLine = Object.entries(versions).filter(([, v]) => v).map(([k, v]) => `${k} ${v}`).join(" · ");
+  return pageTemplate
+    .replace(/__NONCE__/g, nonce)
+    .replace(/__PROJECT_HOME__/g, PROJECT_HOME)
+    .replace(/__VERSIONS__/g, escapeHtml(versionLine));
 }
 
 // ---- the server ----
@@ -291,10 +300,10 @@ function createCameraTestServer({
       const nonce = crypto.randomBytes(12).toString("base64");
       secure(res, {
         "Content-Type": "text/html; charset=utf-8",
-        "Content-Security-Policy": `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'nonce-${nonce}'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
+        "Content-Security-Policy": `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'nonce-${nonce}'; img-src data:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
       });
       res.writeHead(200);
-      return res.end(page(nonce));
+      return res.end(page(nonce, versions));
     }
 
     if (!isApi) return sendText(res, 404, "Not found");
