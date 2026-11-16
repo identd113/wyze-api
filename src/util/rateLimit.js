@@ -47,7 +47,13 @@ function waitFromHeaders(headers = {}, now = Date.now()) {
     if (!Number.isNaN(at)) return Math.max(0, at - now);
   }
   for (const name of ["x-ratelimit-reset", "x-ratelimit-reset-by"]) {
-    const at = toUnixMs(get(name));
+    const raw = get(name);
+    // A small number (before the year 2001 as a Unix time) is seconds from now, as in the IETF RateLimit-Reset
+    // header; a larger one is a Unix time in seconds or milliseconds.
+    if (raw !== undefined && /^\s*\d+(\.\d+)?\s*$/.test(String(raw)) && Number(raw) < 1e9) {
+      return Math.max(0, Math.ceil(Number(raw) * 1000));
+    }
+    const at = toUnixMs(raw);
     if (at !== null) return Math.max(0, at - now);
   }
   return null;

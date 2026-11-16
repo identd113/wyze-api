@@ -106,12 +106,13 @@ async function attempt(fn, literals) {
   }
 }
 
-// property name -> value, from either a list of {pid, pvalue} or a plain object
+// property name -> value, from Wyze's answer ({ data: { property_list: [{ pid, value }] } }), a bare
+// { property_list } or a plain list of rows, or a plain object. Older callers and tests used `pvalue`.
 function flattenProperties(props, literals) {
-  const list = Array.isArray(props) ? props : props && props.property_list;
+  const list = Array.isArray(props) ? props : props && (props.data && props.data.property_list || props.property_list);
   if (!Array.isArray(list)) return props === undefined ? undefined : scrub(props, literals);
   const out = {};
-  for (const p of list) out[p.pid] = scrub(p.pvalue, literals);
+  for (const p of list) out[p.pid] = scrub(p.value !== undefined ? p.value : p.pvalue, literals);
   return out;
 }
 

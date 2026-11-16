@@ -9,7 +9,7 @@ const constants = require("./constants");
 const util = require("./util");
 const types = require("./types");
 const { installRedirectGuard, WYZE_ALLOWED_HOSTNAMES, sanitizeLogMessage } = require("./util/security");
-const { installRateLimitRetry, onRateLimit } = require("./util/rateLimit");
+const { installRateLimitRetry, onRateLimit, waitFromHeaders, MAX_WAIT_MS } = require("./util/rateLimit");
 const httpsAgent = require("./httpsAgent");
 const { normalizeMfaCode, isValidMfaCode } = require("./util/totp");
 const axios = require("axios");
@@ -340,22 +340,26 @@ module.exports = class WyzeAPI {
         ? Number(headers["x-ratelimit-remaining"])
         : undefined;
 
-      const rateLimitResetBy = headers["x-ratelimit-reset-by"]
-        ? new Date(headers["x-ratelimit-reset-by"]).getTime()
-        : undefined;
+      // How long until the limit resets, from Retry-After or X-RateLimit-Reset(-By), or null when the headers say
+      // nothing usable (a missing or malformed value must not become NaN or an endless sleep).
+      const resetsIn = waitFromHeaders(headers);
 
       if (rateLimitRemaining !== undefined && rateLimitRemaining < 7) {
         // Critical — about to throttle. Always surface as warn.
-        const resetsIn = rateLimitResetBy - Date.now();
-        this.log.warn(
-          `API rate limit remaining: ${rateLimitRemaining} — sleeping until reset in ${resetsIn}ms`
-        );
-        await this.sleepMilliSecounds(resetsIn);
+        if (resetsIn === null) {
+          this.log.warn(`API rate limit remaining: ${rateLimitRemaining} — Wyze gave no reset time, not sleeping`);
+        } else {
+          const sleepMs = Math.min(resetsIn, MAX_WAIT_MS);
+          this.log.warn(
+            `API rate limit remaining: ${rateLimitRemaining} — sleeping until reset in ${sleepMs}ms`
+          );
+          await this.sleepMilliSecounds(sleepMs);
+        }
       } else if (rateLimitRemaining !== undefined) {
         // Normal remaining-count: one line per request, so debug only. The
         // critical case above is always a warning.
         this.log.debug(
-          `API rate limit remaining: ${rateLimitRemaining}. Expires in ${rateLimitResetBy - Date.now()}ms`
+          `API rate limit remaining: ${rateLimitRemaining}. Expires in ${resetsIn === null ? "an unknown time" : `${resetsIn}ms`}`
         );
       }
     } catch (err) {
@@ -382,6 +386,12 @@ module.exports = class WyzeAPI {
       }
 
       if (this._isAccessTokenError(code, errorMessage)) {
+        // The refresh call itself was refused: handling it as an expired access token would call refreshToken(),
+        // which returns the refresh that is already running, so it would wait on itself and never settle. Fail
+        // this refresh instead; _doRefreshToken then falls back to a fresh login.
+        if (url === "app/user/refresh_token") {
+          throw new Error(`Wyze refused the refresh token (${code}): ${errorMessage}`);
+        }
         return this._handleAccessTokenError(result, errorMessage, code, url, data);
       }
 

@@ -79,6 +79,8 @@ const REDACT_KEYS = [
   "oliveSigningSecret", "oliveAppId",
   "authApiKey",
   "auth_token", "signaling_url", "credential",
+  // The lock access-code encryption secret (Ford crypt_secret answer): it encrypts door PINs.
+  "secret", "crypt_secret",
 ];
 
 const MAX_LOG_LINE = 2000;
