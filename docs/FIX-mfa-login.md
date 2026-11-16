@@ -1,6 +1,6 @@
 # Fix: restore 2FA/MFA login support
 
-Written when the fix landed on the 1.x line (v1.1.16). 2.x goes further: it can also make the code itself from the authenticator secret (`totpSecret`), so the stale-code limitation below no longer applies there. See the changelog. The submodule it mentions no longer exists.
+Written when the fix landed on the 1.x line (v1.1.16). 2.x went further in 2.0.0-beta.3 and made the code itself from the authenticator secret (`totpSecret`). That option is deprecated and ignored from 2.1.0-beta.1 (a login with only the API key worked on a 2FA account), so the stale-code limitation below applies again; see the changelog. The submodule it mentions no longer exists.
 
 ## Symptom
 

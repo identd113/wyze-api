@@ -25,7 +25,6 @@ const options = {
   keyId: process.env.keyId,
   apiKey: process.env.apiKey,
   mfaCode: process.env.mfaCode, // optional, only required if your account has 2FA enabled
-  totpSecret: process.env.totpSecret, // optional, recommended for 2FA: base32 key from the authenticator QR setup
   // persistPath: "/path/for/saved-tokens", // optional; defaults to ~/.wyze-api
   logLevel: "none"
 }
@@ -55,20 +54,14 @@ const wyze = new Wyze(options)
 `username=first.last@email.om password=123456 keyId=2222222 apiKey=222222 node index.js`
 
 ## 2FA / MFA accounts
-If your Wyze account has two-factor authentication enabled, pass the current code from your
-authenticator app as `mfaCode` in the options above (only TOTP authenticator apps are supported —
-SMS/email codes are not). If `mfaCode` is required but missing, `login()` throws an error telling
-you to provide it.
+The API key (`keyId` and `apiKey`) is what `login()` needs, and it is enough for most accounts, including an account with an
+authenticator app turned on. If Wyze does answer the login with a 2-factor challenge, pass the current 6-digit code from your
+authenticator app as `mfaCode` (authenticator apps only; SMS and email codes are not supported). The code works once and expires
+after 30 seconds, so it must be current when `login()` runs; the login then saves its tokens and later runs refresh them without
+a code. If a code is needed and `mfaCode` is missing, `login()` throws an error saying so.
 
-**`totpSecret` (recommended):** instead of typing a code, provide the base32 key Wyze shows next to the QR
-code when you set up the authenticator app ("can't scan? enter this key"). wyze-api generates a fresh code
-for every login, waits for the next 30s window if the current code is about to expire or was already used,
-and retries once with the next code if Wyze rejects it. If both are set, `totpSecret` wins. Spaces, dashes and pasted `otpauth://` URIs are cleaned automatically. Keep the host
-clock accurate (NTP); the secret is as sensitive as your password. Authenticator apps only, not SMS.
-
-Note that `mfaCode` is a static config value but TOTP codes rotate every 30 seconds, so this only
-works if the code is still current at the moment `login()` actually runs — a stale code fails with
-the same "provide mfaCode" error.
+**`totpSecret` is deprecated and ignored.** It used to generate a fresh code from the authenticator secret at every login. A value
+is still accepted so an existing config does not break, and the client logs a warning that it is not used. You can remove it.
 
 ## Helper methods
 

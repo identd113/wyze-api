@@ -9,11 +9,9 @@ const constants = require("./constants");
 const util = require("./util");
 const types = require("./types");
 const { installRedirectGuard, WYZE_ALLOWED_HOSTNAMES, sanitizeLogMessage } = require("./util/security");
+const { installRateLimitRetry, onRateLimit } = require("./util/rateLimit");
 const httpsAgent = require("./httpsAgent");
-const {
-  generateTotp, msUntilNextWindow,
-  normalizeTotpSecret, isValidTotpSecret, normalizeMfaCode, isValidMfaCode,
-} = require("./util/totp");
+const { normalizeMfaCode, isValidMfaCode } = require("./util/totp");
 const axios = require("axios");
 
 // Pin the DigiCert roots Wyze's backend depends on into axios's shared
@@ -28,6 +26,19 @@ axios.defaults.httpsAgent = httpsAgent;
 // known Wyze hostnames so a 3xx can never silently send the bearer token to
 // another host. Other axios consumers in the same process aren't affected.
 installRedirectGuard();
+
+// A 429 from Wyze is waited out (Retry-After, or X-RateLimit-Reset) and the request sent again; see util/rateLimit.js.
+// The log lines go to the most recently built client's logger.
+let rateLimitLog = null;
+installRateLimitRetry(axios, (hostname) => WYZE_ALLOWED_HOSTNAMES.has(hostname));
+onRateLimit((info) => {
+  if (!rateLimitLog) return;
+  if (info.kind === "wait") {
+    rateLimitLog.warn(`Wyze rate limit (${info.status}) on ${info.host}${info.path}: waiting ${info.waitMs}ms${info.said ? "" : " (Wyze gave no time)"} before retry ${info.attempt}`);
+  } else {
+    rateLimitLog.error(`Wyze rate limit (${info.status}) on ${info.host}${info.path}: not retrying (asked to wait ${info.waitMs}ms)`);
+  }
+});
 
 const { propertyIds: PIDs } = types;
 
@@ -74,6 +85,7 @@ module.exports = class WyzeAPI {
       // debug captures. Off by default — never set true in shared logs.
       redact: options.disableLogRedaction !== true,
     });
+    rateLimitLog = this.log;
     // Where the login tokens are saved. Without an option, `WYZE_API_PERSIST_PATH`, else a per-user folder outside
     // any project (`~/.wyze-api`). It used to have no default, and a client built without one failed at login.
     this.persistPath = options.persistPath ?? process.env.WYZE_API_PERSIST_PATH ?? path.join(os.homedir(), ".wyze-api");
@@ -86,7 +98,14 @@ module.exports = class WyzeAPI {
     // Validation happens at login time so a bad value is a clear login error,
     // not a constructor crash.
     this.mfaCode = normalizeMfaCode(options.mfaCode) || undefined;
-    this.totpSecret = normalizeTotpSecret(options.totpSecret) || undefined;
+    // Deprecated and ignored: it generated a 2FA code from the authenticator secret. A value is still accepted so an
+    // existing config does not break; the client says once that it is not used.
+    this.totpSecret = options.totpSecret || undefined;
+    if (this.totpSecret) {
+      this.log.warn(
+        'The "totpSecret" option is deprecated and no longer used. Wyze accounts log in with the API key (keyId and apiKey); you can remove it. A one-time "mfaCode" is still accepted.'
+      );
+    }
     this.apiKey = options.apiKey;
     this.keyId = options.keyId;
 
@@ -507,27 +526,21 @@ module.exports = class WyzeAPI {
   }
 
   /**
-   * Completes a TOTP authenticator-app MFA challenge returned by the login endpoint.
+   * Completes a TOTP authenticator-app MFA challenge returned by the login endpoint, with the one-time `mfaCode`.
    * @param {object} mfaDetails - The `mfa_details` block from the login response.
    * @returns {Promise<object>} - The result of the follow-up login request.
    * @throws {Error} - Throws if no mfaCode was configured or the account uses an
    *   unsupported MFA method (only TOTP authenticator apps are handled).
    */
   async _performMfaLogin(mfaDetails) {
-    const secret = normalizeTotpSecret(this.totpSecret);
     const code = normalizeMfaCode(this.mfaCode);
 
-    if (!secret && !code) {
+    if (!code) {
       throw new Error(
-        'Your account has 2-factor auth enabled. Please provide the "totpSecret" (recommended) or "mfaCode" parameter in config.json.'
+        'Wyze asked for a 2-factor code. Provide a current 6-digit "mfaCode" (an authenticator-app code, used once). The "totpSecret" option is deprecated and no longer used.'
       );
     }
-    if (secret && !isValidTotpSecret(secret)) {
-      throw new Error(
-        'The "totpSecret" is not valid: it should be the base32 key shown next to the QR code (letters A-Z and digits 2-7 only).'
-      );
-    }
-    if (!secret && !isValidMfaCode(code)) {
+    if (!isValidMfaCode(code)) {
       throw new Error(
         `The "mfaCode" must be the 6-digit code from your authenticator app (got ${code.length} characters after removing spaces).`
       );
@@ -540,56 +553,11 @@ module.exports = class WyzeAPI {
       );
     }
 
-    if (secret) {
-      return this._performTotpLogin(totpApp.app_id, secret);
-    }
-
     return this._performLoginRequest({
       mfa_type: "TotpVerificationCode",
       verification_id: totpApp.app_id,
       verification_code: code,
     });
-  }
-
-  /**
-   * Logs in with a code generated from `totpSecret`. Never sends a code that is
-   * about to expire or was already used for a previous login (Wyze may treat a
-   * reused code as a replay), and retries once with the next window's code if
-   * Wyze answers without issuing a token. Network errors and API error codes
-   * throw and are not retried here, and neither is a throttled (ok: false)
-   * response.
-   */
-  async _performTotpLogin(verificationId, secret = normalizeTotpSecret(this.totpSecret)) {
-    const now = this._totpNow || (() => Date.now());
-    const sleep = this._totpSleep || ((ms) => new Promise((r) => setTimeout(r, ms)));
-    const SAFETY_MS = 3000;
-
-    let result;
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      let t = now();
-      let window = Math.floor(t / 30000);
-      if (msUntilNextWindow(t) < SAFETY_MS || window === this._lastTotpWindow) {
-        await sleep(msUntilNextWindow(t) + 250);
-        t = now();
-        window = Math.floor(t / 30000);
-      }
-      this._lastTotpWindow = window;
-
-      result = await this._performLoginRequest({
-        mfa_type: "TotpVerificationCode",
-        verification_id: verificationId,
-        verification_code: generateTotp(secret, t),
-      });
-      if (result.ok && result.data?.access_token) return result;
-      // A throttled or otherwise failed request (ok: false) is not a rejected
-      // code: don't spend another code, let the caller's backoff handle it.
-      if (!result.ok) return result;
-    }
-
-    this.log.warn(
-      "Wyze rejected the generated TOTP code twice. Check that totpSecret is correct and that this host's clock is accurate (NTP)."
-    );
-    return result;
   }
 
   /**
