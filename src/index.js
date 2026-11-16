@@ -89,6 +89,9 @@ module.exports = class WyzeAPI {
     // Where the login tokens are saved. Without an option, `WYZE_API_PERSIST_PATH`, else a per-user folder outside
     // any project (`~/.wyze-api`). It used to have no default, and a client built without one failed at login.
     this.persistPath = options.persistPath ?? process.env.WYZE_API_PERSIST_PATH ?? path.join(os.homedir(), ".wyze-api");
+    // The short-lived files for ffmpeg (SDP) go inside that folder too, not the OS temp folder, so a host such as
+    // Homebridge keeps everything the library writes inside its own storage.
+    require("./devices/cameraStreamCapture").setTempDirectory(path.join(this.persistPath, "tmp"));
     this.refreshTokenTimerEnabled = options.refreshTokenTimerEnabled || false;
     this.lowBatteryPercentage = options.lowBatteryPercentage || 30;
     // User login parameters

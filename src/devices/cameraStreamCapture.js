@@ -373,6 +373,31 @@ async function decodeKeyframe({ packets, sprop = null, timeoutMs = 6000 }) {
   return buffer;
 }
 
+// Where the short-lived SDP files for ffmpeg go. The host gives a folder inside its own storage (the Homebridge
+// storage folder, through `persistPath`) so nothing is written outside it; without one the OS temp folder is used.
+let tempDirectory = null;
+const STALE_SDP_MS = 60 * 60 * 1000;
+
+function setTempDirectory(dir) {
+  tempDirectory = dir || null;
+  if (!tempDirectory) return;
+  try {
+    fs.mkdirSync(tempDirectory, { recursive: true, mode: 0o700 });
+    // A run that was killed leaves its files behind, and unlike /tmp nothing clears this folder.
+    for (const name of fs.readdirSync(tempDirectory)) {
+      if (!/^wyze-(capture|audio)-.*\.sdp$/.test(name)) continue;
+      const file = path.join(tempDirectory, name);
+      try { if (Date.now() - fs.statSync(file).mtimeMs > STALE_SDP_MS) fs.unlinkSync(file); } catch (_) { /* gone already */ }
+    }
+  } catch (_) {
+    tempDirectory = null; // cannot use it: fall back to the OS temp folder
+  }
+}
+
+function tempFilePath(name) {
+  return path.join(tempDirectory || os.tmpdir(), name);
+}
+
 function writeSdpFile(rtpPort, spropParameterSets = null, payloadType = 96) {
   // sprop-parameter-sets gives FFmpeg the H.264 SPS/PPS up front. Without it,
   // FFmpeg has to wait for in-band parameter sets — and Wyze cameras often
@@ -389,10 +414,7 @@ t=0 0
 m=video ${rtpPort} RTP/AVP ${payloadType}
 a=rtpmap:${payloadType} H264/90000
 ${fmtp}`;
-  const sdpPath = path.join(
-    os.tmpdir(),
-    `wyze-capture-${process.pid}-${nodeCrypto.randomBytes(4).toString("hex")}.sdp`
-  );
+  const sdpPath = tempFilePath(`wyze-capture-${process.pid}-${nodeCrypto.randomBytes(4).toString("hex")}.sdp`);
   fs.writeFileSync(sdpPath, sdp);
   return sdpPath;
 }
@@ -545,10 +567,7 @@ s=WyzeAudio
 c=IN IP4 127.0.0.1
 t=0 0
 ${media}`;
-  const sdpPath = path.join(
-    os.tmpdir(),
-    `wyze-audio-${process.pid}-${nodeCrypto.randomBytes(4).toString("hex")}.sdp`
-  );
+  const sdpPath = tempFilePath(`wyze-audio-${process.pid}-${nodeCrypto.randomBytes(4).toString("hex")}.sdp`);
   fs.writeFileSync(sdpPath, sdp);
   return sdpPath;
 }
@@ -1249,6 +1268,7 @@ module.exports = {
   audioCodecs, // exported for tests
   pickFreeUdpPort,
   writeSdpFile,
+  setTempDirectory,
   writeAudioSdpFile,
   resolveFfmpegPath,
   localIpAddress,
