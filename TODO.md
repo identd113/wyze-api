@@ -7,7 +7,7 @@ Goal: when someone reports a device that is missing or only partly works, we ask
 Done and committed on `2.x`, not pushed (2026-11-13): `scripts/device-report.js` and `src/deviceReport.js`, `tests/device-report.test.js`, the section in `scripts/README.md`, and a "Reporting a device" section in `docs/README.md`. `_deviceMgmtGetIotProp` takes an optional third argument, the model whose property list to use. A live read-only run on this account covered 10 devices, and a check against the device list found no MAC, name, IP, Wi-Fi name, serial or P2P id in the output.
 
 Still to do:
-- Add a line to the next release's `CHANGELOG.md` section and release notes (the script and the new argument). It ships in the first release after the device report is committed. `2.0.0-beta.4` has a GitHub pre-release (2026-11-02) but is not on npm (only beta.3 is), so check whether its staged publish was ever approved.
+- Add a line to the next release's `CHANGELOG.md` section and release notes (the script and the new argument). It ships in the first release after the device report is committed. The first `2.0.0-beta.4` (GitHub pre-release 2026-11-02, deleted along with its tag) never reached npm, and its number is reused for the next release. Check npmjs.com for a staged publish of it still waiting, and reject it.
 - Link it from the plugin's new-device issue form (`.github/ISSUE_TEMPLATE/new-device.yml`) and from the bot's reply, in the plugin repo.
 - Run it against a model nobody here owns, when a reporter does, and fix anything it shows in the output that should have been removed.
 - Decide whether `npx` access is worth it: the report needs the repo's `src/`, so people run it from a checkout for now.

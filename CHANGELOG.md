@@ -2,9 +2,9 @@
 
 ## Releases
 
-### v2.1.0-beta.1
+### v2.0.0-beta.4
 
-Everything since the last published beta, **2.0.0-beta.3**. A `2.0.0-beta.4` was tagged on GitHub (2026-11-02) but its publish was never approved on npm, so it is not on npm; its changes are listed below the new ones. Pairs with `homebridge-wyze-smart-home` 2.1.0-beta.1.
+Everything since the last published beta, **2.0.0-beta.3**. An earlier `2.0.0-beta.4` was tagged on GitHub (2026-11-02) but its publish was never approved on npm, so it never reached npm. That GitHub release and tag were deleted and the number is used for this release; the changes the first attempt carried are listed below the new ones. Pairs with `homebridge-wyze-smart-home` 2.0.0-beta.4.
 
 **New**
 - **Night vision over the local network.** `getCameraNightVision(mac)` returns `"on"`, `"off"` or `"auto"`, and `setCameraNightVision(mac, value)` sets it and reads it back (`{ before, after, matches }`). The Wyze cloud does not expose this setting for these cameras, so the library talks to the camera directly, with a pure-JavaScript client in `src/tutk/client.js` (no native library). It needs to run on the same network as the camera, and works for cameras the device list marks with the `dtls` flag and gives an IP and keys (the Cam v2, Cam v3 and Doorbell v2 are tested). One conversation per camera at a time.
@@ -25,7 +25,7 @@ Everything since the last published beta, **2.0.0-beta.3**. A `2.0.0-beta.4` was
 - **A bulb command to the local network times out after 10 seconds** instead of waiting forever.
 - **The device report hides a server address (`server`, `dns_server`) and any IPv6 address,** and keeps firmware versions.
 
-**Carried over from 2.0.0-beta.4 (tagged, not on npm)**
+**Carried over from the first 2.0.0-beta.4 attempt (tagged 2026-11-02, never on npm)**
 
 - **Development: `npm run lint`** (ESLint on `src`, `scripts` and `tests`) and a lint job in CI. Nothing about the published package changes.
 - **Fix: concurrent logins.** Several callers finding the access token missing at once (parallel requests at start-up) each started their own login. They now share one. A second login could also run unawaited, so a failure became an unhandled rejection that crashes a default Node process, and a one-shot 2FA code failed on the repeat.
