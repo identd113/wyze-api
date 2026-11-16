@@ -235,7 +235,7 @@ Full library documentation at https://github.com/wyze-smart-home/wyze-api/wiki �
 - `src/types.js` now properly exports its constants (was previously dead code).
 
 ### v1.1.10
-- Add camera WebRTC stream support. Port of [wyzeapy#230](https://github.com/SecKatie/wyzeapy/pull/230) plus production-ready helpers ported from the [`camera-stream`](https://github.com/wyze-smart-home/wyze-api/tree/camera-stream) reference branch.
+- Add camera WebRTC stream support. Port of [wyzeapy#230](https://github.com/SecKatie/wyzeapy/pull/230) plus production-ready helpers ported from the `camera-stream` reference branch (kept as the [`archive/cameraStream`](https://github.com/identd113/wyze-api/tree/archive/cameraStream) tag).
 - Primary: `getCameraWebRTCConnectionInfo(mac, model, options)` — returns `{signalingUrl, iceServers, authToken, clientId, mac, model, substream, cached}`. ICE servers are normalized to `{urls, ...}` for `RTCPeerConnection`; signaling URL is decoded and (optionally) has the generated client ID injected as `X-Amz-ClientId`. 60s in-memory cache per `(mac, substream)`.
 - Convenience: `getCameraWebRTCConnectionInfoWithReconnect` (exponential-backoff retry), `cameraStreamWithReconnect` (general retry wrapper).
 - Lower-level: `cameraGetStreamInfo`, `cameraGetSignalingUrl`, `cameraGetIceServers` — all accept `{substream}` option.
