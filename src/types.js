@@ -106,6 +106,11 @@ const DeviceModels = Object.freeze({
   // Cameras whose light is driven by run_action floodlight_on/off; P1056 can be
   // read but writes do nothing.
   CAMERA_LIGHT_RUN_ACTION: ["HL_BC"],
+  // Cameras whose light write is tried through the devicemgmt "floodlight" capability first, and falls back to
+  // the plain P1056 write if devicemgmt fails. The Floodlight v2 (HL_CFL2) answers set_property P1056 with
+  // SUCCESS and does nothing (plugin issue #16); nobody here owns one, so devicemgmt is a guess. Only the light
+  // write changes: state reads still use get_property_list.
+  CAMERA_LIGHT_DEVICEMGMT_TRY: ["HL_CFL2"],
   // Cameras with a doorbell button (a press shows up as a "Doorbell rang" event).
   DOORBELL: ["HL_DB2"],
   // Cameras that cannot be powered off through the API: Wyze answers run_action power_off

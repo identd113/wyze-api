@@ -64,15 +64,30 @@ test("raw-value entry points route the same way (what the homebridge plugin call
   assert.deepStrictEqual(calls, [
     ["devicemgmt", "MAC", "HL_PAN4", "spotlight", "1"],
     ["runAction", "MAC", "HL_BC", "floodlight_off"],
-    ["setProperty", "MAC", "HL_CFL2", "P1056", "1"],
+    ["devicemgmt", "MAC", "HL_CFL2", "floodlight", "1"],
   ]);
 });
 
-test("Floodlight v2 (HL_CFL2) keeps the set_property P1056 path, as wyzeapy does", async () => {
+test("Floodlight v2 (HL_CFL2) tries the devicemgmt 'floodlight' capability first (issue #16)", async () => {
   const { w, calls } = stub();
   await w.cameraFloodLightOn("MAC", "HL_CFL2");
   await w.cameraFloodLightOff("MAC", "HL_CFL2");
-  assert.deepStrictEqual(calls.map((c) => c[0] + ":" + c[4]), ["setProperty:1", "setProperty:2"]);
+  assert.deepStrictEqual(calls, [
+    ["devicemgmt", "MAC", "HL_CFL2", "floodlight", "1"],
+    ["devicemgmt", "MAC", "HL_CFL2", "floodlight", "0"],
+  ]);
+});
+
+test("Floodlight v2 falls back to the set_property P1056 write when devicemgmt fails, and says so", async () => {
+  const { w, calls } = stub();
+  const warnings = [];
+  w.log.warn = (m) => warnings.push(m);
+  w._deviceMgmtRunAction = async () => { throw new Error("Request failed with status code 403"); };
+  await w.cameraFloodLightOn("MAC", "HL_CFL2");
+  await w.cameraFloodLightOff("MAC", "HL_CFL2");
+  assert.deepStrictEqual(calls.map((c) => c[0] + ":" + c[3] + ":" + c[4]), ["setProperty:P1056:1", "setProperty:P1056:2"]);
+  assert.strictEqual(warnings.length, 2);
+  assert.match(warnings[0], /HL_CFL2.*403.*property write/);
 });
 
 test("new models are registered", () => {
@@ -81,7 +96,8 @@ test("new models are registered", () => {
   assert.strictEqual(WyzeAccessoryModels.CameraModels.WyzeCamFloodlightV2, "HL_CFL2");
   for (const m of ["HL_PAN4", "HL_BC", "HL_CFL2"]) assert.ok(DeviceModels.CAMERA.includes(m), m);
   assert.ok(DeviceModels.CAMERA_DEVICEMGMT.includes("HL_PAN4"));
-  assert.ok(!DeviceModels.CAMERA_DEVICEMGMT.includes("HL_CFL2"));
+  assert.ok(!DeviceModels.CAMERA_DEVICEMGMT.includes("HL_CFL2"), "state reads still use get_property_list");
+  assert.ok(DeviceModels.CAMERA_LIGHT_DEVICEMGMT_TRY.includes("HL_CFL2"));
 });
 
 test("every devicemgmt model has a property list (needed for state reads)", () => {

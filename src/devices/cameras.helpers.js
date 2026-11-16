@@ -74,6 +74,15 @@ module.exports = {
       // Bulb Cam: P1056 can be read but not written - the light is driven by run_action.
       return this.runAction(deviceMac, deviceModel, on ? "floodlight_on" : "floodlight_off");
     }
+    if (DeviceModels.CAMERA_LIGHT_DEVICEMGMT_TRY.includes(deviceModel)) {
+      // Floodlight v2: set_property P1056 is accepted and does nothing (issue #16). Try devicemgmt first; if it
+      // fails, the plain write below is what the model has always had.
+      try {
+        return await this._deviceMgmtRunAction(deviceMac, deviceModel, "floodlight", on ? "1" : "0");
+      } catch (e) {
+        this.log.warn(`The devicemgmt light write failed for ${deviceModel} (${e.message}); using the property write instead`);
+      }
+    }
     await this.setProperty(
       deviceMac,
       deviceModel,
@@ -213,7 +222,9 @@ module.exports = {
   },
 
   _cameraLightUsesActionApi(deviceModel) {
-    return this.cameraUsesDeviceMgmt(deviceModel) || DeviceModels.CAMERA_LIGHT_RUN_ACTION.includes(deviceModel);
+    return this.cameraUsesDeviceMgmt(deviceModel)
+      || DeviceModels.CAMERA_LIGHT_RUN_ACTION.includes(deviceModel)
+      || DeviceModels.CAMERA_LIGHT_DEVICEMGMT_TRY.includes(deviceModel);
   },
 
   async cameraSpotLightOn(deviceMac, deviceModel) {
