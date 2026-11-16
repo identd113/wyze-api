@@ -10,6 +10,7 @@ Before publishing:
 - On npmjs.com, or with `npm login` then `npm stage list wyze-api` and `npm stage list homebridge-wyze-smart-home`, look for a staged publish of the first `2.0.0-beta.4` still waiting, and reject it (`npm stage reject <stage-id>`). If it were approved it would publish the old contents under this number. (npm on this machine is not logged in, so this has not been checked.)
 - Push `2.x` in both repos (`wyze-api` first). Then cut `release/2.0.0-beta.4` from `2.x` and retarget the draft GitHub release `v2.0.0-beta.4` (it targets `2.x` for now) to it.
 - The plugin's CI fails at `npm install` until `wyze-api` `2.0.0-beta.4` is on npm (its range is `^2.0.0-beta.4`). Re-run it after publishing.
+- Getting the release upstream, and the tags: see "Getting the release into the upstream repository" in `docs/releasing.md`. In short: merge commit (no squash or rebase), then `git fetch upstream --tags`, push our `v2.0.0-beta.3` to upstream, and push the upstream tags our fork lacks (`v0.1.1.9` to `v1.1.12`, `v2.0.0-beta.1`, `v2.0.0-beta.2`; in the plugin `v0.5.46`, `v0.5.47`, `v0.5.54`, `v0.5.56`, `v0.5.61`, `v2.0.0-beta.1`, `v2.0.0-beta.2`). Pushing branches or merging does not delete tags.
 - After publishing: install both from the registry into a scratch Homebridge, start it and read the log.
 - `npm audit` on the plugin flags axios 1.19.0 in the local install only (`package-lock.json` is ignored). Re-run it after `wyze-api` is published and fix if it is still there.
 
@@ -71,7 +72,8 @@ Cause is a guess: `HL_CFL2` is in `CAMERA` but not in `CAMERA_DEVICEMGMT` or `CA
 
 **The reporter answered on 2026-11-14** (the issue's last comment): they attached a Homebridge log, said they redacted what needed it, and are willing to try a test build. It is now waiting on us; nobody has read the log yet.
 
-1. Read the attached log.
+1. ~~Read the attached log.~~ Done 2026-11-16: it covers startup only. `get_property_list` for `HL_CFL2` answers `SUCCESS`, the plugin reads `light=off, power=on`, and `get-streams` shows `iot-device::iot-state` and `iot-power`; the log line with the property list is cut off at about 2,000 characters before `P1056`, and the log holds no light toggle, so it neither confirms nor rules out devicemgmt.
+1a. **Done in code, uncommitted (2026-11-16):** `CAMERA_LIGHT_DEVICEMGMT_TRY` in `src/types.js` makes `_cameraLightSet` try the devicemgmt `floodlight` capability first and fall back to `P1056` with a warning (tests in `tests/camera-lights.test.js`). A guess until the reporter confirms; if the light switches but the plugin's next poll flips it back, the state read (`P1056`) is stale for this model and needs the devicemgmt read too (`CAMERA_DEVICEMGMT` plus a `devicemgmtProps.js` entry). Ask the reporter for a debug log of one light toggle on this build.
 2. Run the device report for `HL_CFL2` (it adds the devicemgmt `get_iot_prop` read, with the `LD_CFP` property list), or send the reporter a test build that does.
 3. If the device answers, add `HL_CFL2` to `CAMERA_DEVICEMGMT` with the capability names it reports (and a `devicemgmtProps.js` entry), plus tests, then ask the reporter to confirm the light switches. Note in `docs/camera-properties.md` what `P1056` does on this model.
 4. If it does not answer, ask for a capture of the Wyze app's traffic for one light toggle and look for the call it makes.
