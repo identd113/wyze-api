@@ -232,6 +232,7 @@ module.exports = {
   /**
    * Combined snapshot — list entry + lock info + crypt secret + record
    * count. Tolerates partial sub-fetch failures.
+   * The result carries `secret`, the key that encrypts access-code PINs: do not log or store the whole object.
    */
   async getLockFullInfo(mac) {
     const devices = await this.getLockDeviceList();

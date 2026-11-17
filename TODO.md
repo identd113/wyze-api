@@ -31,7 +31,7 @@ Checked against the plugin on 2026-11-16: dynamic platform, no install scripts o
 - Done: CI tests Node 22, 24 and 26 in both repos (`wyze-api`'s `engines` stays `>=22`).
 - The plugin installs process-wide `uncaughtException` and `unhandledRejection` handlers that only log. They were added on purpose (a bad accessory must not kill the child bridge) but they also swallow other plugins' errors. About 100 async entry points rely on them. Removing them needs a pass that finds the uncaught paths first.
 - `ffmpeg-static` (a dependency of `wyze-api`) runs `node install.js` at install to download a binary into `node_modules`. `ffmpeg-for-homebridge`, which Homebridge camera plugins use, does the same. Ask Homebridge whether a dependency's install script counts, or make ffmpeg optional with the system `ffmpeg` as the fallback (`wyze-api` already falls back to it).
-- `engines.homebridge` is now `^1.8.5 || ^2.0.0` (plugin commit `0bfaf36`, Homebridge 1.x accepts Node 22 only from 1.8.5). Still to do: say so in the README, and load the plugin once on `homebridge@1.11.4` in a scratch folder to see that nothing in it needs Homebridge 2.
+- Done: `engines.homebridge` is `^1.8.5 || ^2.0.0` (plugin commit `0bfaf36`), the README says so, and on 2026-11-16 the plugin and `wyze-api` 2.0.0-beta.4 (packed tarballs) were installed with `homebridge@1.11.4` on Node 22.23.5 in a scratch folder: the plugin loaded, registered its platform and logged its versions. Not run with real credentials there.
 - Release notes are written for every published 2.x version (`docs/releases/`, in both repos). Still to do: create the GitHub releases for `2.0.0-beta.1` and `2.0.0-beta.2` in both repos, and for the plugin's `2.0.0-beta.4`.
 
 ## Login: `totpSecret` is deprecated (2026-11-16)
