@@ -6,7 +6,8 @@
  * When Wyze answers 429 (or 503 with a Retry-After) the request is held for as long as the answer says, then sent
  * again, up to MAX_RETRIES times. The wait comes from, in this order:
  *   1. `Retry-After`: a number of seconds, or an HTTP date;
- *   2. `X-RateLimit-Reset`: a Unix time in seconds (or milliseconds, or a date); `X-RateLimit-Reset-By` is read the same way;
+ *   2. `X-RateLimit-Reset`: a number under 1e9 is seconds from now, a larger one a Unix time in seconds or
+ *      milliseconds, else a date; `X-RateLimit-Reset-By` is read the same way;
  *   3. a short wait that doubles on each retry, when the answer says nothing.
  * A wait longer than MAX_WAIT_MS is not served: the error is thrown at once, with `retryAfterMs` on it, so the caller
  * decides. Nobody has measured whether Wyze limits per account, per endpoint or per host, so while one request waits
@@ -57,6 +58,11 @@ function waitFromHeaders(headers = {}, now = Date.now()) {
     if (at !== null) return Math.max(0, at - now);
   }
   return null;
+}
+
+/** Holds every request to `host` for `ms` (the shared gate), as a 429 wait does. */
+function holdHost(host, ms, now = Date.now()) {
+  if (host && ms > 0) gates.set(host, Math.max(gates.get(host) || 0, now + ms));
 }
 
 function hostAndPath(config) {
@@ -135,7 +141,7 @@ function createRateLimitHandlers({ isWyzeHost, send, sleep = defaultSleep, now =
       throw error;
     }
 
-    gates.set(host, Math.max(gates.get(host) || 0, now() + wait));
+    holdHost(host, wait, now());
     events.emit("wait", info);
     await sleep(wait);
     config.__wyzeRateRetries = attempt + 1;
@@ -167,7 +173,7 @@ function onRateLimit(fn) {
 
 module.exports = {
   MAX_RETRIES, MAX_WAIT_MS, FALLBACK_WAIT_MS,
-  toUnixMs, waitFromHeaders, observe, getRateLimitObservations,
+  toUnixMs, waitFromHeaders, holdHost, observe, getRateLimitObservations,
   createRateLimitHandlers, installRateLimitRetry, onRateLimit,
   _gates: gates,
 };

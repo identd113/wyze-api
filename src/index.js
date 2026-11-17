@@ -9,7 +9,7 @@ const constants = require("./constants");
 const util = require("./util");
 const types = require("./types");
 const { installRedirectGuard, WYZE_ALLOWED_HOSTNAMES, sanitizeLogMessage } = require("./util/security");
-const { installRateLimitRetry, onRateLimit, waitFromHeaders, MAX_WAIT_MS } = require("./util/rateLimit");
+const { installRateLimitRetry, onRateLimit, waitFromHeaders, holdHost, MAX_WAIT_MS } = require("./util/rateLimit");
 const httpsAgent = require("./httpsAgent");
 const { normalizeMfaCode, isValidMfaCode } = require("./util/totp");
 const axios = require("axios");
@@ -29,6 +29,15 @@ installRedirectGuard();
 
 // A 429 from Wyze is waited out (Retry-After, or X-RateLimit-Reset) and the request sent again; see util/rateLimit.js.
 // The log lines go to the most recently built client's logger.
+// The host a request goes to, or null when the config does not make a URL.
+function safeHost(config) {
+  try {
+    return (config.baseURL ? new URL(config.url, config.baseURL) : new URL(config.url)).hostname;
+  } catch (_) {
+    return null;
+  }
+}
+
 let rateLimitLog = null;
 installRateLimitRetry(axios, (hostname) => WYZE_ALLOWED_HOSTNAMES.has(hostname));
 onRateLimit((info) => {
@@ -284,7 +293,7 @@ module.exports = class WyzeAPI {
     this._logApiResponse(result, url);
 
     // Check and handle API rate limiting
-    await this._checkRateLimit(result.headers);
+    await this._checkRateLimit(result.headers, config);
 
     // Handle API errors based on the response code
     return this._handleApiResponse(result, url, data);
@@ -334,7 +343,7 @@ module.exports = class WyzeAPI {
     );
   }
 
-  async _checkRateLimit(headers) {
+  async _checkRateLimit(headers, config) {
     try {
       const rateLimitRemaining = headers["x-ratelimit-remaining"]
         ? Number(headers["x-ratelimit-remaining"])
@@ -353,6 +362,9 @@ module.exports = class WyzeAPI {
           this.log.warn(
             `API rate limit remaining: ${rateLimitRemaining} — sleeping until reset in ${sleepMs}ms`
           );
+          // Other requests to this host wait too (the gate the 429 handler uses), instead of running into the limit.
+          const where = config && config.url ? safeHost(config) : null;
+          if (where) holdHost(where, sleepMs);
           await this.sleepMilliSecounds(sleepMs);
         }
       } else if (rateLimitRemaining !== undefined) {
@@ -390,7 +402,7 @@ module.exports = class WyzeAPI {
         // which returns the refresh that is already running, so it would wait on itself and never settle. Fail
         // this refresh instead; _doRefreshToken then falls back to a fresh login.
         if (url === "app/user/refresh_token") {
-          throw new Error(`Wyze refused the refresh token (${code}): ${errorMessage}`);
+          throw Object.assign(new Error(`Wyze refused the refresh token (${code}): ${errorMessage}`), { refreshRefused: true });
         }
         return this._handleAccessTokenError(result, errorMessage, code, url, data);
       }
@@ -731,7 +743,8 @@ module.exports = class WyzeAPI {
           throw new Error(`Failed to refresh access token - ${describeResult(result)}`);
         }
       } catch (error) {
-        attempt += 1;
+        // A refusal is final: sending the same refresh token again would be refused again.
+        attempt = error.refreshRefused ? maxRetries : attempt + 1;
         if (attempt < maxRetries) {
           this.log.info(`Retrying token refresh, attempt ${attempt}...`);
           // Wait before retrying

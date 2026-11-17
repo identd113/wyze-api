@@ -108,3 +108,23 @@ test("flattenProperties still reads a bare property_list, `pvalue` rows and a pl
   assert.deepStrictEqual(flattenProperties([{ pid: "P2", pvalue: "2" }], []), { P2: "2" });
   assert.strictEqual(flattenProperties(undefined, []), undefined);
 });
+
+test("a low-remaining sleep holds the host for other requests; a refused refresh is not retried", async () => {
+  const sleeps = [];
+  const w = stub({ sleepMilliSecounds: async (ms) => { sleeps.push(ms); } });
+  w.log.warn = () => {};
+  await w._checkRateLimit({ "x-ratelimit-remaining": "2", "x-ratelimit-reset": "7" }, { baseURL: "https://hold.wyzecam.test", url: "app/x" });
+  assert.deepStrictEqual(sleeps, [7000]);
+  assert.ok(rl._gates.get("hold.wyzecam.test") > Date.now() + 5000, "the host is held");
+
+  let calls = 0;
+  const x = stub({
+    username: "u", password: "p", keyId: "k", apiKey: "a", refresh_token: "r",
+    getRequestData: () => ({}),
+    _performRequest: async () => { calls += 1; throw Object.assign(new Error("refused"), { refreshRefused: true }); },
+    sleepSeconds: async () => { throw new Error("must not sleep before a retry"); },
+    login: async () => { calls += 100; },
+  });
+  await x._doRefreshToken();
+  assert.strictEqual(calls, 101, "one refresh try, then the fresh login");
+});
