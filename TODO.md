@@ -77,7 +77,7 @@ Cause is a guess: `HL_CFL2` is in `CAMERA` but not in `CAMERA_DEVICEMGMT` or `CA
 2. Run the device report for `HL_CFL2` (it adds the devicemgmt `get_iot_prop` read, with the `LD_CFP` property list), or send the reporter a test build that does.
 3. If the device answers, add `HL_CFL2` to `CAMERA_DEVICEMGMT` with the capability names it reports (and a `devicemgmtProps.js` entry), plus tests, then ask the reporter to confirm the light switches. Note in `docs/camera-properties.md` what `P1056` does on this model.
 4. If it does not answer, ask for a capture of the Wyze app's traffic for one light toggle and look for the call it makes.
-5. In the plugin, once the library change ships: bump `wyze-api`, run `npm run known-models`, check the README row for `HL_CFL2`, and close #16 when the reporter confirms.
+5. In the plugin, once the library change ships: bump `wyze-api`, run `npm run known-models`, check the README row for `HL_CFL2`, and close [#16](https://github.com/identd113/homebridge-wyze-smart-home/issues/16) when the reporter confirms.
 
 ## Night vision on other cameras (updated 2026-11-16)
 
