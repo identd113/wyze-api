@@ -43,6 +43,48 @@ const { buildReport, ENDPOINTS } = require("../deviceReport");
 const LIST_TTL_MS = 60 * 1000;
 const REPORT_TTL_MS = 10 * 60 * 1000;
 
+const SCAN_CACHE_FILE = "device-scan-cache.json";
+const SCAN_CACHE_MAX = 200;
+
+/**
+ * The part of a scan that does not change until the firmware does, which devicemgmt capability groups a device has,
+ * kept in the client's persist path (the folder that already holds its login token), so a restart does not read it
+ * again. Group names only: no values, and no MAC (devices are keyed by a hash of the MAC with a random salt kept in
+ * the file). Owner-only file. Returns null when there is no folder to keep it in; every failure is a warning, never
+ * an error, because the cache is only a shortcut.
+ */
+function openScanCache(dir, say) {
+  if (!dir || typeof dir !== "string") return null;
+  const file = path.join(dir, SCAN_CACHE_FILE);
+  let data = { version: 1, salt: crypto.randomBytes(8).toString("hex"), discovery: {} };
+  try {
+    const saved = JSON.parse(fs.readFileSync(file, "utf8"));
+    if (saved && saved.version === 1 && typeof saved.salt === "string" && saved.discovery && typeof saved.discovery === "object") data = saved;
+  } catch (_) { /* none yet, or unreadable: start empty */ }
+  const keyOf = (mac) => crypto.createHash("sha256").update(`${data.salt}:${mac}`).digest("hex").slice(0, 16);
+  const readable = (f) => f && typeof f === "object" && Array.isArray(f.withValues) && Array.isArray(f.rejected) && f.accepted && typeof f.accepted === "object";
+  return {
+    file,
+    get(mac, firmware) {
+      const hit = data.discovery[keyOf(mac)];
+      return hit && hit.firmware === firmware && readable(hit.found) ? hit.found : null;
+    },
+    set(mac, firmware, found) {
+      data.discovery[keyOf(mac)] = { firmware, found, at: Date.now() };
+      const keys = Object.keys(data.discovery);
+      if (keys.length > SCAN_CACHE_MAX) for (const k of keys.sort((a, b) => data.discovery[a].at - data.discovery[b].at).slice(0, keys.length - SCAN_CACHE_MAX)) delete data.discovery[k];
+      try {
+        fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+        const tmp = `${file}.tmp`;
+        fs.writeFileSync(tmp, JSON.stringify(data), { mode: 0o600 });
+        fs.renameSync(tmp, file);
+      } catch (e) {
+        say("warn", `could not save the scan cache: ${e.message}`);
+      }
+    },
+  };
+}
+
 const MIN_PORT = 1024;
 const MAX_PORT = 65535;
 const MAX_BODY = 2048;
@@ -154,13 +196,15 @@ function page(nonce, versions = {}) {
  *   sentence), shown on that device's card
  * @param {object} [opts.versions] shown in the report, for example { plugin: "2.0.0" }
  * @param {Function} [opts.deviceReport] default buildReport (src/deviceReport.js); tests give a stand-in
+ * @param {string|null} [opts.scanCacheDir] where to keep which capability groups each device has, so a restart does not
+ *   ask again: default the client's `persistPath`; null keeps it in memory only
  * @param {object} [opts.issueForm] { url, template, origin, plugin, kind, deviceLabel(model) }: when given, a finished
  *   test comes with a link that opens that GitHub issue form with the test's findings filled in (see issueLink.js)
  */
 function createCameraTestServer({
   client, port, log = {}, host = "0.0.0.0", token = crypto.randomBytes(18).toString("hex"),
   probe = tutk.probeCamera, setNightVision = null, ephemeral = false, privateClientsOnly = true, issueForm = null, settings = null, sensors = null,
-  unsupported = null, describeDevice = null, versions = {}, deviceReport = buildReport,
+  unsupported = null, describeDevice = null, versions = {}, deviceReport = buildReport, scanCacheDir,
 }) {
   if (!client || typeof client.getDeviceList !== "function") throw new Error("createCameraTestServer needs a client with getDeviceList()");
   if (!ephemeral) {
@@ -177,6 +221,14 @@ function createCameraTestServer({
   let listCache = null; // { at, list }: the device list, saved for LIST_TTL_MS
   const reportCache = new Map(); // mac -> { at, firmware, generated, versions, entry }
   const discoveryCache = new Map(); // mac -> { firmware, found }: capability discovery, kept until the firmware changes
+  const scanCache = scanCacheDir === null ? null : openScanCache(scanCacheDir === undefined ? client.persistPath : scanCacheDir, say); // the same, on disk
+  const savedDiscovery = (mac, firmware) => {
+    const here = discoveryCache.get(mac);
+    if (here && here.firmware === firmware) return here.found;
+    const disk = scanCache && scanCache.get(mac, firmware);
+    if (disk) discoveryCache.set(mac, { firmware, found: disk });
+    return disk || null;
+  };
 
   async function deviceList() {
     if (listCache && Date.now() - listCache.at < LIST_TTL_MS) return listCache.list;
@@ -390,8 +442,7 @@ function createCameraTestServer({
           stored = saved;
           say("info", `report for a ${device.product_model}: the saved scan from ${Math.round((Date.now() - saved.at) / 1000)} s ago`);
         } else {
-          const known = discoveryCache.get(device.mac);
-          const reuseDiscovery = wantDiscovery && !refresh && known && known.firmware === device.firmware_ver ? known.found : null;
+          const reuseDiscovery = wantDiscovery && !refresh ? savedDiscovery(device.mac, device.firmware_ver) : null;
           const report = await deviceReport({
             client,
             select: (d) => d.mac === device.mac,
@@ -411,7 +462,10 @@ function createCameraTestServer({
           }
           stored = { at: Date.now(), firmware: device.firmware_ver, generated: report.generated, versions: report.versions, entry };
           reportCache.set(device.mac, stored);
-          if (entry.capabilityDiscovery && !entry.capabilityDiscovery.stopped) discoveryCache.set(device.mac, { firmware: device.firmware_ver, found: entry.capabilityDiscovery });
+          if (entry.capabilityDiscovery && !entry.capabilityDiscovery.stopped && !reuseDiscovery) {
+            discoveryCache.set(device.mac, { firmware: device.firmware_ver, found: entry.capabilityDiscovery });
+            if (scanCache) scanCache.set(device.mac, device.firmware_ver, entry.capabilityDiscovery);
+          }
           say("info", `collected a report for a ${device.product_model} (${device.product_type})`);
         }
         const entry = stored.entry;

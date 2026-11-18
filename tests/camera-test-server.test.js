@@ -471,6 +471,78 @@ test("the device list is read once for both tabs within a minute, and again afte
   } finally { await server.stop(); t.mock.timers.reset(); }
 });
 
+test("which capability groups a device has is saved in the persist path, owner-only and without the MAC, and a restart reuses it", async () => {
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const path = require("node:path");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "scan-cache-"));
+  const client = () => ({ getDeviceList: async () => THINGS, cameraUsesDeviceMgmt: () => false, persistPath: dir });
+  try {
+    let run = startOthers({ client: client() });
+    let { server, port } = await run.promise;
+    await request(port, { path: "/api/devices", headers: auth });
+    await post(port, { discovery: true });
+    assert.deepStrictEqual(run.calls.discovery, [true], "the first time it is asked");
+    await server.stop();
+
+    const file = path.join(dir, "device-scan-cache.json");
+    assert.ok(fs.existsSync(file), "the cache is in the persist path");
+    assert.strictEqual(fs.statSync(file).mode & 0o777, 0o600, "owner-only");
+    const text = fs.readFileSync(file, "utf8");
+    for (const secret of ["AABBCCDDEEFF", "112233445566", "665544332211", "Bedroom purifier", "10.0.0.7"]) assert.ok(!text.includes(secret), `no ${secret} on disk`);
+    assert.ok(text.includes("device-info"), "the group names are there");
+    assert.ok(!fs.existsSync(`${file}.tmp`), "no half-written file is left");
+
+    // a new server (a restart) in the same folder: asked for discovery, it reads the device but not its groups
+    run = startOthers({ client: client() });
+    ({ server, port } = await run.promise);
+    await request(port, { path: "/api/devices", headers: auth });
+    const body = JSON.parse((await post(port, { discovery: true })).text);
+    assert.deepStrictEqual(run.calls.discovery, [false], "the groups came from the file");
+    assert.ok(body.steps.some((st) => st.name === "Capability discovery" && st.ok));
+    // Scan again asks anyway, and writes the new answer
+    await post(port, { discovery: true, refresh: true });
+    assert.deepStrictEqual(run.calls.discovery, [false, true]);
+    await server.stop();
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("a different firmware, a damaged cache file or no persist path never breaks a scan", async () => {
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const path = require("node:path");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "scan-cache-"));
+  const file = path.join(dir, "device-scan-cache.json");
+  try {
+    fs.writeFileSync(file, "{ this is not json");
+    let run = startOthers({ client: { getDeviceList: async () => THINGS, cameraUsesDeviceMgmt: () => false, persistPath: dir } });
+    let { server, port } = await run.promise;
+    await request(port, { path: "/api/devices", headers: auth });
+    assert.strictEqual((await post(port, { discovery: true })).status, 200, "a damaged file is ignored and replaced");
+    assert.doesNotThrow(() => JSON.parse(fs.readFileSync(file, "utf8")));
+    await server.stop();
+
+    // the saved answer belongs to a firmware: a device that now has another one is asked again
+    const updated = THINGS.map((d) => (d.mac === "AABBCCDDEEFF" ? { ...d, firmware_ver: "9.9.9" } : d));
+    run = startOthers({ client: { getDeviceList: async () => updated, cameraUsesDeviceMgmt: () => false, persistPath: dir } });
+    ({ server, port } = await run.promise);
+    await request(port, { path: "/api/devices", headers: auth });
+    await post(port, { discovery: true });
+    assert.deepStrictEqual(run.calls.discovery, [true], "a new firmware is not served the old answer");
+    await server.stop();
+
+    // scanCacheDir null: memory only, and nothing is written
+    const other = fs.mkdtempSync(path.join(os.tmpdir(), "scan-cache-"));
+    run = startOthers({ client: { getDeviceList: async () => THINGS, cameraUsesDeviceMgmt: () => false, persistPath: other }, scanCacheDir: null });
+    ({ server, port } = await run.promise);
+    await request(port, { path: "/api/devices", headers: auth });
+    await post(port, { discovery: true });
+    assert.deepStrictEqual(fs.readdirSync(other), []);
+    await server.stop();
+    fs.rmSync(other, { recursive: true, force: true });
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
 test("without an unsupported check there are no device routes", async () => {
   const { server, port } = await start({});
   try {
