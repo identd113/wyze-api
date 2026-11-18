@@ -305,3 +305,8 @@ test("a rejection while discovering is logged as debug, not as an error", async 
     axios.post = original;
   }
 });
+
+test("Wyze's per-request trace ids are removed from a report", () => {
+  const out = scrub({ code: "1", traceId: "d8c45c142b8e791112d47a7be51c65e4", request_id: "9de4ded6-4769160", data: { traceId: "aaaa" } });
+  assert.deepStrictEqual(out, { code: "1", data: {} });
+});
