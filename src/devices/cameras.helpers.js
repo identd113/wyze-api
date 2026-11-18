@@ -8,6 +8,7 @@ const {
   writeSdpFile,
   writeAudioSdpFile,
   resolveFfmpegPath,
+  killChild,
   localIpAddress,
   labelLogger,
   formatStartTiming,
@@ -642,8 +643,8 @@ module.exports = {
     const cleanup = () => {
       if (keepaliveTimer) { clearInterval(keepaliveTimer); keepaliveTimer = null; }
       if (stableTimer) { clearTimeout(stableTimer); stableTimer = null; }
-      try { videoFfmpeg?.kill("SIGKILL"); } catch (_) {}
-      try { audioFfmpeg?.kill("SIGKILL"); } catch (_) {}
+      killChild(videoFfmpeg);
+      killChild(audioFfmpeg);
       try { forwarder?.stop(); } catch (_) {}
       try { if (videoSdpPath) fs.unlinkSync(videoSdpPath); } catch (_) {}
       try { if (audioSdpPath) fs.unlinkSync(audioSdpPath); } catch (_) {}
@@ -722,7 +723,7 @@ module.exports = {
       const onVideoIdle = () => {
         if (stopped) return;
         log("warn", "[stream] video idle — forcing reconnect");
-        try { videoFfmpeg?.kill("SIGKILL"); } catch (_) {}
+        killChild(videoFfmpeg);
       };
 
       // Fresh local ports for every attempt. The ones picked when HomeKit prepared

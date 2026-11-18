@@ -54,6 +54,15 @@ const audioCodecs = () => [
 ];
 
 let _ffmpegBinaryPath = null;
+/**
+ * Kills a child process, but only one that really started. A child whose spawn failed (ENOENT) has no pid, and on
+ * Node 22 `kill()` on it can still reach the process's own group (pid 0) and SIGKILL the host and everything in it.
+ */
+function killChild(child, signal = "SIGKILL") {
+  if (!child || typeof child.pid !== "number") return false;
+  try { return child.kill(signal); } catch (_) { return false; }
+}
+
 function resolveFfmpegPath() {
   if (_ffmpegBinaryPath) return _ffmpegBinaryPath;
   try {
@@ -360,13 +369,13 @@ async function decodeKeyframe({ packets, sprop = null, timeoutMs = 6000 }) {
     ffmpeg.once("error", reject);
     ffmpeg.once("close", () => resolve());
   });
-  const timer = setTimeout(() => { try { ffmpeg.kill("SIGKILL"); } catch (_) {} }, timeoutMs);
+  const timer = setTimeout(() => killChild(ffmpeg), timeoutMs);
   try {
     ffmpeg.stdin.end(stream);
     await done;
   } finally {
     clearTimeout(timer);
-    try { ffmpeg.kill("SIGKILL"); } catch (_) {}
+    killChild(ffmpeg);
   }
   const buffer = Buffer.concat(chunks);
   if (buffer.length === 0) throw new Error(`ffmpeg produced no picture: ${Buffer.concat(errors).toString().trim().slice(0, 200)}`);
@@ -1271,6 +1280,7 @@ module.exports = {
   setTempDirectory,
   writeAudioSdpFile,
   resolveFfmpegPath,
+  killChild,
   localIpAddress,
   extractSpropParameterSets,
 };
