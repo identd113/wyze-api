@@ -504,8 +504,8 @@ function createCameraTestServer({
       }
     }
 
-    // A picture of the camera: Wyze's last saved thumbnail, or with ?live=1 a frame taken from the live stream now
-    // (several seconds; the night vision check uses it to show what changed).
+    // A picture of the camera: Wyze's last saved thumbnail only (it never starts a stream on the camera), or with ?live=1 a
+    // frame taken from the live stream now (several seconds; the night vision check uses it to show what changed).
     const sm = /^\/api\/cameras\/(cam-\d+)\/snapshot$/.exec(url.pathname);
     if (sm) {
       if (req.method !== "GET") return sendText(res, 405, "Method not allowed");
@@ -516,7 +516,7 @@ function createCameraTestServer({
       const live = url.searchParams.get("live") === "1";
       snapshotsBusy.add(cam.mac);
       try {
-        const { buffer, source } = await client.getCameraSnapshotImage(cam.mac, { deviceModel: cam.product_model, skipCloud: live, noCache: live, timeoutMs: SNAPSHOT_TIMEOUT_MS });
+        const { buffer, source } = await client.getCameraSnapshotImage(cam.mac, { deviceModel: cam.product_model, skipCloud: live, noCache: live, cloudOnly: !live, timeoutMs: SNAPSHOT_TIMEOUT_MS });
         const jpeg = Buffer.isBuffer(buffer) && buffer.length > 4 && buffer.length <= MAX_SNAPSHOT_BYTES && buffer[0] === 0xff && buffer[1] === 0xd8;
         if (!jpeg) return sendJson(res, 502, { error: "the camera did not return a picture" });
         say("info", `snapshot of ${cam.nickname} (${live ? "live" : "saved by Wyze"}, ${Math.round(buffer.length / 1024)} kB)`);

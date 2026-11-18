@@ -295,6 +295,9 @@ module.exports = {
    * the device-list lookup that finds the camera's model.
    */
   async getCameraSnapshotImage(mac, options = {}) {
+    // options.cloudOnly: only Wyze's saved thumbnail, never a live capture (which starts a stream on the camera). Throws
+    // when Wyze has none.
+    if (options.cloudOnly && options.skipCloud) throw new Error("getCameraSnapshotImage: cloudOnly and skipCloud cannot both be set");
     if (!options.skipCloud) {
       const cloud = await this.getCameraSnapshot(mac);
       if (cloud?.url) {
@@ -306,6 +309,8 @@ module.exports = {
         }
       }
     }
+
+    if (options.cloudOnly) throw new Error("Wyze has no saved picture for this camera");
 
     // A caller that already knows the model (the plugin does) saves a whole device-list
     // request per capture; otherwise look the camera up.

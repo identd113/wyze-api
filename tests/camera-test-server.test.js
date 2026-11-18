@@ -729,10 +729,12 @@ test("a snapshot is a JPEG behind the token; ?live=1 asks for a fresh frame, and
     assert.strictEqual(saved.headers["content-type"], "image/jpeg");
     assert.strictEqual(saved.headers["cache-control"], "no-store");
     assert.strictEqual(saved.headers["x-snapshot-source"], "cloud");
-    assert.deepStrictEqual(asked[0], { mac: MAC, options: { deviceModel: "HL_DB2", skipCloud: false, noCache: false, timeoutMs: 20000 } });
+    assert.deepStrictEqual(asked[0], { mac: MAC, options: { deviceModel: "HL_DB2", skipCloud: false, noCache: false, cloudOnly: true, timeoutMs: 20000 } });
     const live = await request(port, { path: "/api/cameras/cam-1/snapshot?live=1", headers: auth });
     assert.strictEqual(live.headers["x-snapshot-source"], "live");
     assert.deepStrictEqual([asked[1].options.skipCloud, asked[1].options.noCache], [true, true], "a live frame, not a saved or cached one");
+    assert.strictEqual(asked[0].options.cloudOnly, true, "the picture shown on opening never starts a stream on the camera");
+    assert.strictEqual(asked[1].options.cloudOnly, false);
     assert.strictEqual((await request(port, { path: "/api/cameras/cam-9/snapshot", headers: auth })).status, 404);
     assert.strictEqual((await request(port, { method: "POST", path: "/api/cameras/cam-1/snapshot", headers: json, body: {} })).status, 405);
   } finally { await server.stop(); }
