@@ -334,3 +334,8 @@ test("discovery waits between the asks for one device, not before the first, and
   await buildReport({ client, onDiscovery: (i) => none.push(i) });
   assert.deepStrictEqual(none, []);
 });
+
+test("a key that only contains a private pattern inside an ordinary word is kept, and a real one next to it is not", () => {
+  const out = scrub({ capacity: 1, "storage-capacity": 2, microphone: "on", velocity: 3, microphone_ip: "10.0.0.5", city: "Springfield", phone: "555", nickname: "x" });
+  assert.deepStrictEqual(out, { capacity: 1, "storage-capacity": 2, microphone: "on", velocity: 3 });
+});

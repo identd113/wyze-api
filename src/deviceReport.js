@@ -33,6 +33,10 @@ const PRIVATE_KEY = new RegExp(
   ].join("|")
 );
 
+// Ordinary words that contain a private pattern ("capacity" has "city", "microphone" has "phone", "velocity" has "city").
+// They are taken out of a key before it is tested, so `microphone` is kept and `microphone_ip` is still dropped.
+const HARMLESS_WORDS = /capacity|microphone|velocity/g;
+
 const MAC_COLON = /\b[0-9A-Fa-f]{2}([:-])[0-9A-Fa-f]{2}(?:\1[0-9A-Fa-f]{2}){4}\b/g;
 const MAC_PLAIN = /(?<![0-9A-Za-z])[0-9A-Fa-f]{12}(?![0-9A-Za-z])/g;
 const MAC_AFTER_UNDERSCORE = /(?<=_)[0-9A-Fa-f]{12}(?![0-9A-Za-z])/g;
@@ -82,7 +86,7 @@ function scrub(value, literals = [], keepVersions = false) {
     const out = {};
     for (const [k, v] of Object.entries(value)) {
       const lower = k.toLowerCase();
-      if (PRIVATE_KEY.test(lower)) continue;
+      if (PRIVATE_KEY.test(lower.replace(HARMLESS_WORDS, ""))) continue;
       out[scrubString(k, literals)] = scrub(v, literals, VERSION_KEY.test(lower));
     }
     return out;

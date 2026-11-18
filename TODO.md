@@ -153,6 +153,18 @@ Details are in `docs/camera-properties.md` ("What the Cam v3 answered") and `doc
 - **Rate limit:** the history is recorded now (`getRateLimitHistory()` in `src/util/rateLimit.js`: the last 100 answers per path, and a count of all). Still to do: run a few hundred calls and read it to see whether `remaining` is per account, host or endpoint. `devicemgmt-service-beta` sends no rate-limit headers.
 - **Palm Lock** gets a `battery` group through devicemgmt (four values); check whether the plugin's battery reading already has the same data.
 
+## Code review since beta.3 (2026-11-18, `wyze-api` only; the plugin's is separate)
+
+Fixed on `2.x` (commit after `0a96e61`): the camera test page's night vision change waited on its own queue forever when run inside Homebridge, and kept the page's one-test lock (it is in the `release/2.0.0-beta.4` code too); card ids are now fixed to their device instead of their place in the list; `scrub` no longer drops keys like `capacity` and `microphone`.
+
+Open, none urgent:
+- **Thermostat setpoints go out as text first for every thermostat** (`src/devices/thermostat.js`), with no opt-in. If Wyze accepts the text and the unit ignores it, nothing falls back and nothing is logged. Consider a `thermostatSetpointAsText` option, or checking the answer, once someone with a `CO_EA1` reports on #317.
+- **Floodlight v2 (`HL_CFL2`) light write:** `_deviceMgmtRunAction` returns the body without checking `code`, so a non-success answer skips the P1056 fallback, and each failed devicemgmt call logs an error before the warning. Check the code once there is a device to see what a failure looks like.
+- **Module-level state in `src/index.js`:** `setTempDirectory` and the rate-limit logger are shared by every client in the process (the last constructed wins). Pass them per client if a host ever runs two.
+- **A DTLS alert after the handshake** (`src/tutk/client.js`) does not reject the pending reads, so a dropped session waits out every command's 2 second timeout (about 38 seconds for a full probe). Reject the waiters on an alert.
+- **The same `.env` loader is copied into seven scripts**, and a CRLF `.env` leaves a `\r` on the password in all of them. Move it to one `scripts/lib/loadEnv.js` and trim.
+- **A 429 hold releases every waiting request at once** (`src/util/rateLimit.js`), which can trigger the next 429. Release them one at a time or with a little jitter.
+
 ## Housekeeping
 
 - The `wyze-api` wiki sync workflow (`wiki-sync.yml`) fails on every run with "Repository not found" for `identd113/wyze-api.wiki.git`: turn the wiki on in the fork's settings, or switch the workflow off.

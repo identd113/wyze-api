@@ -4,6 +4,11 @@
 
 ### Unreleased
 
+**Fixed**
+- **The camera test page's night vision change never finished inside Homebridge.** The page queued the change on the camera's queue and `setCameraNightVision` queued it again behind itself, so neither could finish and the page's one-test-at-a-time lock was never released (every later test got 409 until a restart). Present in 2.0.0-beta.4. The change is now queued once.
+- **A card's id stays with its device.** Ids were positions in the device list, so a list that was reordered or changed under an open page could point a button at another camera. They are now fixed to the device for as long as the server runs.
+- **The device report no longer drops keys that only contain a private pattern inside an ordinary word** (`capacity`, `microphone`, `velocity`).
+
 **New**
 - **The camera test page shows a snapshot of each camera.** Wyze's last saved picture opens with the page, **Live snapshot** takes a frame from the live stream, and a night vision change waits five seconds and then shows a new snapshot next to the one from before (`GET /api/cameras/<id>/snapshot`, `?live=1` for a fresh frame; JPEG only, one per camera at a time, the token required). `getCameraSnapshotImage(mac, { cloudOnly: true })` returns Wyze's saved thumbnail or throws, and never starts a live capture; the page uses it for the picture shown on opening.
 - **"What may it support?"** on each camera's card (and in the Other devices results): a read-only scan listed as seen on this device, likely for the model, or not seen, with what shows each (`POST /api/cameras/<id>/support`, `src/web/support.js`). It joins what Test found over the network.

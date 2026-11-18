@@ -14,7 +14,7 @@ const WyzeAPI = require("../src/index");
 const MAC = "AABBCCDDEEFF";
 const CAMERAS = [
   { mac: MAC, nickname: "Front Doorbell", product_model: "HL_DB2", product_type: "Camera", firmware_ver: "4.51.3.6791", enr: "SECRETENRSECRET16", device_params: { ip: "192.168.1.50", p2p_id: "ABCDEFGHIJKLMNOPQRST", dtls: 1 } },
-  { mac: "AABBCCDDEEFF", nickname: "Old Cam", product_model: "WYZEC1", product_type: "Camera", firmware_ver: "3.9.1", enr: "ANOTHERENRSECRET1", device_params: { ip: "192.168.1.51", p2p_id: "TSRQPONMLKJIHGFEDCBA" } },
+  { mac: "AABBCCDDEE02", nickname: "Old Cam", product_model: "WYZEC1", product_type: "Camera", firmware_ver: "3.9.1", enr: "ANOTHERENRSECRET1", device_params: { ip: "192.168.1.51", p2p_id: "TSRQPONMLKJIHGFEDCBA" } },
   { mac: "112233445566", nickname: "Hall bulb", product_model: "WLPA19C", product_type: "MeshLight", firmware_ver: "1.0" },
 ];
 
@@ -689,7 +689,8 @@ test("with the host's own client, a night vision change and a test go through it
   const client = {
     getDeviceList: async () => CAMERAS,
     _oneAtATime: (mac, job) => { queued.push(mac); return job(); },
-    setCameraNightVision: async (mac, value) => ({ before: "off", after: value, matches: true }),
+    // like the real client, the change queues itself: the page must not queue it a second time
+    setCameraNightVision: (mac, value) => client._oneAtATime(mac, async () => ({ before: "off", after: value, matches: true })),
   };
   const { server, port } = await start({ client, setNightVision: undefined, probe: async () => ({ authenticated: true }) });
   try {
@@ -697,7 +698,7 @@ test("with the host's own client, a night vision change and a test go through it
     const set = await request(port, { method: "POST", path: "/api/cameras/cam-1/night-vision", headers: json, body: { value: "auto", confirm: true } });
     assert.deepStrictEqual(JSON.parse(set.text), { before: "off", after: "auto", matches: true }, "the client's method is used");
     await request(port, { method: "POST", path: "/api/cameras/cam-1/test", headers: json, body: {} });
-    assert.strictEqual(queued.length, 2, "both went through the queue");
+    assert.strictEqual(queued.length, 2, "each went through the queue once: the change by the client itself, the test by the page");
   } finally { await server.stop(); }
 });
 
@@ -845,4 +846,71 @@ test("the footer's Report an issue is the bug form with the versions filled in, 
     const html = (await request(without.port, { path: "/?token=test-token-1234" })).text;
     assert.match(html, /href="https:\/\/github\.com\/[^"]*\/issues\/new\/choose"[^>]*>Report an issue</);
   } finally { await without.server.stop(); }
+});
+
+test("a night vision change with the real client's own queue finishes (it used to wait on itself) and frees the page for the next test", async () => {
+  // the real client: it has _oneAtATime, and setCameraNightVision queues on it, as in Homebridge
+  const api = new WyzeAPI({ username: "u", password: "p", keyId: "k", apiKey: "a", logLevel: "error" });
+  const device = { ...CAMERAS[0], device_params: { dtls: 1, ip: "10.0.0.9", p2p_id: "UID" } };
+  api.getDeviceList = async () => [device];
+  const sent = [];
+  const tutkClient = require("../src/tutk/client");
+  const original = tutkClient.setNightVision;
+  tutkClient.setNightVision = async (args) => { sent.push(args.value); return { before: "auto", after: args.value, matches: true }; };
+  const { server, port } = await start({ client: api, setNightVision: null });
+  try {
+    await request(port, { path: "/api/cameras", headers: auth });
+    const done = await Promise.race([
+      request(port, { method: "POST", path: "/api/cameras/cam-1/night-vision", headers: json, body: { value: "off", confirm: true } }),
+      new Promise((resolve) => setTimeout(() => resolve({ status: "HUNG" }), 3000)),
+    ]);
+    assert.strictEqual(done.status, 200, "the change came back");
+    assert.deepStrictEqual(sent, ["off"], "and was sent once");
+    // nothing is left holding the one-test-at-a-time lock, and the camera's queue is free
+    const next = await request(port, { method: "POST", path: "/api/cameras/cam-1/night-vision", headers: json, body: { value: "auto", confirm: true } });
+    assert.strictEqual(next.status, 200);
+    assert.deepStrictEqual(sent, ["off", "auto"]);
+  } finally { tutkClient.setNightVision = original; await server.stop(); }
+});
+
+test("a stand-in night vision change and the bare tutk path are each queued once", async () => {
+  const order = [];
+  const { server, port } = await start({
+    client: { getDeviceList: async () => CAMERAS, _oneAtATime: (mac, job) => { order.push("queued"); return job(); } },
+    setNightVision: async (args) => { order.push("ran"); return { before: "auto", after: args.value, matches: true }; },
+  });
+  try {
+    await request(port, { path: "/api/cameras", headers: auth });
+    assert.strictEqual((await request(port, { method: "POST", path: "/api/cameras/cam-1/night-vision", headers: json, body: { value: "on", confirm: true } })).status, 200);
+    assert.deepStrictEqual(order, ["queued", "ran"], "queued once, then run");
+  } finally { await server.stop(); }
+});
+
+test("a card's id stays with its device when the list is reordered or a device goes, so a button never changes another camera", async (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: 1_800_000_000_000 });
+  const A = { ...CAMERAS[0], mac: "AAAAAAAAAAAA", nickname: "A" };
+  const B = { ...CAMERAS[0], mac: "BBBBBBBBBBBB", nickname: "B" };
+  const C = { ...CAMERAS[0], mac: "CCCCCCCCCCCC", nickname: "C" };
+  const D = { ...CAMERAS[0], mac: "DDDDDDDDDDDD", nickname: "D" };
+  let list = [A, B, C];
+  const changed = [];
+  const { server, port } = await start({
+    client: { getDeviceList: async () => list },
+    setNightVision: async (args) => { changed.push(args.mac); return { before: "auto", after: args.value, matches: true }; },
+  });
+  const night = (id) => request(port, { method: "POST", path: `/api/cameras/${id}/night-vision`, headers: json, body: { value: "off", confirm: true } });
+  const read = async () => JSON.parse((await request(port, { path: "/api/cameras", headers: auth })).text).cameras.map((c) => [c.id, c.name]);
+  try {
+    assert.deepStrictEqual(await read(), [["cam-1", "A"], ["cam-2", "B"], ["cam-3", "C"]]);
+    // Wyze returns them in another order, A is gone and D is new; the page reads the list again after the minute it is kept
+    list = [C, D, B];
+    t.mock.timers.tick(61 * 1000);
+    assert.deepStrictEqual(await read(), [["cam-3", "C"], ["cam-4", "D"], ["cam-2", "B"]], "each keeps its id; the new one gets the next number");
+    await night("cam-2");
+    assert.deepStrictEqual(changed, ["BBBBBBBBBBBB"], "cam-2 is still B (by position it would now be D)");
+    await night("cam-3");
+    assert.deepStrictEqual(changed, ["BBBBBBBBBBBB", "CCCCCCCCCCCC"]);
+    assert.strictEqual((await night("cam-1")).status, 404, "A is gone: its id is not handed to another camera");
+    assert.deepStrictEqual(changed.length, 2, "and nothing was changed");
+  } finally { await server.stop(); t.mock.timers.reset(); }
 });

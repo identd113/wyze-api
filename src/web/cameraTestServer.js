@@ -223,8 +223,16 @@ function createCameraTestServer({
   const tokenBuf = Buffer.from(token);
   const failures = new Map(); // address -> { count, until }
   let busy = false;
-  let cameras = []; // the last device list, in the order shown
-  let others = []; // the devices the host does not support, in the order shown
+  // A card's id is fixed to its device for as long as the server runs: the number is given when the MAC is first seen
+  // and never reused or shifted. Ids by position would move when Wyze reorders the list or a device is added or
+  // removed, and a button pressed on one card could then change another camera.
+  const seenIds = { cam: new Map(), dev: new Map() }; // mac -> number
+  const idOf = (kind, mac) => {
+    if (!seenIds[kind].has(mac)) seenIds[kind].set(mac, seenIds[kind].size + 1);
+    return `${kind}-${seenIds[kind].get(mac)}`;
+  };
+  let cameraById = new Map(); // id -> the device, from the last device list
+  let otherById = new Map(); // the devices the host does not support
   const localResults = new Map(); // mac -> { at, result }: what the camera itself last answered to Test, for the support view
   const snapshotsBusy = new Set(); // macs with a snapshot being taken: one at a time per camera
   let listCache = null; // { at, list }: the device list, saved for LIST_TTL_MS
@@ -254,9 +262,10 @@ function createCameraTestServer({
 
   async function loadCameras() {
     const list = await deviceList();
-    cameras = list.filter((d) => String(d.product_type).toLowerCase() === "camera");
-    return cameras.map((d, i) => ({
-      id: `cam-${i + 1}`,
+    const cameras = list.filter((d) => String(d.product_type).toLowerCase() === "camera");
+    cameraById = new Map(cameras.map((d) => [idOf("cam", d.mac), d]));
+    return cameras.map((d) => ({
+      id: idOf("cam", d.mac),
       name: d.nickname,
       model: d.product_model,
       firmware: d.firmware_ver,
@@ -267,9 +276,10 @@ function createCameraTestServer({
 
   async function loadOthers() {
     const list = await deviceList();
-    others = list.filter((d) => unsupported(d));
-    return others.map((d, i) => ({
-      id: `dev-${i + 1}`,
+    const others = list.filter((d) => unsupported(d));
+    otherById = new Map(others.map((d) => [idOf("dev", d.mac), d]));
+    return others.map((d) => ({
+      id: idOf("dev", d.mac),
       name: d.nickname,
       model: d.product_model,
       type: d.product_type,
@@ -283,15 +293,18 @@ function createCameraTestServer({
   // The host's client keeps one conversation per camera at a time (its own night vision reads and switches use the
   // same queue), so a test or a change from this page waits for those instead of colliding with them.
   const oneAtATime = (mac, job) => (typeof client._oneAtATime === "function" ? client._oneAtATime(mac, job) : job());
+  // Runs the change in the camera's queue exactly once. The client's own setCameraNightVision queues itself, so it must
+  // not be wrapped in the queue again: its inner job would wait for the outer one, which waits for it, and neither
+  // ever finishes (and the page's one-test-at-a-time lock would never be released).
   const changeNightVision = (mac, args) => {
-    if (setNightVision) return setNightVision(args);
-    return typeof client.setCameraNightVision === "function" ? client.setCameraNightVision(mac, args.value) : tutk.setNightVision(args);
+    if (setNightVision) return oneAtATime(mac, () => setNightVision(args));
+    if (typeof client.setCameraNightVision === "function") return client.setCameraNightVision(mac, args.value);
+    return oneAtATime(mac, () => tutk.setNightVision(args));
   };
 
   const findOther = async (id) => {
-    if (!others.length) await loadOthers();
-    const m = /^dev-(\d+)$/.exec(id);
-    return m ? others[Number(m[1]) - 1] : undefined;
+    if (!otherById.size) await loadOthers();
+    return otherById.get(id);
   };
 
   /**
@@ -357,9 +370,8 @@ function createCameraTestServer({
   }
 
   const findCamera = async (id) => {
-    if (!cameras.length) await loadCameras();
-    const m = /^cam-(\d+)$/.exec(id);
-    return m ? cameras[Number(m[1]) - 1] : undefined;
+    if (!cameraById.size) await loadCameras();
+    return cameraById.get(id);
   };
 
   const secure = (res, extra = {}) => {
@@ -609,7 +621,7 @@ function createCameraTestServer({
       busy = true;
       say("info", `setting night vision of ${cam.nickname} to ${body.value}`);
       try {
-        const result = await oneAtATime(cam.mac, () => changeNightVision(cam.mac, { ...target, value: body.value }));
+        const result = await changeNightVision(cam.mac, { ...target, value: body.value });
         say("info", `${cam.nickname}: night vision ${result.before} -> ${result.after}${result.matches ? "" : " (did not match)"}`);
         return sendJson(res, 200, result);
       } catch (e) {
