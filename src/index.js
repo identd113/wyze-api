@@ -1154,12 +1154,12 @@ module.exports = class WyzeAPI {
   // for a camera whose device list entry has the dtls flag, an IP and its keys. One conversation per camera at a
   // time: the camera serves a few sessions, and a second at once only fails.
 
-  async _localCamera(mac) {
+  async _localCamera(mac, what = "night vision") {
     const tutk = require("./tutk/client");
     const device = (await this.getDeviceList()).find((d) => d.mac === mac);
     if (!device) throw new Error("no such camera on this account");
     const why = tutk.cameraLocalSkipReason(device);
-    if (why) throw new Error(`night vision cannot be reached: ${why}`);
+    if (why) throw new Error(`${what} cannot be reached: ${why}`);
     return { tutk, target: { host: device.device_params.ip, uid: device.device_params.p2p_id, enr: device.enr, mac: device.mac } };
   }
 
@@ -1177,6 +1177,18 @@ module.exports = class WyzeAPI {
     return this._oneAtATime(mac, async () => {
       const { tutk, target } = await this._localCamera(mac);
       return tutk.readNightVision(target);
+    });
+  }
+
+  /**
+   * The camera's smoke and CO alarm sound settings, as the Wyze app's Alarm Settings page shows them:
+   * `{ smoke, co }`, each "on", "off" or "unknown". Read only; asks the camera over the local network like
+   * night vision. There is no setter (the camera's write command for these is not known yet).
+   */
+  async getCameraAlarmSettings(mac) {
+    return this._oneAtATime(mac, async () => {
+      const { tutk, target } = await this._localCamera(mac, "the alarm settings");
+      return tutk.readAlarmSettings(target);
     });
   }
 

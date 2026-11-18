@@ -1098,6 +1098,34 @@ async function setNightVision({ host, port = 32761, uid, enr, mac, value, timeou
   }
 }
 
+// The camera's own smoke and CO alarm sound settings (the Wyze app's Alarm Settings page): K10020 params 17 and 18,
+// 1 on and 2 off. Found on 2026-11-18 by turning the two toggles off and on, one at a time, on a Cam v3 and reading
+// K10020 each time (18 moved alone for CO; 17 is Smoke by elimination). Not in the cloud property list.
+const ALARM_STATE = { 1: "on", 2: "off" };
+const SMOKE_PARAM = "17";
+const CO_PARAM = "18";
+
+/** { smoke, co } ("on", "off" or "unknown") from a K10020 answer. Throws when the answer is not the params JSON. */
+function parseAlarmSettings(buf) {
+  const text = buf.toString("latin1");
+  const brace = text.indexOf("{");
+  let params = null;
+  if (brace >= 0) { try { params = JSON.parse(text.slice(brace)); } catch (_) { /* not JSON */ } }
+  if (!params || typeof params !== "object") throw new Error("the camera did not answer with its settings");
+  const name = (key) => ALARM_STATE[params[key]] || "unknown";
+  return { smoke: name(SMOKE_PARAM), co: name(CO_PARAM) };
+}
+
+/** Reads the smoke and CO alarm sound settings: { smoke, co }. Sends nothing but the read (K10020). */
+async function readAlarmSettings({ host, port = 32761, uid, enr, mac, timeoutMs = 8000 }) {
+  const open = await openCamera({ host, port, uid, enr, mac, timeoutMs });
+  try {
+    return parseAlarmSettings(await open.av.query(10020, timeoutMs));
+  } finally {
+    open.close();
+  }
+}
+
 /** Reads night vision: "on", "off" or "auto". Sends nothing but the read. */
 async function readNightVision({ host, port = 32761, uid, enr, mac, timeoutMs = 8000 }) {
   const open = await openCamera({ host, port, uid, enr, mac, timeoutMs });
@@ -1122,6 +1150,6 @@ function cameraLocalSkipReason(d) {
 }
 
 module.exports = {
-  cameraLocalSkipReason, Session, DtlsClient, AvChannel, openCamera, probeCamera, setNightVision, readNightVision, calculateAuthKey, derivePsk,
+  cameraLocalSkipReason, Session, DtlsClient, AvChannel, openCamera, probeCamera, setNightVision, readNightVision, readAlarmSettings, parseAlarmSettings, calculateAuthKey, derivePsk,
   READ_ONLY_COMMANDS, DEFAULT_PROBE_CODES, NV_NAMES, NV_VALUES, redact, describePayload, answerSummary,
 };

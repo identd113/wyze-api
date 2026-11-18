@@ -60,7 +60,7 @@ changes on its own.
 | `dongle_product_model` | The accessory plugged into the camera | **Confirmed** | `HL_CFL` is the floodlight on the Cam v3 with the floodlight. Blank on the Cam v3 without it. | "" | HL_CFL | "" |
 | `dongle_switch` | Accessory light on (1 = on, 2 = off) | **Confirmed** | Moves with `P1056`. | 0 | 2 | 2 |
 | `audio_alarm_switch` | Unknown (a sound-related alarm flag) | Unknown | Changed 0 to 1 together with `P1002` on the Cam v3 with the floodlight; no effect on live audio. | 0 | 1 | 1 |
-| `smoke_alarm_switch`, `co_alarm_switch` | Smoke / CO alarm listening | Unknown | Both 1 on the Cam v3s, 0 on the Doorbell. | 0 / 0 | 1 / 1 | 1 / 1 |
+| `smoke_alarm_switch`, `co_alarm_switch` | Unknown. **Not** the app's Smoke / CO Alarm sound toggles | Unknown | Both 1 on the Cam v3s, 0 on the Doorbell. On 2026-11-18, with the Wyze app's Alarm Settings toggles (Smoke Alarm sound, CO Alarm sound) turned off on the Cam v3 with the floodlight, both stayed 1, in the device list, the property list, device info and devicemgmt, over four reads. Those toggles are `K10020` params 17 and 18 (below). | 0 / 0 | 1 / 1 | 1 / 1 |
 | `ai_notification_v2` | AI (person, vehicle, ...) notifications | Unknown | 0 on the Doorbell, 1 on the Cam v3s. | 0 | 1 | 1 |
 | `spotlight_status`, `accessory_switch`, `power_saving_mode_switch`, `device_setting_channel`, `dtls`, `main_device_dtls`, `comfort_standard_level`, `power_source`, `is_link_toy_car`, `is_temperature_humidity`, `temp_humi_room_type`, `temperature`, `humidity`, `electricity`, `battery_charging_status` | Unknown | Unknown | | | | |
 
@@ -124,7 +124,7 @@ session, the other three in the CC51 form.
 | `K10446` connection status, `K10448` battery usage | **No answer** from either wired camera. They are the outdoor / battery camera commands; not tried on a battery camera. |
 | `K10632` alarm flashing, `K10640` spotlight, `K10720` accessories, `K10604` RTSP params | No answer from either camera |
 
-The Cam v3s were not read yet.
+The Cam v3s were first read on 2026-11-18 (`K10020` and the alarm settings; the other commands above are still to do there).
 
 ### `K10020` camera params
 
@@ -143,13 +143,18 @@ value came back from a dedicated get command on the same camera.
 | 8 | Timestamp overlay (OSD) | 1 | 1 | Cross-checked with `K10070` |
 | 13, 14 | Motion alarm, motion level | 1, 65 | 1, 5 | Name from the other projects only |
 | 15, 16 | Sound alarm, sound level | 2, 5 | 0, 5 | Name from the other projects only |
-| 17, 18 | Smoke, CO alarm | 2, 2 | 1, 1 | Name from the other projects only |
+| 17 | Smoke alarm sound (the Wyze app's Alarm Settings page; 1 on, 2 off) | 2 | 1 | **Confirmed by elimination.** On a Cam v3 (floodlight), turning both Alarm Settings toggles off moved 17 and 18 from 1 to 2 and back; turning only CO off moved 18 alone. Read with `getCameraAlarmSettings(mac)`. |
+| 18 | CO alarm sound (1 on, 2 off) | 2 | 1 | **Confirmed** (same test: it moved alone). The Doorbell reads 2, 2, which fits a camera with these off. |
 | 21 | Motion tagging | 1 | 2 | Cross-checked with `K10290` |
 | 22 | Time zone offset (hours) | -6 | -6 | Matches this location (CST) |
 | 50 | IR LED | not in the first 60 | not in the first 60 | Needs a read with id 50 |
 
 The rest (9 to 12, 19, 20, 23 to 49, and the values above that came back) are unmapped. Reading
-`K10020`, changing one setting in the Wyze app, and reading again shows which param it is.
+`K10020`, changing one setting in the Wyze app, and reading again shows which param it is. That is how 17 and 18 were found
+(2026-11-18): nothing in the cloud lists moved when the toggles changed, and `K10020` showed both.
+
+The library reads them with `getCameraAlarmSettings(mac)`, which returns `{ smoke, co }` (`"on"`, `"off"` or `"unknown"`), over the
+local session like night vision. There is no setter: the camera's write command for these is not known (see `TODO.md`).
 
 ## Things we looked for and did not find
 
@@ -180,6 +185,8 @@ The rest (9 to 12, 19, 20, 23 to 49, and the values above that came back) are un
   may not matter. Parked; see the log below.
 
 ## Log
+
+- 2026-11-18: the Wyze app's Smoke Alarm sound and CO Alarm sound toggles are `K10020` params 17 and 18 on the camera (1 on, 2 off); the cloud properties `smoke_alarm_switch` and `co_alarm_switch` are not them. First `K10020` read of a Cam v3. `getCameraAlarmSettings` added.
 
 - 2026-11-14: pure-JavaScript TUTK client (`future/tutk/spike/tutk-spike.js`) authenticated against all four cameras; night vision read on all four and set on the Doorbell v2 and Cam v2; `K10020` params mapped (see above). Wired cameras give no battery data.
 - 2026-11-14: Doorbell v2 night vision (Off, On, Auto) is not in the classic list or in devicemgmt (see above). Cross-checking the classic list against devicemgmt on the Doorbell confirmed `P1013` (Wi-Fi signal), `P1050` (siren-on time) and `P1078` (motion-alert schedule).
