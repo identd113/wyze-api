@@ -98,6 +98,18 @@
   .pill .tag { margin-left: 6px; font-size: 11px; opacity: .85; }
   .sensor-warn { margin: 6px 0 0; padding-left: 8px; border-left: 3px solid var(--warn); font-size: 13px; }
   .endpoint { font-family: ui-monospace, Menlo, monospace; font-size: 12px; word-break: break-all; }
+  .snap { margin-top: 10px; }
+  .snap .pair { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-start; }
+  .snap figure { margin: 0; }
+  .snap img { display: block; max-width: 100%; width: 320px; border-radius: 8px; border: 1px solid var(--line); background: var(--line); }
+  .snap figure.before img { width: 160px; opacity: 0.9; }
+  .snap figcaption { font-size: 12px; margin-top: 4px; }
+  .support { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 10px; }
+  .support h3 { font-size: 13px; margin: 10px 0 4px; }
+  .support ul { margin: 0; padding-left: 18px; }
+  .support li { margin: 2px 0; }
+  .support li.yes::marker { color: var(--ok, #2a9d4a); }
+  .support li.notSeen { opacity: 0.65; }
   .issue { margin-top: 10px; }
   .issue a { color: var(--accent); }
 </style>
@@ -115,7 +127,7 @@
     <div class="foot">A test only reads. Night vision asks you to confirm first.
       <div class="links">
         <a href="__PROJECT_HOME__" target="_blank" rel="noopener noreferrer">Project home</a>
-        <a href="__PROJECT_HOME__/issues/new/choose" target="_blank" rel="noopener noreferrer">Report an issue</a>
+        <a href="__REPORT_ISSUE_URL__" target="_blank" rel="noopener noreferrer">Report an issue</a>
         <span class="ver">__VERSIONS__</span>
       </div>
     </div>
@@ -275,6 +287,120 @@
     }
   }
 
+  // ---- snapshots: a picture of the camera on its card. The page shows Wyze's last saved picture at first (cheap), "Live
+  // snapshot" takes a frame from the live stream now (several seconds), and a night vision change takes one five seconds
+  // after the camera switched, next to the picture from before it. Pictures are fetched with the page's token and shown
+  // as data: addresses; nothing is stored.
+  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const NIGHT_SETTLE_SECONDS = 5;
+
+  async function fetchSnapshot(cam, live) {
+    const res = await api(`/api/cameras/${cam.id}/snapshot${live ? "?live=1" : ""}`);
+    if (!res.ok) {
+      let message = res.statusText;
+      try { message = (await res.json()).error || message; } catch (_) { /* not JSON */ }
+      throw new Error(message);
+    }
+    const blob = await res.blob();
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error("could not read the picture"));
+      reader.readAsDataURL(blob);
+    });
+    return { dataUrl, live: res.headers.get("X-Snapshot-Source") === "live", at: new Date() };
+  }
+
+  // one picture at a time for the saved ones, so the page does not start every camera's request at once
+  let savedQueue = Promise.resolve();
+
+  function setupSnapshot(card, cam) {
+    const box = card.querySelector(".snap");
+    const pair = el("div", { className: "pair" });
+    const note = el("div", { className: "meta" });
+    const liveButton = el("button", { textContent: "Live snapshot", title: "Takes a frame from the camera's live stream now. It takes several seconds, and the camera has to be on." });
+    box.append(pair, el("div", { className: "row" }, liveButton), note);
+    let current = null;
+    const figure = (snap, label, extra = "") => el("figure", { className: extra }, el("img", { src: snap.dataUrl, alt: `${label} snapshot of ${cam.name}` }),
+      el("figcaption", { className: "meta", textContent: `${label}, ${snap.at.toLocaleTimeString()}${snap.live ? "" : " (Wyze's saved picture, may be old)"}` }));
+    function show(snap, before) {
+      current = snap;
+      pair.replaceChildren(...(before ? [figure(before, "Before", "before")] : []), figure(snap, before ? "After" : (snap.live ? "Live" : "Saved")));
+    }
+    async function live(before) {
+      liveButton.disabled = true;
+      note.className = "meta";
+      note.textContent = "Taking a live snapshot (up to 20 seconds)...";
+      try {
+        const snap = await fetchSnapshot(cam, true);
+        show(snap, before);
+        note.textContent = "";
+        return snap;
+      } catch (e) {
+        note.className = "meta bad";
+        note.textContent = `No live snapshot: ${e.message}`;
+        return null;
+      } finally {
+        liveButton.disabled = false;
+      }
+    }
+    liveButton.onclick = () => live(null);
+    savedQueue = savedQueue.then(async () => {
+      try { show(await fetchSnapshot(cam, false), null); } catch (e) { note.textContent = `No saved picture from Wyze (${e.message}). Live snapshot takes one now.`; }
+    });
+    return { current: () => current, live, note };
+  }
+
+  // What the camera may support, as lists by how sure it is, with what shows each.
+  function renderSupport(support, into) {
+    const groups = [["yes", "Seen on this device"], ["likely", "Likely: the model is known to have it"], ["notSeen", "Not seen"]];
+    const parts = [];
+    for (const [state, title] of groups) {
+      const rows = support.features.filter((f) => f.state === state);
+      if (!rows.length) continue;
+      parts.push(el("h3", { textContent: `${title} (${rows.length})` }),
+        el("ul", {}, ...rows.map((f) => el("li", { className: state }, el("span", { textContent: f.label }), el("span", { className: "meta", textContent: ` — ${f.how}` })))));
+    }
+    if (support.backends.length) parts.push(el("h3", { textContent: "Answered by" }), el("ul", {}, ...support.backends.map((b) => el("li", { textContent: b }))));
+    for (const n of support.notes) parts.push(el("div", { className: "meta", textContent: n }));
+    into.replaceChildren(...parts);
+  }
+
+  function setupSupport(card, cam) {
+    const out = card.querySelector(".support");
+    const status = el("div", { className: "meta" });
+    const ask = el("button", { textContent: "What may it support?", title: "Reads what Wyze says about this camera (read only), including which groups of its newer API it has, and lists what it appears to support. The scan is saved, so asking again does not read Wyze again." });
+    const again = el("button", { textContent: "Scan again" });
+    again.hidden = true;
+    card.querySelector(".snap .row").append(ask, again);
+    async function run(refresh) {
+      ask.disabled = true; again.disabled = true;
+      status.className = "meta";
+      status.textContent = "Reading what Wyze says about it (read only)...";
+      out.replaceChildren(status);
+      try {
+        const res = await api(`/api/cameras/${cam.id}/support`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ refresh: refresh === true }) });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || res.statusText);
+        const ago = Math.max(0, Math.round((Date.now() - new Date(data.collectedAt).getTime()) / 60000));
+        const where = el("div", { className: "meta", textContent: `${data.cached ? `Saved scan from ${ago < 1 ? "less than a minute" : `${ago} minute${ago === 1 ? "" : "s"}`} ago: Wyze was not asked again.` : "Fresh scan."}${data.cameraAnswered ? " Includes what the camera itself answered to Test." : ""}` });
+        const list = el("div");
+        renderSupport(data.support, list);
+        out.replaceChildren(where, list);
+        showIssueLink(card, data.issueUrl);
+        again.hidden = false;
+      } catch (e) {
+        status.className = "meta bad";
+        status.textContent = `Could not scan: ${e.message}`;
+        out.replaceChildren(status);
+      } finally {
+        ask.disabled = false; again.disabled = false;
+      }
+    }
+    ask.onclick = () => run(false);
+    again.onclick = () => run(true);
+  }
+
   function nightControls(card, cam, result) {
     const box = card.querySelector(".nv");
     box.replaceChildren();
@@ -304,6 +430,16 @@
         out.textContent = `${data.before} → ${data.after}${data.matches ? "" : " (the camera did not report the value that was set)"}`;
         if (result.answers.K10040) result.answers.K10040.answer = { bytes: 1, hex: "0" + ({ on: 1, off: 2, auto: 3 })[data.after], value: ({ on: 1, off: 2, auto: 3 })[data.after] };
         line.textContent = `Night vision now: ${data.after}`;
+        const snap = card._snap;
+        if (snap) {
+          const before = snap.current();
+          for (let left = NIGHT_SETTLE_SECONDS; left > 0; left -= 1) {
+            out.textContent = `${data.before} → ${data.after}. Waiting ${left} second${left === 1 ? "" : "s"} for the camera to switch, then taking a new snapshot...`;
+            await wait(1000);
+          }
+          out.textContent = `${data.before} → ${data.after}`;
+          await snap.live(before);
+        }
       } catch (e) {
         out.className = "meta bad";
         out.textContent = `Failed: ${e.message}`;
@@ -420,6 +556,8 @@
       el("div", { className: "head" },
         el("div", {}, el("div", { className: "name", textContent: cam.name }), el("div", { className: "meta", textContent: `${cam.model} · firmware ${cam.firmware}` })),
         test),
+      el("div", { className: "snap" }),
+      el("div", { className: "support" }),
       el("ul", { className: "steps" }),
       el("div", { className: "note" }),
       el("div", { className: "answers" }),
@@ -427,6 +565,8 @@
       el("div", { className: "issue" }));
     if (cam.reason) { test.disabled = true; card.querySelector(".note").textContent = `Cannot be tested here: ${cam.reason}.`; }
     test.onclick = () => runTest(card, cam, test);
+    card._snap = setupSnapshot(card, cam);
+    setupSupport(card, cam);
     return card;
   }
 
@@ -505,7 +645,9 @@
     if (dev.known) box.append(el("div", { className: "meta", textContent: dev.known }));
     const again = el("button", { textContent: "Scan again", title: "Ask Wyze again and ignore the saved scan. A scan is saved for ten minutes (and what a device has, for as long as this page runs), so pressing Test twice does not read it twice." });
     again.hidden = true;
-    box.append(el("div", { className: "row" }, button, discoverLabel, again), steps, results, issue);
+    const supportBox = el("div", { className: "support" });
+    supportBox.hidden = true;
+    box.append(el("div", { className: "row" }, button, discoverLabel, again), steps, supportBox, results, issue);
     const run = async (refresh) => {
       button.disabled = true;
       again.disabled = true;
@@ -526,6 +668,7 @@
         };
         const when = new Date(data.collectedAt);
         const ago = Math.max(0, Math.round((Date.now() - when.getTime()) / 60000));
+        if (data.support) { renderSupport(data.support, supportBox); supportBox.hidden = false; }
         results.replaceChildren(el("div", { className: "row" }, download), el("div", { className: "meta", textContent: data.cached ? `Saved scan from ${ago < 1 ? "less than a minute" : `${ago} minute${ago === 1 ? "" : "s"}`} ago: Wyze was not asked again. Press Scan again for a new one.` : "Fresh scan." }));
         again.hidden = false;
         if (data.issueUrl && data.issueUrl.startsWith("https://github.com/")) {

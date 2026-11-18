@@ -5,7 +5,7 @@
 const test = require("node:test");
 const assert = require("node:assert");
 
-const { buildIssueUrl, buildDeviceIssueUrl, MAX_URL } = require("../src/web/issueLink");
+const { buildIssueUrl, buildDeviceIssueUrl, buildBugUrl, reportForTest, MAX_URL, REPORT_KINDS } = require("../src/web/issueLink");
 
 const FORM = {
   url: "https://github.com/identd113/homebridge-wyze-smart-home/issues/new",
@@ -123,4 +123,42 @@ test("a report with a discovery in an older or odd shape does not break the link
     assert.ok(url && url.length <= MAX_URL, JSON.stringify(capabilityDiscovery));
     assert.ok(!/devicemgmt has values/.test(new URL(url).searchParams.get("details") || ""), "nothing is said about groups it cannot read");
   }
+});
+
+test("a camera test preselects what the test showed, and only a real option of the form", () => {
+  const worked = { authenticated: true, reachable: true, answers: { K10040: { answer: { value: 3 } } } };
+  assert.strictEqual(reportForTest(worked), "It works");
+  assert.strictEqual(reportForTest({ authenticated: true, answers: {} }), "It partly works");
+  assert.strictEqual(reportForTest({ reachable: false }), "It does not work");
+  assert.strictEqual(reportForTest(null), undefined, "no test, nothing preselected");
+  assert.ok(REPORT_KINDS.includes(reportForTest(worked)));
+  assert.strictEqual(new URL(buildIssueUrl(FORM, { model: "WYZE_CAKP2JFUS" }, worked)).searchParams.get("report"), "It works");
+  assert.strictEqual(new URL(buildIssueUrl(FORM, { model: "WYZE_CAKP2JFUS" }, null)).searchParams.get("report"), null);
+  // a value the form does not have is ignored, not passed on
+  assert.strictEqual(new URL(buildIssueUrl(FORM, { model: "X" }, worked, { report: "Totally fine" })).searchParams.get("report"), "It works");
+  assert.strictEqual(new URL(buildDeviceIssueUrl(FORM, { model: "X", type: "Camera" }, null, { report: "It partly works" })).searchParams.get("report"), "It partly works");
+  assert.strictEqual(new URL(buildDeviceIssueUrl(FORM, { model: "X", type: "Camera" }, null, { report: "nonsense" })).searchParams.get("report"), "It is not supported yet");
+});
+
+test("the support list goes into the link as names, for a tested camera, a scanned one and a device", () => {
+  const support = { features: [{ key: "floodlight", state: "yes" }, { key: "doorbell", state: "likely" }, { key: "battery", state: "notSeen" }] };
+  const tested = new URL(buildIssueUrl(FORM, { model: "WYZE_CAKP2JFUS" }, { authenticated: true, answers: {} }, { support }));
+  assert.deepStrictEqual(JSON.parse(tested.searchParams.get("blob")).support, { yes: ["floodlight"], likely: ["doorbell"], notSeen: ["battery"] });
+  const untested = new URL(buildIssueUrl(FORM, { model: "WYZE_CAKP2JFUS", firmware: "1" }, null, { support, report: "It works" }));
+  assert.strictEqual(untested.searchParams.get("report"), "It works");
+  assert.deepStrictEqual(JSON.parse(untested.searchParams.get("blob")).support.yes, ["floodlight"]);
+  assert.strictEqual(JSON.parse(untested.searchParams.get("blob")).product_model, "WYZE_CAKP2JFUS", "the form's check finds the model code");
+  const device = new URL(buildDeviceIssueUrl(FORM, { model: "GW_CHI", type: "Common" }, { propertyList: {}, deviceInfo: { data: {} } }, { support }));
+  assert.deepStrictEqual(JSON.parse(device.searchParams.get("blob")).support.likely, ["doorbell"]);
+});
+
+test("the bug report link carries the versions, the origin and the device, and nothing when there is no form", () => {
+  const url = new URL(buildBugUrl(FORM, { versions: { plugin: "2.0.0", "wyze-api": "2.0.1", node: "v22" }, homebridge: "2.5.0", device: "Cam v3 (WYZE_CAKP2JFUS)" }));
+  assert.strictEqual(url.searchParams.get("template"), "bug-report.yml");
+  assert.strictEqual(url.searchParams.get("versions"), "Plugin: 2.0.0\nwyze-api: 2.0.1\nHomebridge: 2.5.0\nNode.js: v22");
+  assert.strictEqual(url.searchParams.get("device"), "Cam v3 (WYZE_CAKP2JFUS)");
+  assert.strictEqual(url.searchParams.get("origin"), FORM.origin);
+  assert.strictEqual(buildBugUrl(null), null);
+  assert.strictEqual(buildBugUrl({ url: "https://evil.example.com/x" }), null);
+  assert.ok(!new URL(buildBugUrl(FORM)).searchParams.has("device"));
 });

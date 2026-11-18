@@ -707,3 +707,140 @@ test("the page stops asking once the server has refused its token", () => {
   assert.ok(html.includes('if (linkExpired) throw new Error("this link has expired")'));
   assert.ok(html.includes("if (!linkExpired) showStatus"));
 });
+
+// ---- snapshots, the support view and the prefilled links ----
+
+const JPEG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(200, 7)]);
+const camForm = { url: "https://github.com/example/plugin/issues/new", template: "new-device.yml", origin: "camera-test-page", plugin: "2.0.0", kind: "Camera or doorbell", deviceLabel: (m) => (m === "HL_DB2" ? "Video Doorbell v2 (HL_DB2)" : undefined) };
+
+test("a snapshot is a JPEG behind the token; ?live=1 asks for a fresh frame, and a failure says nothing about the camera's insides", async () => {
+  const asked = [];
+  const { server, port } = await start({
+    client: {
+      getDeviceList: async () => CAMERAS,
+      getCameraSnapshotImage: async (mac, options) => { asked.push({ mac, options }); return { buffer: JPEG, source: options.skipCloud ? "capture" : "cloud" }; },
+    },
+  });
+  try {
+    await request(port, { path: "/api/cameras", headers: auth });
+    assert.strictEqual((await request(port, { path: "/api/cameras/cam-1/snapshot" })).status, 401, "no token, no picture");
+    const saved = await request(port, { path: "/api/cameras/cam-1/snapshot", headers: auth });
+    assert.strictEqual(saved.status, 200);
+    assert.strictEqual(saved.headers["content-type"], "image/jpeg");
+    assert.strictEqual(saved.headers["cache-control"], "no-store");
+    assert.strictEqual(saved.headers["x-snapshot-source"], "cloud");
+    assert.deepStrictEqual(asked[0], { mac: MAC, options: { deviceModel: "HL_DB2", skipCloud: false, noCache: false, timeoutMs: 20000 } });
+    const live = await request(port, { path: "/api/cameras/cam-1/snapshot?live=1", headers: auth });
+    assert.strictEqual(live.headers["x-snapshot-source"], "live");
+    assert.deepStrictEqual([asked[1].options.skipCloud, asked[1].options.noCache], [true, true], "a live frame, not a saved or cached one");
+    assert.strictEqual((await request(port, { path: "/api/cameras/cam-9/snapshot", headers: auth })).status, 404);
+    assert.strictEqual((await request(port, { method: "POST", path: "/api/cameras/cam-1/snapshot", headers: json, body: {} })).status, 405);
+  } finally { await server.stop(); }
+});
+
+test("a snapshot that is not a picture, or that fails, is a plain error; one at a time per camera", async () => {
+  let mode = "bad";
+  let release;
+  const { server, port } = await start({
+    client: {
+      getDeviceList: async () => CAMERAS,
+      getCameraSnapshotImage: async () => {
+        if (mode === "bad") return { buffer: Buffer.from("<html>nope</html>"), source: "cloud" };
+        if (mode === "throw") throw new Error("ffmpeg exploded at https://secret.example/x?token=abc\nmore");
+        await new Promise((resolve) => { release = resolve; });
+        return { buffer: JPEG, source: "capture" };
+      },
+    },
+  });
+  try {
+    await request(port, { path: "/api/cameras", headers: auth });
+    const notJpeg = await request(port, { path: "/api/cameras/cam-1/snapshot", headers: auth });
+    assert.strictEqual(notJpeg.status, 502);
+    assert.match(notJpeg.text, /did not return a picture/);
+    mode = "throw";
+    const failed = await request(port, { path: "/api/cameras/cam-1/snapshot", headers: auth });
+    assert.strictEqual(failed.status, 502);
+    assert.ok(!/secret|token|ffmpeg|exploded/.test(failed.text), "what went wrong inside is not handed to the page");
+    mode = "slow";
+    const first = request(port, { path: "/api/cameras/cam-1/snapshot?live=1", headers: auth });
+    await new Promise((r) => setTimeout(r, 40));
+    assert.strictEqual((await request(port, { path: "/api/cameras/cam-1/snapshot?live=1", headers: auth })).status, 409, "a second one for the same camera waits its turn");
+    release();
+    assert.strictEqual((await first).status, 200);
+  } finally { await server.stop(); }
+});
+
+test("a client that cannot take snapshots gives the page a plain 404 instead of an error", async () => {
+  const { server, port } = await start();
+  try {
+    await request(port, { path: "/api/cameras", headers: auth });
+    assert.strictEqual((await request(port, { path: "/api/cameras/cam-1/snapshot", headers: auth })).status, 404);
+  } finally { await server.stop(); }
+});
+
+test("what a camera may support: scanned once and saved, joined with what Test found, and with a prefilled link that carries it", async () => {
+  const calls = [];
+  const ENTRY2 = { label: "device-1", model: "HL_DB2", type: "Camera", firmware: "4.51.3.6791", propertyList: { P3: "1", P1049: "2" }, deviceInfo: { data: {} },
+    capabilityDiscovery: { requests: 1, withValues: ["siren"], accepted: { siren: ["state"], wifi: ["signal-strength"] }, rejected: [] } };
+  const { server, port } = await start({
+    client: { getDeviceList: async () => CAMERAS },
+    issueForm: camForm,
+    deviceReport: async (opts) => { calls.push({ discovery: opts.discovery, local: typeof opts.localProbe === "function" }); return { generated: "2026-11-18T00:00:00Z", versions: opts.versions, devices: [{ ...ENTRY2 }] }; },
+  });
+  try {
+    await request(port, { path: "/api/cameras", headers: auth });
+    const one = JSON.parse((await request(port, { method: "POST", path: "/api/cameras/cam-1/support", headers: json, body: {} })).text);
+    assert.deepStrictEqual(calls, [{ discovery: true, local: false }], "discovery, and no direct ask of the camera");
+    assert.strictEqual(one.cached, false);
+    assert.strictEqual(one.cameraAnswered, null, "Test has not been run");
+    const states = Object.fromEntries(one.support.features.map((f) => [f.key, f.state]));
+    assert.strictEqual(states.siren, "yes");
+    assert.strictEqual(states.wifiSignal, "yes");
+    assert.strictEqual(states.doorbell, "likely", "the Doorbell v2 is a known doorbell");
+    assert.strictEqual(states.nightVision, "likely", "not asked over the network yet");
+    const link = new URL(one.issueUrl);
+    assert.strictEqual(link.searchParams.get("report"), "It works", "a camera that answered is preselected as working, not as unsupported");
+    assert.strictEqual(link.searchParams.get("device"), "Video Doorbell v2 (HL_DB2)");
+    assert.ok(JSON.parse(link.searchParams.get("blob")).support.yes.includes("siren"), "the support list is in the link");
+
+    const again = JSON.parse((await request(port, { method: "POST", path: "/api/cameras/cam-1/support", headers: json, body: {} })).text);
+    assert.strictEqual(calls.length, 1, "the second ask is answered from the saved scan");
+    assert.strictEqual(again.cached, true);
+    assert.strictEqual(again.issueUrl, one.issueUrl);
+
+    // Test the camera over the network: its answers join the list, and the test's own link carries the list too
+    const test = await request(port, { method: "POST", path: "/api/cameras/cam-1/test", headers: json, body: {} });
+    const done = test.text.trim().split("\n").map((l) => JSON.parse(l)).find((l) => l.event === "done");
+    const testLink = new URL(done.issueUrl);
+    assert.strictEqual(testLink.searchParams.get("report"), "It works", "authenticated and night vision answered");
+    assert.ok(JSON.parse(testLink.searchParams.get("blob")).support, "the test link has the support list too");
+    const joined = JSON.parse((await request(port, { method: "POST", path: "/api/cameras/cam-1/support", headers: json, body: {} })).text);
+    assert.ok(joined.cameraAnswered, "it says the camera's own answers are included");
+    assert.strictEqual(Object.fromEntries(joined.support.features.map((f) => [f.key, f.state])).nightVision, "yes");
+    assert.strictEqual(calls.length, 1, "joining what Test found did not read Wyze again");
+
+    const fresh = JSON.parse((await request(port, { method: "POST", path: "/api/cameras/cam-1/support", headers: json, body: { refresh: true } })).text);
+    assert.strictEqual(calls.length, 2);
+    assert.strictEqual(fresh.cached, false);
+    assert.strictEqual((await request(port, { method: "POST", path: "/api/cameras/cam-9/support", headers: json, body: {} })).status, 404);
+    assert.strictEqual((await request(port, { method: "GET", path: "/api/cameras/cam-1/support", headers: auth })).status, 405);
+  } finally { await server.stop(); }
+});
+
+test("the footer's Report an issue is the bug form with the versions filled in, or the chooser when the host gave no form", async () => {
+  const withForm = await start({ issueForm: camForm, versions: { plugin: "2.0.0", "wyze-api": "2.0.1", node: "v22.1.0" } });
+  try {
+    const html = (await request(withForm.port, { path: "/?token=test-token-1234" })).text;
+    const href = /href="([^"]*)"[^>]*>Report an issue</.exec(html)[1].replace(/&amp;/g, "&");
+    const link = new URL(href);
+    assert.strictEqual(`${link.origin}${link.pathname}`, camForm.url);
+    assert.strictEqual(link.searchParams.get("template"), "bug-report.yml");
+    assert.match(link.searchParams.get("versions"), /Plugin: 2\.0\.0\nwyze-api: 2\.0\.1\nHomebridge: \nNode\.js: v22\.1\.0/);
+    assert.strictEqual(link.searchParams.get("origin"), "camera-test-page");
+  } finally { await withForm.server.stop(); }
+  const without = await start();
+  try {
+    const html = (await request(without.port, { path: "/?token=test-token-1234" })).text;
+    assert.match(html, /href="https:\/\/github\.com\/[^"]*\/issues\/new\/choose"[^>]*>Report an issue</);
+  } finally { await without.server.stop(); }
+});
