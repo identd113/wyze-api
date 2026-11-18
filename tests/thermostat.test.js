@@ -98,8 +98,8 @@ test("setpoint setters require whole °F in a sane range", async () => {
   await w.setThermostatHeatingSetpoint(thermostat.mac, thermostat.product_model, 68);
   await w.setThermostatCoolingSetpoint(thermostat.mac, thermostat.product_model, 74);
   assert.deepStrictEqual(calls, [
-    { key: "heat_sp", value: 68 },
-    { key: "cool_sp", value: 74 },
+    { key: "heat_sp", value: "68" },
+    { key: "cool_sp", value: "74" },
   ]);
 
   await assert.rejects(
@@ -127,8 +127,8 @@ test("setThermostatTemperature writes both setpoints in cool→heat order", asyn
 
   await w.setThermostatTemperature(thermostat.mac, thermostat.product_model, 74, 68);
   assert.deepStrictEqual(calls, [
-    { key: "cool_sp", value: 74 },
-    { key: "heat_sp", value: 68 },
+    { key: "cool_sp", value: "74" },
+    { key: "heat_sp", value: "68" },
   ]);
 });
 
@@ -231,8 +231,8 @@ test("device-object helpers forward to mac/model methods", async () => {
     { key: "mode_sys", value: "cool" },
     { key: "fan_mode", value: "on" },
     { key: "current_scenario", value: "sleep" },
-    { key: "heat_sp", value: 68 },
-    { key: "cool_sp", value: 74 },
+    { key: "heat_sp", value: "68" },
+    { key: "cool_sp", value: "74" },
     { key: "kid_lock", value: "1" },
     { key: "save_comfort_balance", value: 1 },
     { key: "dev_hold", value: "0" },
@@ -249,7 +249,30 @@ test("thermostatTemperature(device, cool, heat) wraps setThermostatTemperature",
 
   await w.thermostatTemperature(thermostat, 74, 68);
   assert.deepStrictEqual(calls, [
-    { key: "cool_sp", value: 74 },
-    { key: "heat_sp", value: 68 },
+    { key: "cool_sp", value: "74" },
+    { key: "heat_sp", value: "68" },
   ]);
+});
+
+test("a setpoint is sent as text first and as a number if the text write throws, counting the fallback", async () => {
+  const w = stub();
+  const warnings = [];
+  w.log.warn = (m) => warnings.push(m);
+  const sent = [];
+  w.thermostatSetIotProp = async (mac, model, key, value) => {
+    sent.push([key, value]);
+    if (typeof value === "string") throw new Error("Wyze API Error (3000) - bad value");
+    return { ok: true };
+  };
+
+  const res = await w.setThermostatHeatingSetpoint(thermostat.mac, thermostat.product_model, 70);
+  assert.deepStrictEqual(res, { ok: true });
+  assert.deepStrictEqual(sent, [["heat_sp", "70"], ["heat_sp", 70]]);
+  assert.strictEqual(w.thermostatSetpointFallbacks, 1);
+  assert.ok(warnings.length === 1 && /heat_sp as text failed/.test(warnings[0]), warnings.join("|"));
+
+  // when the number fails as well, that error reaches the caller
+  w.thermostatSetIotProp = async () => { throw new Error("down"); };
+  await assert.rejects(() => w.setThermostatCoolingSetpoint(thermostat.mac, thermostat.product_model, 75), /down/);
+  assert.strictEqual(w.thermostatSetpointFallbacks, 2);
 });
