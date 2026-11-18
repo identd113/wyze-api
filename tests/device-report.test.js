@@ -5,7 +5,7 @@
 const test = require("node:test");
 const assert = require("node:assert");
 
-const { buildReport, scrub, readOnly, localSkipReason, READ_METHODS, DEVICEMGMT_FALLBACK_MODEL } = require("../src/deviceReport");
+const { buildReport, scrub, readOnly, localSkipReason, READ_METHODS, DEVICEMGMT_FALLBACK_MODEL, DISCOVERY_GROUPS, discoverCapabilities } = require("../src/deviceReport");
 const WyzeAPI = require("../src/index");
 
 const MAC = "AABBCCDDEEFF";
@@ -207,9 +207,9 @@ test("each section of the report says which endpoint it came from, and the paths
   assert.match(ENDPOINTS.devicemgmt, /^POST https:\/\/devicemgmt-service-beta\.wyze\.com\//);
 });
 
-test("the report records the endpoint of each answer: the cloud calls for every device, devicemgmt for a camera, and the local session when asked", async () => {
+test("the report records the endpoint of each answer: the cloud calls for every device, devicemgmt for a camera (and, with discovery, for every device), and the local session when asked", async () => {
   const { client } = fakeClient();
-  const report = await buildReport({ client, routing: { devicemgmt: () => true }, localProbe: async () => ({ authenticated: true, answers: {} }) });
+  const report = await buildReport({ client, discovery: false, routing: { devicemgmt: () => true }, localProbe: async () => ({ authenticated: true, answers: {} }) });
   const [camera, bulb] = report.devices;
   assert.deepStrictEqual(Object.keys(bulb.endpoints), ["propertyList", "deviceInfo"]);
   assert.match(bulb.endpoints.propertyList, /^POST https:\/\/api\.wyzecam\.com\/app\/v2\/device\/get_property_list$/);
@@ -222,4 +222,87 @@ test("serial numbers, uuids, home and group ids, owner and address parts are rem
   assert.deepStrictEqual(Object.values(out).filter((v) => typeof v === "string" && /SN123|ABC|0f0f|h-77|g-77|p-77|Sam|Springfield|55555/.test(v)), []);
   assert.strictEqual(out.firmware_ver, "1.2.3.4", "a firmware version is kept");
   assert.strictEqual(out.power, 1);
+});
+
+// ---- capability discovery ----
+
+const reject = (group) => Object.assign(new Error("Request failed with status code 400"), {
+  response: { status: 400, statusText: "Bad Request", data: { code: 1001, message: JSON.stringify({ code: 1001, message: `unsupported capability ${group}` }) } },
+});
+const answer = (groups) => ({ code: 1, data: { capabilities: groups.map((g) => ({ iid: g.iid, name: g.name, properties: Object.fromEntries(g.properties.map((p) => [p, p === "iot-state" ? true : null])) })) } });
+
+test("discovery leaves out each group the device lacks, as the rejections name them, until the answer comes back whole", async () => {
+  const lacks = new Set(["camera", "camera-ai"]);
+  const asked = [];
+  const { client } = fakeClient({
+    _deviceMgmtGetIotProp: async (mac, model, propsModel, groups) => {
+      asked.push(groups.map((g) => g.name));
+      const missing = groups.find((g) => lacks.has(g.name));
+      if (missing) throw reject(missing.name);
+      return answer(groups);
+    },
+  });
+  const [chime] = (await buildReport({ client: { ...client, getDeviceList: async () => [DEVICES[1]] } })).devices;
+  const found = chime.capabilityDiscovery;
+  assert.deepStrictEqual(found.rejected, ["camera", "camera-ai"]);
+  assert.strictEqual(found.requests, 3);
+  assert.ok(!Object.keys(found.accepted).some((g) => lacks.has(g)));
+  assert.ok("iot-device" in found.accepted && "wifi" in found.accepted);
+  assert.deepStrictEqual(found.accepted["iot-device"], ["iot-state"], "only the properties that have a value, by name");
+  assert.deepStrictEqual(found.withValues, ["iot-device"], "an accepted group with no value is not listed as one the device has");
+  assert.ok(asked[0].length > asked[2].length, "each ask is smaller");
+  assert.strictEqual(chime.endpoints.devicemgmt.includes("get_iot_prop"), true);
+});
+
+test("discovery runs for every device, not only cameras, and --no-discovery skips it", async () => {
+  const { client, calls } = fakeClient({ _deviceMgmtGetIotProp: async (m, mo, p, groups) => answer(groups) });
+  const on = await buildReport({ client });
+  assert.ok(on.devices.every((d) => d.capabilityDiscovery && d.capabilityDiscovery.requests === 1));
+  const off = await buildReport({ client, discovery: false });
+  assert.ok(off.devices.every((d) => !("capabilityDiscovery" in d)));
+  assert.ok(calls.length > 0);
+});
+
+test("discovery gives up on an answer it cannot read, and records it, instead of looping", async () => {
+  let n = 0;
+  const { client } = fakeClient({ _deviceMgmtGetIotProp: async () => { n += 1; throw Object.assign(new Error("boom"), { response: { status: 500, data: { message: "server error" } } }); } });
+  const found = await discoverCapabilities(client, DEVICES[1], []);
+  assert.strictEqual(n, 1);
+  assert.strictEqual(found.stopped.httpStatus, 500);
+  assert.deepStrictEqual(found.accepted, {});
+  // a rejection that names a group we did not ask about does not loop either
+  n = 0;
+  const odd = fakeClient({ _deviceMgmtGetIotProp: async () => { n += 1; throw reject("not-a-group"); } }).client;
+  const stopped = await discoverCapabilities(odd, DEVICES[1], []);
+  assert.strictEqual(n, 1);
+  assert.ok(stopped.stopped);
+});
+
+test("discovery asks for every group in all our devicemgmt lists, once each, and never sends a value", async () => {
+  assert.ok(["camera", "device-info", "iot-device", "wifi", "floodlight", "spotlight", "battery", "solar-panel"].every((g) => DISCOVERY_GROUPS.some((x) => x.name === g)));
+  assert.strictEqual(new Set(DISCOVERY_GROUPS.map((g) => g.name)).size, DISCOVERY_GROUPS.length);
+  const sent = [];
+  const { client } = fakeClient({ _deviceMgmtGetIotProp: async (m, mo, p, groups) => { sent.push(groups); return answer(groups); } });
+  await discoverCapabilities(client, DEVICES[1], []);
+  assert.ok(sent[0].every((g) => Array.isArray(g.properties) && g.properties.every((x) => typeof x === "string")), "names only");
+});
+
+test("a rejection while discovering is logged as debug, not as an error", async () => {
+  const w = Object.create(WyzeAPI.prototype);
+  const lines = { error: [], debug: [] };
+  w.log = { error: (m) => lines.error.push(m), debug: (m) => lines.debug.push(m), info() {}, warn() {} };
+  w.maybeLogin = async () => {};
+  w.access_token = "t";
+  const axios = require("axios");
+  const original = axios.post;
+  axios.post = async () => { throw reject("camera"); };
+  try {
+    await assert.rejects(() => w._deviceMgmtGetIotProp("AABBCCDDEEFF", "GW_CHI", "LD_CFP", DISCOVERY_GROUPS));
+    assert.deepStrictEqual(lines.error, []);
+    assert.ok(lines.debug.some((m) => m.includes("get_iot_prop")));
+    await assert.rejects(() => w._deviceMgmtGetIotProp("AABBCCDDEEFF", "GW_CHI", "LD_CFP"));
+    assert.ok(lines.error.length > 0, "an ordinary call still logs the failure as an error");
+  } finally {
+    axios.post = original;
+  }
 });

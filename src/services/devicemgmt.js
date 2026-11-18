@@ -71,13 +71,16 @@ module.exports = {
    * Cam Pro, OG, Pan v4). Returns the raw response; see
    * `_deviceMgmtParseState` for the normalized view.
    */
-  async _deviceMgmtGetIotProp(deviceMac, deviceModel, propsModel = deviceModel) {
+  async _deviceMgmtGetIotProp(deviceMac, deviceModel, propsModel = deviceModel, capabilitiesOverride = null) {
     // propsModel lets scripts/device-report.js ask a model with no list of its own
     // using another model's list. The request still names the real model.
-    const capabilities = devicemgmtProps[propsModel];
+    // capabilitiesOverride is a list of its own (the report's capability discovery); Wyze rejects the whole
+    // request, naming the first group the device lacks, so a rejection there is expected and logged as debug.
+    const capabilities = capabilitiesOverride || devicemgmtProps[propsModel];
     if (!capabilities) {
       throw new Error(`_deviceMgmtGetIotProp: no property list for model ${propsModel}`);
     }
+    const logFailure = capabilitiesOverride ? (m) => this.log.debug(m) : (m) => this.log.error(m);
     await this.maybeLogin();
     const payload = {
       capabilities,
@@ -93,9 +96,9 @@ module.exports = {
       this.log.debug(`API response DeviceMgmt get_iot_prop: ${JSON.stringify(result.data)}`);
       return result.data;
     } catch (e) {
-      this.log.error(`Request failed: ${e.message}`);
+      logFailure(`Request failed: ${e.message}`);
       if (e.response) {
-        this.log.error(
+        logFailure(
           `Response DeviceMgmt get_iot_prop (${e.response.status} - ${e.response.statusText}): ${JSON.stringify(e.response.data, null, 2)}`
         );
       }

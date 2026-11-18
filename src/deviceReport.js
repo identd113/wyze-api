@@ -4,6 +4,7 @@
 // Read-only: the only client methods called are the four in READ_METHODS.
 
 const constants = require("./constants");
+const devicemgmtProps = require("./util/devicemgmtProps");
 
 // The calls a report makes, so the report says which endpoint each answer came from. The paths are the ones the client
 // uses for getPropertyList and getDeviceInfo (a test keeps them in step), and the devicemgmt host and path of
@@ -125,6 +126,59 @@ function summarizeCapabilities(answer, literals) {
   return out;
 }
 
+// Every capability group any of our devicemgmt lists names, with the union of its property names (the first
+// list to name a group sets its iid). Capability discovery asks for all of them at once.
+function discoveryGroups() {
+  const byName = new Map();
+  for (const list of Object.values(devicemgmtProps)) {
+    for (const g of list) {
+      const have = byName.get(g.name);
+      if (!have) byName.set(g.name, { iid: g.iid, name: g.name, properties: [...g.properties] });
+      else for (const p of g.properties) if (!have.properties.includes(p)) have.properties.push(p);
+    }
+  }
+  return [...byName.values()];
+}
+const DISCOVERY_GROUPS = discoveryGroups();
+
+// Wyze rejects a devicemgmt request that names a group the device lacks, with HTTP 400 and the first such group
+// in the message ("unsupported capability camera-ai").
+const UNSUPPORTED_GROUP = /unsupported capability ([A-Za-z0-9_-]+)/;
+
+/**
+ * Which devicemgmt capability groups does this device have? Asks for every group at once. Some devices (the
+ * Doorbell v2's chime) reject the whole ask, naming the first group they lack; that group is left out of the
+ * next ask, until the answer comes back whole. At most one ask per group, plus the last. Most devices accept
+ * every group and answer null for what they lack, so an accepted group proves nothing: `withValues` lists the
+ * groups that came back with a value, and `accepted` has the property names that did. Works for any device, not
+ * only cameras. Records group and property NAMES only, never the values.
+ */
+async function discoverCapabilities(client, d, literals) {
+  let groups = DISCOVERY_GROUPS;
+  const rejected = [];
+  let requests = 0;
+  while (groups.length && requests <= DISCOVERY_GROUPS.length) {
+    requests += 1;
+    const r = await attempt(() => client._deviceMgmtGetIotProp(d.mac, d.product_model, DEVICEMGMT_FALLBACK_MODEL, groups), literals);
+    if (r.ok) {
+      const accepted = {};
+      const caps = r.result && r.result.data && r.result.data.capabilities;
+      for (const c of Array.isArray(caps) ? caps : []) {
+        accepted[c.name] = Object.entries(c.properties || {}).filter(([, v]) => v !== null && v !== undefined).map(([k]) => k);
+      }
+      const withValues = Object.keys(accepted).filter((g) => accepted[g].length);
+      return { requests, withValues, accepted, rejected };
+    }
+    const named = UNSUPPORTED_GROUP.exec(JSON.stringify(r.response === undefined ? r.error : r.response));
+    if (!named || !groups.some((g) => g.name === named[1])) {
+      return { requests, withValues: [], accepted: {}, rejected, stopped: { error: r.error, httpStatus: r.httpStatus, response: r.response } };
+    }
+    rejected.push(named[1]);
+    groups = groups.filter((g) => g.name !== named[1]);
+  }
+  return { requests, withValues: [], accepted: {}, rejected };
+}
+
 function pickDevice(d, literals) {
   return {
     model: d.product_model,
@@ -171,11 +225,13 @@ async function localSection(d, probe, literals) {
  * @param {(device: object) => boolean} [opts.select] only the devices this returns true for (one device, for the test page)
  * @param {object} [opts.versions] shown at the end, for example { "wyze-api": "2.0.0" }
  * @param {object} [opts.routing] { devicemgmt: (model) => bool, runAction: (model) => bool }
+ * @param {boolean} [opts.discovery] ask devicemgmt which capability groups each device has (default true; a few
+ *   extra reads per device)
  * @param {(camera: object) => Promise<object>} [opts.localProbe] for each camera that has the dtls flag
  *   and an address, opens a read-only local session and returns what it answered. It gets the raw device
  *   (with its keys), so what it returns is scrubbed here like everything else. Left out unless asked for.
  */
-async function buildReport({ client: rawClient, models = [], select = null, versions = {}, routing = {}, localProbe = null }) {
+async function buildReport({ client: rawClient, models = [], select = null, versions = {}, routing = {}, discovery = true, localProbe = null }) {
   const client = readOnly(rawClient);
   const wanted = models.map((m) => m.toUpperCase());
   const all = await client.getDeviceList();
@@ -209,6 +265,10 @@ async function buildReport({ client: rawClient, models = [], select = null, vers
         ...(dm.ok ? { capabilities: summarizeCapabilities(dm.result, literals) } : { error: dm.error, httpStatus: dm.httpStatus, response: dm.response }),
       };
     }
+    if (discovery) {
+      entry.endpoints.devicemgmt = ENDPOINTS.devicemgmt;
+      entry.capabilityDiscovery = await discoverCapabilities(client, d, literals);
+    }
     if (localProbe && String(d.product_type).toLowerCase() === "camera") {
       entry.endpoints.local = ENDPOINTS.local;
       entry.local = await localSection(d, localProbe, literals);
@@ -218,4 +278,4 @@ async function buildReport({ client: rawClient, models = [], select = null, vers
   return report;
 }
 
-module.exports = { ENDPOINTS, localSkipReason, READ_METHODS, DEVICEMGMT_FALLBACK_MODEL, scrub, scrubString, flattenProperties, readOnly, buildReport };
+module.exports = { ENDPOINTS, localSkipReason, READ_METHODS, DEVICEMGMT_FALLBACK_MODEL, DISCOVERY_GROUPS, discoverCapabilities, scrub, scrubString, flattenProperties, readOnly, buildReport };

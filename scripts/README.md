@@ -157,6 +157,7 @@ node scripts/device-report.js                      # every device
 node scripts/device-report.js --model HL_CFL2      # only this model code (comma-separate several)
 node scripts/device-report.js --out my-report.json # default: ./wyze-device-report.json
 node scripts/device-report.js --local              # also ask each camera directly (see below)
+node scripts/device-report.js --no-discovery       # skip the capability discovery (see below)
 ```
 
 Login comes from `USERNAME`, `PASSWORD`, `KEY_ID` and `API_KEY` in the environment or in `.env` (the same as the other scripts here).
@@ -166,6 +167,15 @@ For each device it records the model, type, firmware, the property list (`P1056 
 It only reads. The code reaches the client through a view that offers four read methods, and a test fails if that grows. It never sets, switches, deletes or logs out.
 
 MAC addresses, device names, IP addresses, the Wi-Fi name, serial numbers, account identifiers, thumbnail URLs and the time zone are removed. Any value the device list gives for a device (such as its P2P id) is also removed wherever another answer repeats it. Read the file once before you post it, and add the plugin version, which it cannot see.
+
+### Capability discovery
+
+For every device (not only cameras) the report adds a `capabilityDiscovery` section: which groups of the devicemgmt API (`device-info`, `iot-device`, `wifi`, `battery`, `floodlight`, `siren` and so on) come back with a value.
+
+- **How:** it asks for every group any of our devicemgmt lists names (`src/util/devicemgmtProps.js`) in one request. Most devices accept it and answer null for what they lack. A few, such as the Doorbell v2's chime (`GW_CHI`), reject it with HTTP 400 and name the first group they lack ("unsupported capability camera"); that group is left out and it asks again, at most once per group.
+- **What it records:** `withValues` (the groups that came back with a value), `accepted` (each accepted group with the names of the properties that had a value), `rejected` (the groups a device refused) and `requests`. Names only, never values. An accepted group with no value means nothing; trust `withValues`.
+- **Why:** it shows what a model has, so a new model can be guessed from similar ones, and it is the only place a device the library does not know (a chime, a lock's battery) shows up on devicemgmt.
+- **Cost:** one extra read per device, up to eleven for a device that rejects groups. `--no-discovery` skips it.
 
 ### `--local`: ask the cameras directly
 

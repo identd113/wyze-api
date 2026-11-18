@@ -2,6 +2,11 @@
 
 ## Releases
 
+### Unreleased
+
+**New**
+- **`scripts/device-report.js` and the camera test page's Other devices tab record capability discovery for every device.** A `capabilityDiscovery` section lists which devicemgmt groups (`device-info`, `iot-device`, `wifi`, `battery`, `floodlight`, ...) come back with a value, by name only. A device that rejects groups, such as the Doorbell v2's chime, is asked again without the group it names. `--no-discovery` skips it. `_deviceMgmtGetIotProp` takes an optional list of capability groups as a fourth argument, and logs a rejection at debug level when it is used.
+
 ### v2.0.0-beta.4
 
 Everything since the last published beta, **2.0.0-beta.3**. An earlier `2.0.0-beta.4` was tagged on GitHub (2026-11-02) but its publish was never approved on npm, so it never reached npm. That GitHub release and tag were deleted and the number is used for this release; the changes the first attempt carried are listed below the new ones. Pairs with `homebridge-wyze-smart-home` 2.0.0-beta.4.
