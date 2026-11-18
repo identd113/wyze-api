@@ -24,6 +24,7 @@ Everything since the last published beta, **2.0.0-beta.3**. An earlier `2.0.0-be
 - **Pictures are captured from one whole keyframe** piped to ffmpeg, not from UDP packets, so a picture no longer depends on a free local port.
 
 **Fixed (found in a full code audit before this release)**
+- **Stopping a stream whose ffmpeg could not start no longer kills the host process on Node 22.** `kill()` on a child that failed to spawn (no pid yet, handle still open) signalled the process's own group there, so a missing ffmpeg ended Homebridge's child bridge, and the CI test run, instead of just the stream. Children are now only killed once they have a pid (`killChild`).
 - **A failed login or token refresh now says why.** The error text was built from a whole HTTP response, which cannot be turned into text, so a wrong password or a rate limit showed up as a "circular structure" TypeError and the real message was lost.
 - **A disk that cannot be written no longer fails a login.** The new tokens work from memory; the refresh used to be retried with the already-used token, then a fresh login, which a one-time 2FA code cannot do twice. The log says the login could not be saved.
 - **The stream address, token and TURN credentials stay out of errors and logs.** An unexpected get-streams answer put them in the error text and in the debug log; `auth_token`, `signaling_url` and `credential` are also redacted in any log line.
