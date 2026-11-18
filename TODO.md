@@ -99,6 +99,15 @@ Done: the pure-JavaScript client ships in `src/tutk/client.js`, with night visio
 - Not built: the pre-DTLS session (cameras without the `dtls` flag), local video and audio, and cameras on the Gwell protocol (OG, Pan v4).
 - Licence: the client credits go2rtc (MIT). Our older `future/tutk/lib` was ported from docker-wyze-bridge (AGPL-3.0); check what that means before it is ever published.
 
+## Smoke and CO alarm sound settings on the camera (2026-11-18)
+
+Found on the backyard Cam v3 (floodlight) by toggling "Smoke Alarm sound" and "CO Alarm sound" in the Wyze app's Alarm Settings and reading the camera's own settings (`K10020`, `device-report.js --local`): param 18 is the CO setting (toggling only CO moved 18 from 1 to 2 and left 17 alone), param 17 is Smoke by elimination. 1 is on, 2 is off. The cloud properties `smoke_alarm_switch` and `co_alarm_switch` did not move in four runs, so they are something else; the values live on the camera only. The first `K10020` read of a Cam v3.
+- Record the finding in `docs/camera-properties.md` (params 17 and 18 now confirmed; the cloud `smoke_alarm_switch` / `co_alarm_switch` stay unknown).
+- Toggle Smoke alone once, to confirm 17.
+- Detect a change: poll `K10020` over the local session (the camera does not push changes, and the cloud list never shows them). Local network only, seconds per read.
+- Set them: not possible today. The client's only write is night vision (`K10042`), and it refuses commands outside the read-only list. Find the write command in docker-wyze-bridge's source first (it may be a general set-params command or none for these two), then add it the way night vision was done: read before, write, read back, and a switch that is opt-in and off by default, because turning these off silently stops smoke and CO alerts.
+- Same method for other `K10020` params: change one setting in the app, read before and after.
+
 ## Housekeeping
 
 - The `wyze-api` wiki sync workflow (`wiki-sync.yml`) fails on every run with "Repository not found" for `identd113/wyze-api.wiki.git`: turn the wiki on in the fork's settings, or switch the workflow off.
