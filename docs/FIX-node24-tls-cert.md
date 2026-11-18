@@ -141,3 +141,19 @@ fix to users requires, in `homebridge-wyze-smart-home`:
 
 This is the same pattern already used for v0.5.58 of the plugin ("bumps `wyze-api` to `1.1.14`,
 which corrects Ford API payload signing").
+
+## Update, 2026-11-18: the chain has changed
+
+Checked with a plain TLS handshake (no pinned roots, Node's own default trust store) from one network, on Node 22.23.5, 24.18.0, 24.22.3 and 26.13.1:
+
+| Host | Result on all four Node versions |
+|---|---|
+| `api.wyzecam.com` | trusted |
+| `app.wyzecam.com` | trusted |
+| `yd-saas-toc.wyzecam.com` | trusted |
+| `devicemgmt-service-beta.wyze.com` | trusted |
+
+`api.wyzecam.com` no longer needs the legacy root: it presents the `*.wyzecam.com` certificate, then `DigiCert G5 TLS RSA4096 SHA384 2021 CA1`, then `DigiCert TLS RSA4096 Root G5`, then `DigiCert Global Root G2` (cross-signed by Global Root CA). `app.wyzecam.com` presents a shorter chain, through `DigiCert Global G2 TLS RSA SHA256 2020 CA1` to Root G2. So Node 24.18.0, which failed in the table above, now connects without the pin. Wyze changed the certificate after this fix was written.
+
+What this does not show: that the failure cannot come back (Wyze can change the chain again), or that every region sees the same chain (one network was tested). The pin in `src/httpsAgent.js` stays, as a safeguard. The same `/app` calls also work on `app.wyzecam.com` (device list, property list and device info, nine devices, identical answers except the expiring thumbnail URLs), so it is a usable fallback host if `api.wyzecam.com` has trouble.
+

@@ -44,7 +44,7 @@ Checked against the plugin on 2026-11-16: dynamic platform, no install scripts o
 
 A 429, or a 503 with `Retry-After`, to a Wyze host is waited out (`src/util/rateLimit.js`). Nobody has measured how Wyze limits: per account, per endpoint or per host.
 - Run against a real account with a debug log, then read `getRateLimitObservations()` (headers per host and path). If the numbers differ by path, change the shared per-host gate to a per-endpoint one.
-- Check whether `app.wyzecam.com` serves the same `/app` calls as `api.wyzecam.com` (wyzeapy routed `/app` through it on 2026-11-08 because `api.wyzecam.com` chains to the distrusted DigiCert G1 root). If it does, the TLS root pin in `src/httpsAgent.js` may become unnecessary.
+- Done (2026-11-18): `app.wyzecam.com` answers the same `/app` calls as `api.wyzecam.com` (device list, property list and device info for all nine devices; the answers are identical except the expiring thumbnail URLs). And `api.wyzecam.com` now presents a chain through DigiCert Root G5 and Global Root G2, which Node 22.23.5, 24.18.0, 24.22.3 and 26.13.1 all trust with their default store, so the pin is not needed today on those versions (see `docs/FIX-node24-tls-cert.md`). Keep the pin: it costs nothing and covers a chain that reverts. Recheck from another network, since Wyze may serve different chains by region.
 
 ## New devices
 

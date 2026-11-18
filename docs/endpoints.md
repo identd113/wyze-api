@@ -41,7 +41,9 @@ Calling the timer endpoint with the wrong `group_id` (for example `undefined`) r
 
 **Rate-limit headers** (`getRateLimitObservations()`, after a full report with discovery, about 10 seconds): `api.wyzecam.com` sends `remaining` and `reset` on `get_object_list`, `get_property_list` and `get_device_Info` (`remaining` 292 to 295, `reset` a date string about five minutes after the first call, with a 300-ish limit). It did not count down by one per call (about 20 calls went to `api.wyzecam.com`), and `devicemgmt-service-beta.wyze.com` sent no rate-limit headers at all. Only the last answer per path is kept, so whether the limit is per account, host or endpoint is still open.
 
-Not probed: the Venus, Earth, Ford, Lockwood and Olive services (no device of theirs on this account), and whether `app.wyzecam.com` serves the `/app` calls.
+**`app.wyzecam.com` serves the same `/app` calls as `api.wyzecam.com`** (checked with the same login on both hosts): `get_object_list`, `get_property_list` and `get_device_Info` for all nine devices gave identical answers, except the expiring signed thumbnail URLs in the device list. See `docs/FIX-node24-tls-cert.md` for the certificate chains.
+
+Not probed: the Venus, Earth, Ford, Lockwood and Olive services (no device of theirs on this account).
 
 ## Used by the library (not re-tested here)
 
