@@ -28,6 +28,21 @@ library's `request()` adds the `sv` signing constant for each call.
 Calling the timer endpoint with the wrong `group_id` (for example `undefined`) returns
 `400 "Failed to read HTTP message"`. That message is misleading.
 
+## Checked on 2026-11-18 (read only, one account: nine devices)
+
+**devicemgmt `get_iot_prop`** (`devicemgmt-service-beta.wyze.com/device-management/api/device-property/get_iot_prop`) is not camera-only. The body names capability groups; each answer lists the groups with `null` for what the device does not have. How a device that lacks a group reacts differs:
+- Most devices (every camera, the Palm Lock, the chime sensors, the Scale X) accept every group and answer `null` for the missing ones, so an accepted group proves nothing. Judge by the values.
+- The Doorbell v2's chime (`GW_CHI`) rejects the whole request with HTTP 400 and `unsupported capability <group>`, naming the first group it lacks (`camera`, then `camera-ai`, and so on). Without those it answers `device-info`, `iot-device` and `wifi`. Ten groups were refused one at a time (eleven requests). The device report's `--discovery` does this.
+- What had values: Cam v2, Doorbell v2, both Cam v3: `device-info`, `iot-device`, `wifi`, `memory-card-management`, `motion-detection`, `siren`, a few `camera` properties (`floodlight::on` on the floodlight camera only). Palm Lock (`DX_PVLOC`): `device-info`, `iot-device`, `wifi` and `battery` (four values). Chime sensors (`CHIME`): firmware, hardware, time zone and online state. Scale X (`WL_SC3`): nothing.
+
+**iot3 `get-property`** (`app.wyzecam.com/app/v4/iot3/get-property`, the Lock Bolt V2 and Palm Lock service) answers success for any device, with values only for the Palm Lock (`lock::lock-status`, `iot-device::iot-state`). Judge it by its values, not the code.
+
+**The classic list gives nothing** for the Doorbell v2's chime (`GW_CHI`) and the Scale X (`WL_SC3`); they use another backend. Neither is read by the library. The chime sensors (`CHIME`) give five properties.
+
+**Rate-limit headers** (`getRateLimitObservations()`, after a full report with discovery, about 10 seconds): `api.wyzecam.com` sends `remaining` and `reset` on `get_object_list`, `get_property_list` and `get_device_Info` (`remaining` 292 to 295, `reset` a date string about five minutes after the first call, with a 300-ish limit). It did not count down by one per call (about 20 calls went to `api.wyzecam.com`), and `devicemgmt-service-beta.wyze.com` sent no rate-limit headers at all. Only the last answer per path is kept, so whether the limit is per account, host or endpoint is still open.
+
+Not probed: the Venus, Earth, Ford, Lockwood and Olive services (no device of theirs on this account), and whether `app.wyzecam.com` serves the `/app` calls.
+
 ## Used by the library (not re-tested here)
 
 | Endpoint | Used for |

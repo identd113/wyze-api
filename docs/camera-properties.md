@@ -59,7 +59,7 @@ changes on its own.
 | `records_event_switch` | Event recording on | Library | | 1 | 1 | 1 |
 | `dongle_product_model` | The accessory plugged into the camera | **Confirmed** | `HL_CFL` is the floodlight on the Cam v3 with the floodlight. Blank on the Cam v3 without it. | "" | HL_CFL | "" |
 | `dongle_switch` | Accessory light on (1 = on, 2 = off) | **Confirmed** | Moves with `P1056`. | 0 | 2 | 2 |
-| `audio_alarm_switch` | Unknown (a sound-related alarm flag) | Unknown | Changed 0 to 1 together with `P1002` on the Cam v3 with the floodlight; no effect on live audio. | 0 | 1 | 1 |
+| `audio_alarm_switch` | Probably sound detection (the camera's `K10020` param 15) | Probable | Changed 0 to 1 together with `P1002` on the Cam v3 with the floodlight; no effect on live audio. On 2026-11-18 it matched `K10020` param 15 on the two Cam v3s (floodlight camera: 0 and 2, the other: 1 and 1), but not the Doorbell's older param 15 reading (2, read four days earlier, while the cloud value was 1 on 18 Nov). Not toggled on purpose yet: turn Sound detection off and on in the app and read both. | 0 | 1 | 1 |
 | `smoke_alarm_switch`, `co_alarm_switch` | Unknown. **Not** the app's Smoke / CO Alarm sound toggles | Unknown | Both 1 on the Cam v3s, 0 on the Doorbell. On 2026-11-18, with the Wyze app's Alarm Settings toggles (Smoke Alarm sound, CO Alarm sound) turned off on the Cam v3 with the floodlight, both stayed 1, in the device list, the property list, device info and devicemgmt, over four reads. Those toggles are `K10020` params 17 and 18 (below). | 0 / 0 | 1 / 1 | 1 / 1 |
 | `ai_notification_v2` | AI (person, vehicle, ...) notifications | Unknown | 0 on the Doorbell, 1 on the Cam v3s. | 0 | 1 | 1 |
 | `spotlight_status`, `accessory_switch`, `power_saving_mode_switch`, `device_setting_channel`, `dtls`, `main_device_dtls`, `comfort_standard_level`, `power_source`, `is_link_toy_car`, `is_temperature_humidity`, `temp_humi_room_type`, `temperature`, `humidity`, `electricity`, `battery_charging_status` | Unknown | Unknown | | | | |
@@ -142,12 +142,12 @@ value came back from a dedicated get command on the same camera.
 | 6, 7 | Horizontal / vertical flip | 1, 1 | 1, 1 | Name from the other projects only |
 | 8 | Timestamp overlay (OSD) | 1 | 1 | Cross-checked with `K10070` |
 | 13, 14 | Motion alarm, motion level | 1, 65 | 1, 5 | Name from the other projects only |
-| 15, 16 | Sound alarm, sound level | 2, 5 | 0, 5 | Name from the other projects only |
+| 15, 16 | Sound alarm, sound level | 2, 5 | 0, 5 | Name from the other projects only. On the two Cam v3s (2026-11-18) 15 was 2 (floodlight camera) and 1 (the other), level 5 on both; see `audio_alarm_switch` above. |
 | 17 | Smoke alarm sound (the Wyze app's Alarm Settings page; 1 on, 2 off) | 2 | 1 | **Confirmed by elimination.** On a Cam v3 (floodlight), turning both Alarm Settings toggles off moved 17 and 18 from 1 to 2 and back; turning only CO off moved 18 alone. Read with `getCameraAlarmSettings(mac)`. |
 | 18 | CO alarm sound (1 on, 2 off) | 2 | 1 | **Confirmed** (same test: it moved alone). The Doorbell reads 2, 2, which fits a camera with these off. |
 | 21 | Motion tagging | 1 | 2 | Cross-checked with `K10290` |
 | 22 | Time zone offset (hours) | -6 | -6 | Matches this location (CST) |
-| 50 | IR LED | not in the first 60 | not in the first 60 | Needs a read with id 50 |
+| 50 | IR LED (1 on, 2 off) | not in the answer | not in the answer | **Cross-checked** on the two Cam v3s (2026-11-18): 2 and 1, the same as `K10044` on each. The Doorbell v2 and the Cam v2 do not return param 50. |
 
 The rest (9 to 12, 19, 20, 23 to 49, and the values above that came back) are unmapped. Reading
 `K10020`, changing one setting in the Wyze app, and reading again shows which param it is. That is how 17 and 18 were found
@@ -155,6 +155,29 @@ The rest (9 to 12, 19, 20, 23 to 49, and the values above that came back) are un
 
 The library reads them with `getCameraAlarmSettings(mac)`, which returns `{ smoke, co }` (`"on"`, `"off"` or `"unknown"`), over the
 local session like night vision. There is no setter: the camera's write command for these is not known (see `TODO.md`).
+
+## What the Cam v3 answered (2026-11-18, read only)
+
+First read of the two Cam v3 (`WYZE_CAKP2JFUS`, firmware 4.36.17.21, CC51 session form), one with the floodlight attachment and one without, with `scripts/device-report.js --local`.
+
+| Command | Cam v3 with the floodlight | Cam v3 without |
+|---|---|---|
+| `K10030` status light | 2 | 2 |
+| `K10040` night vision | 3 (auto) | 3 (auto) |
+| `K10044` IR LED | 2 | 1 |
+| `K10200` motion alarm | `01 05` (on, level 5; the same as `K10020` params 13 and 14) | `01 05` |
+| `K10620` night check | `02 01 02 02 02` | `02 01 01 02 02`: the third byte is the same as `K10044`; meaning of the rest unknown |
+| `K10632` alarm flashing, `K10640` spotlight | `02 02` and 3 | `02 02` and 3 |
+| `K10720` accessories | the floodlight's own settings (below) | `{"status":"3"}` only: no accessory |
+| `K10446`, `K10448`, `K10604`, `K10788`, `K10820` | no answer | no answer |
+
+**`K10720` is the floodlight accessory's record**, and it only has content on the camera with the attachment. Fields seen (all strings): `realSwitch` 2 (the light, 1 on and 2 off, the same as `P1056`), `brightness` 226, `mode` 3, `durations` 15, `PIR` 1, `PIRSensitivity` 255, `PIRSilentTime` 1, `PIRChoose` 224, `PIRFilter` 1, `PIRMotionFilter` 1, `envDark` 1, `montionDark` 2, `soundDark` 2, `alarmSwitch` 1, `alarmLightType` 1, `alarmVolumeType` 1, `accessoriesVolume` 4, `sirenAlarm` 2 (the siren, 2 off like `P1049`), `type` 3, `status` 1. Only `realSwitch` and `sirenAlarm` are cross-checked against another source. The rest are names only: the brightness scale (226 is above 100), what `mode` 3 and `durations` 15 mean, and how the app's floodlight settings map to them are not known. They are not in the cloud lists, which is why the plugin has an on/off floodlight and no brightness. A write command for them is not known.
+
+**`K10020` differences between the two Cam v3** (floodlight camera, then the other): param 15 (sound alarm) 2 and 1; param 19 0 and 1380; param 23 104 and 224; param 24 40 and 254; param 25 0 and 1; param 50 (IR LED) 2 and 1. Params 15 and 50 are explained above. 19, 23, 24 and 25 are unmapped: find them by changing one app setting and reading again.
+
+**devicemgmt on the Cam v3** (neither is on the library's devicemgmt routing, and both answer): `wifi::signal-strength` (the classic list gives the Cam v3 no Wi-Fi value), `memory-card-management::storage-status` ("available"), `siren::state`, the `motion-detection` settings (including the motion-warning schedule), `iot-device` state and power, firmware and hardware versions, and `camera::motion-detect-recording` and `motion-push`. `floodlight::on` was true on the floodlight camera and absent on the other, while `P1056` and `K10720` `realSwitch` both read 2 (off) and did not change when the light was switched in between, so `floodlight::on` is not the light's state. It may say the camera has a floodlight, or something else.
+
+**The smoke and CO toggles** are `K10020` params 17 and 18, not the cloud properties `smoke_alarm_switch` and `co_alarm_switch` (see the table above).
 
 ## Things we looked for and did not find
 
@@ -185,6 +208,8 @@ local session like night vision. There is no setter: the camera's write command 
   may not matter. Parked; see the log below.
 
 ## Log
+
+- 2026-11-18: Cam v3 (both) read over the local session for the first time: `K10720` holds the floodlight's own settings (brightness, mode, duration, PIR); `K10020` param 50 is the IR LED (cross-checked with `K10044`); param 15 and the cloud `audio_alarm_switch` agree on the two Cam v3s. devicemgmt answers for both Cam v3 (Wi-Fi, SD card, siren, motion schedule); its `floodlight::on` is not the light's state.
 
 - 2026-11-18: the Wyze app's Smoke Alarm sound and CO Alarm sound toggles are `K10020` params 17 and 18 on the camera (1 on, 2 off); the cloud properties `smoke_alarm_switch` and `co_alarm_switch` are not them. First `K10020` read of a Cam v3. `getCameraAlarmSettings` added.
 

@@ -142,6 +142,17 @@ To do:
 - Collect reports from other accounts (an OG, Pan v4, Duo Cam Doorbell, Window Cam) and build a model to backend table in `docs/`. Check the model-prefix guess against it (`HL_`, `GW_`, `AN_`, `LD_`, `DX_`, `CO_`, `JA_`, `BS_`, `WL_`, `YD.`).
 - The devicemgmt answers for the Palm Lock and chimes include IP, MAC and Wi-Fi fields: scrub them in any saved report.
 
+## Found on 2026-11-18, to follow up (read only, one account)
+
+Details are in `docs/camera-properties.md` ("What the Cam v3 answered") and `docs/endpoints.md` ("Checked on 2026-11-18").
+- **Floodlight settings on the camera (`K10720`):** the Cam v3 with the floodlight answers `brightness`, `mode`, `durations`, PIR sensitivity and more. The plugin has an on/off floodlight only. To expose brightness or duration we need the scale of `brightness` (226 is above 100), what `mode` 3 means, and a write command (same research as the alarm toggles). Check the app's floodlight settings against the values by changing one at a time.
+- **Sound detection:** `K10020` param 15 and the cloud `audio_alarm_switch` agree on both Cam v3s. Turn Sound detection off and on in the app, read both, and if they move together add a `soundDetection` reading (and a switch once there is a write).
+- **`K10020` params 19, 23, 24, 25** differ between the two Cam v3 (0 and 1380, 104 and 224, 40 and 254, 0 and 1); unmapped.
+- **`K10620` night check:** its third byte follows the IR LED on the two Cam v3; the rest is unknown.
+- **devicemgmt `floodlight::on` is not the light's state** (it read true while the light was off and did not change when the light was switched). That weakens the Floodlight v2 devicemgmt guess: do not read it as state.
+- **Rate limit:** record a history of the headers (not only the last answer per path) and run a few hundred calls to see whether `remaining` is per account, host or endpoint. `devicemgmt-service-beta` sends no rate-limit headers.
+- **Palm Lock** gets a `battery` group through devicemgmt (four values); check whether the plugin's battery reading already has the same data.
+
 ## Housekeeping
 
 - The `wyze-api` wiki sync workflow (`wiki-sync.yml`) fails on every run with "Repository not found" for `identd113/wyze-api.wiki.git`: turn the wiki on in the fork's settings, or switch the workflow off.
