@@ -108,6 +108,31 @@ Found on the backyard Cam v3 (floodlight) by toggling "Smoke Alarm sound" and "C
 - Set them: not possible today. The client's only write is night vision (`K10042`), and it refuses commands outside the read-only list. Find the write command in docker-wyze-bridge's source first (it may be a general set-params command or none for these two), then add it the way night vision was done: read before, write, read back, and a switch that is opt-in and off by default, because turning these off silently stops smoke and CO alerts.
 - Same method for other `K10020` params: change one setting in the app, read before and after.
 
+## Which devices use which backend (framework mapping, 2026-11-18)
+
+Goal: guess how a new model is controlled from what we know about similar ones. A first read-only probe of the 9 devices on one account (classic list, devicemgmt, iot3):
+
+| Device | Classic list | devicemgmt | iot3 |
+|---|---|---|---|
+| Cam v2, Doorbell v2, two Cam v3 | answers (37 to 45 properties) | answers | nothing |
+| Palm Lock (`DX_PVLOC`) | 5 properties | 12 values (device info, power, Wi-Fi) | lock status, online state |
+| Chime sensors (`CHIME`) | 5 properties | 4 values (firmware, timezone, hardware version, online) | nothing |
+| Doorbell v2's chime (`GW_CHI`) | nothing | answers, but only without the `camera` and `camera-ai` groups (device info, IP, power state) | nothing |
+| Scale X (`WL_SC3`) | nothing | accepts the request, 0 values | nothing |
+
+What it shows:
+- devicemgmt is not camera-only. It answers a per-capability list and rejects the first group a device lacks (HTTP 400 "unsupported capability <name>"). Every list we ship (`src/util/devicemgmtProps.js`) includes `camera`, so `GW_CHI` is rejected with them. A trimmed list works.
+- iot3 returns "success" for every device and only has values for locks, so judge it by values, not by the code.
+- A device can answer on several backends. The classic list returning 0 properties means look elsewhere (`GW_CHI`, `WL_SC3`).
+- The `GW_` model prefix is not a protocol family: `GW_CHI` is a chime, `GW_GC1` and `GW_GC2` are the Gwell-protocol OG cameras. `GW_CHI` was bound 13 minutes after the Doorbell v2 on the same account, so it is probably its chime (not proved; `parent_device_enr` is empty on all devices).
+
+To do:
+- Extend `scripts/device-report.js` to probe each backend, not just cameras: the classic list, devicemgmt one capability group at a time (the rejection names the first unsupported group), iot3 for locks, and the Venus, Earth, Ford, Lockwood and Olive reads where the model could use them. Record which answered and how many values, never the values themselves.
+- Support the doorbell's chime (`GW_CHI`) through devicemgmt (read only to start with: model, firmware, power state). Nothing in the library reads it today.
+- Find out where the Scale X (`WL_SC3`) answers (probably Olive or Earth); the classic list and devicemgmt give nothing.
+- Collect reports from other accounts (an OG, Pan v4, Duo Cam Doorbell, Window Cam) and build a model to backend table in `docs/`. Check the model-prefix guess against it (`HL_`, `GW_`, `AN_`, `LD_`, `DX_`, `CO_`, `JA_`, `BS_`, `WL_`, `YD.`).
+- The devicemgmt answers for the Palm Lock and chimes include IP, MAC and Wi-Fi fields: scrub them in any saved report.
+
 ## Housekeeping
 
 - The `wyze-api` wiki sync workflow (`wiki-sync.yml`) fails on every run with "Repository not found" for `identd113/wyze-api.wiki.git`: turn the wiki on in the fork's settings, or switch the workflow off.
