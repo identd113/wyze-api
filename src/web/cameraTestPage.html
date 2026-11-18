@@ -503,14 +503,17 @@
       el("span", { className: "meta", textContent: ` ${dev.model} · ${dev.type}${dev.firmware ? ` · firmware ${dev.firmware}` : ""}${dev.connected ? "" : " · offline"}` })));
     const box = el("div", { className: "card" }, head);
     if (dev.known) box.append(el("div", { className: "meta", textContent: dev.known }));
-    box.append(el("div", { className: "row" }, button, discoverLabel), steps, results, issue);
-    button.onclick = async () => {
+    const again = el("button", { textContent: "Scan again", title: "Ask Wyze again and ignore the saved scan. A scan is saved for ten minutes (and what a device has, for as long as this page runs), so pressing Test twice does not read it twice." });
+    again.hidden = true;
+    box.append(el("div", { className: "row" }, button, discoverLabel, again), steps, results, issue);
+    const run = async (refresh) => {
       button.disabled = true;
+      again.disabled = true;
       steps.replaceChildren(el("li", { textContent: "Asking Wyze (read only)..." }));
       results.replaceChildren();
       issue.replaceChildren();
       try {
-        const res = await api(`/api/devices/${dev.id}/report`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ discovery: discover.checked }) });
+        const res = await api(`/api/devices/${dev.id}/report`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ discovery: discover.checked, refresh: refresh === true }) });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || res.statusText);
         steps.replaceChildren(...data.steps.map((st) => el("li", { className: st.ok ? "ok" : "bad" }, document.createTextNode(`${st.ok ? "✓" : "✗"} ${st.name}: ${st.detail}`), st.endpoint ? el("div", { className: "meta endpoint", textContent: st.endpoint }) : "")));
@@ -521,7 +524,10 @@
           a.click();
           URL.revokeObjectURL(a.href);
         };
-        results.replaceChildren(el("div", { className: "row" }, download));
+        const when = new Date(data.collectedAt);
+        const ago = Math.max(0, Math.round((Date.now() - when.getTime()) / 60000));
+        results.replaceChildren(el("div", { className: "row" }, download), el("div", { className: "meta", textContent: data.cached ? `Saved scan from ${ago < 1 ? "less than a minute" : `${ago} minute${ago === 1 ? "" : "s"}`} ago: Wyze was not asked again. Press Scan again for a new one.` : "Fresh scan." }));
+        again.hidden = false;
         if (data.issueUrl && data.issueUrl.startsWith("https://github.com/")) {
           issue.append(
             el("a", { href: data.issueUrl, target: "_blank", rel: "noopener noreferrer", textContent: "Report this device on GitHub" }),
@@ -532,8 +538,11 @@
         steps.replaceChildren(el("li", { className: "bad", textContent: `✗ ${e.message}` }));
       } finally {
         button.disabled = false;
+        again.disabled = false;
       }
     };
+    button.onclick = () => run(false);
+    again.onclick = () => run(true);
     return box;
   }
 

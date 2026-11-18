@@ -101,7 +101,9 @@ function buildDeviceIssueUrl(form, device, report) {
   const endpoints = report.endpoints || null;
   const props = report.propertyList && !report.propertyList.error ? Object.keys(report.propertyList).length : 0;
   const caps = report.devicemgmt && report.devicemgmt.answered ? Object.keys(report.devicemgmt.capabilities || {}) : [];
-  const found = report.capabilityDiscovery && !report.capabilityDiscovery.stopped ? report.capabilityDiscovery : null;
+  // only a discovery this code can read: a report saved by an older version has other field names
+  const d = report.capabilityDiscovery;
+  const found = d && !d.stopped && Array.isArray(d.withValues) && Array.isArray(d.rejected) ? d : null;
   const sentence = `Wyze lists it as type ${device.type || "unknown"}, model ${device.model}${device.firmware ? `, firmware ${device.firmware}` : ""}. Collected with the camera test page (read only${endpoints && endpoints.propertyList ? `, from ${endpoints.propertyList.replace(/^POST /, "")} and ${(endpoints.deviceInfo || "").replace(/^POST /, "")}` : ""}): ${props ? `${props} properties in the property list` : "no property list"}`
     + `${report.deviceInfo && !report.deviceInfo.error ? "; device info answered" : "; device info did not answer"}`
     + `${report.devicemgmt ? (report.devicemgmt.answered ? `; devicemgmt answered with ${caps.length} capabilities` : "; devicemgmt did not answer") : ""}`

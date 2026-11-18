@@ -115,3 +115,12 @@ test("a device's issue link carries which devicemgmt groups came back with a val
   const stopped = new URL(buildDeviceIssueUrl(FORM, device, { ...report, capabilityDiscovery: { ...discovery, stopped: { httpStatus: 500 } } }));
   assert.ok(!/devicemgmt has values/.test(stopped.searchParams.get("details") || ""));
 });
+
+test("a report with a discovery in an older or odd shape does not break the link", () => {
+  const device = { model: "GW_CHI", type: "Common", firmware: "1.0.0.50" };
+  for (const capabilityDiscovery of [{ supported: { wifi: [] }, unsupported: ["camera"] }, {}, { withValues: "wifi", rejected: null }, null, "x"]) {
+    const url = buildDeviceIssueUrl(FORM, device, { propertyList: {}, deviceInfo: { data: {} }, capabilityDiscovery });
+    assert.ok(url && url.length <= MAX_URL, JSON.stringify(capabilityDiscovery));
+    assert.ok(!/devicemgmt has values/.test(new URL(url).searchParams.get("details") || ""), "nothing is said about groups it cannot read");
+  }
+});

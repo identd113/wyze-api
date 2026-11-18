@@ -35,7 +35,13 @@ const path = require("path");
 
 const tutk = require("../tutk/client");
 const { buildIssueUrl, buildDeviceIssueUrl } = require("./issueLink");
-const { buildReport } = require("../deviceReport");
+const { buildReport, ENDPOINTS } = require("../deviceReport");
+
+// What a scan saves, so the same thing is not read from Wyze again and again: the device list for a minute, a
+// device's report for ten, and which capability groups a device has for as long as the page runs (they change with
+// the firmware, not by the minute). "Scan again" on a card ignores all of it. Memory only: nothing is written to disk.
+const LIST_TTL_MS = 60 * 1000;
+const REPORT_TTL_MS = 10 * 60 * 1000;
 
 const MIN_PORT = 1024;
 const MAX_PORT = 65535;
@@ -168,6 +174,16 @@ function createCameraTestServer({
   let busy = false;
   let cameras = []; // the last device list, in the order shown
   let others = []; // the devices the host does not support, in the order shown
+  let listCache = null; // { at, list }: the device list, saved for LIST_TTL_MS
+  const reportCache = new Map(); // mac -> { at, firmware, generated, versions, entry }
+  const discoveryCache = new Map(); // mac -> { firmware, found }: capability discovery, kept until the firmware changes
+
+  async function deviceList() {
+    if (listCache && Date.now() - listCache.at < LIST_TTL_MS) return listCache.list;
+    const list = await client.getDeviceList();
+    listCache = { at: Date.now(), list };
+    return list;
+  }
 
   const tokenOk = (given) => {
     if (typeof given !== "string") return false;
@@ -176,7 +192,7 @@ function createCameraTestServer({
   };
 
   async function loadCameras() {
-    const list = await client.getDeviceList();
+    const list = await deviceList();
     cameras = list.filter((d) => String(d.product_type).toLowerCase() === "camera");
     return cameras.map((d, i) => ({
       id: `cam-${i + 1}`,
@@ -189,7 +205,7 @@ function createCameraTestServer({
   }
 
   async function loadOthers() {
-    const list = await client.getDeviceList();
+    const list = await deviceList();
     others = list.filter((d) => unsupported(d));
     return others.map((d, i) => ({
       id: `dev-${i + 1}`,
@@ -363,23 +379,48 @@ function createCameraTestServer({
       if (busy) return sendJson(res, 409, { error: "another test is running; wait for it to finish" });
       busy = true;
       try {
-        const report = await deviceReport({
-          client,
-          select: (d) => d.mac === device.mac,
-          versions,
-          discovery: body.discovery === true, // only when the box on the page is ticked: up to eleven more reads
-          onDiscovery: (found) => say("info", `capability discovery for a ${found.model}: ${found.requests} read${found.requests === 1 ? "" : "s"}${found.rejected ? `, ${found.rejected} group${found.rejected === 1 ? "" : "s"} rejected` : ""}`),
-          routing: { devicemgmt: (m) => (typeof client.cameraUsesDeviceMgmt === "function" ? client.cameraUsesDeviceMgmt(m) : false) },
-          localProbe: (camera) => oneAtATime(camera.mac, () => probe(camera)),
-        });
-        const entry = report.devices[0];
-        if (!entry) return sendJson(res, 404, { error: "that device is no longer on the account" });
+        const wantDiscovery = body.discovery === true; // only when the box on the page is ticked: up to eleven more reads
+        const refresh = body.refresh === true; // "Scan again": ignore everything saved
+        const saved = reportCache.get(device.mac);
+        const savedHere = saved && saved.firmware === device.firmware_ver;
+        const usable = Boolean(savedHere && !refresh && Date.now() - saved.at < REPORT_TTL_MS && (!wantDiscovery || saved.entry.capabilityDiscovery));
         const info = { model: device.product_model, type: device.product_type, firmware: device.firmware_ver };
-        say("info", `collected a report for a ${device.product_model} (${device.product_type})`);
+        let stored;
+        if (usable) {
+          stored = saved;
+          say("info", `report for a ${device.product_model}: the saved scan from ${Math.round((Date.now() - saved.at) / 1000)} s ago`);
+        } else {
+          const known = discoveryCache.get(device.mac);
+          const reuseDiscovery = wantDiscovery && !refresh && known && known.firmware === device.firmware_ver ? known.found : null;
+          const report = await deviceReport({
+            client,
+            select: (d) => d.mac === device.mac,
+            versions,
+            discovery: wantDiscovery && !reuseDiscovery,
+            onDiscovery: (found) => say("info", `capability discovery for a ${found.model}: ${found.requests} read${found.requests === 1 ? "" : "s"}${found.rejected ? `, ${found.rejected} group${found.rejected === 1 ? "" : "s"} rejected` : ""}`),
+            routing: { devicemgmt: (m) => (typeof client.cameraUsesDeviceMgmt === "function" ? client.cameraUsesDeviceMgmt(m) : false) },
+            localProbe: (camera) => oneAtATime(camera.mac, () => probe(camera)),
+          });
+          const first = report.devices[0];
+          if (!first) return sendJson(res, 404, { error: "that device is no longer on the account" });
+          const entry = { ...first }; // a copy: what is saved below is added to, and must not change what the report returned
+          if (reuseDiscovery) {
+            entry.capabilityDiscovery = reuseDiscovery;
+            entry.endpoints = { ...(entry.endpoints || {}), devicemgmt: ENDPOINTS.devicemgmt };
+            say("info", `capability discovery for a ${device.product_model}: the saved answer (the firmware has not changed)`);
+          }
+          stored = { at: Date.now(), firmware: device.firmware_ver, generated: report.generated, versions: report.versions, entry };
+          reportCache.set(device.mac, stored);
+          if (entry.capabilityDiscovery && !entry.capabilityDiscovery.stopped) discoveryCache.set(device.mac, { firmware: device.firmware_ver, found: entry.capabilityDiscovery });
+          say("info", `collected a report for a ${device.product_model} (${device.product_type})`);
+        }
+        const entry = stored.entry;
         return sendJson(res, 200, {
           done: true,
+          cached: stored === saved && usable,
+          collectedAt: new Date(stored.at).toISOString(),
           steps: reportSteps(entry),
-          report: { generated: report.generated, versions: report.versions, device: entry },
+          report: { generated: stored.generated, versions: stored.versions, device: entry },
           issueUrl: buildDeviceIssueUrl(issueForm, info, entry),
         });
       } catch (e) {

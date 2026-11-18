@@ -388,10 +388,87 @@ test("capability discovery runs only when the request asks for it, and shows up 
     const step = asked.steps.find((st) => st.name === "Capability discovery");
     assert.ok(step && step.ok);
     assert.match(step.detail, /values for device-info, iot-device; 1 groups rejected \(3 reads\)/);
-    // a truthy string is not a yes: it has to be the boolean true
-    await request(port, { method: "POST", path: "/api/devices/dev-1/report", headers: json, body: { discovery: "true" } });
+    // a truthy string is not a yes: it has to be the boolean true (refresh, so a saved scan is not what answers)
+    await request(port, { method: "POST", path: "/api/devices/dev-1/report", headers: json, body: { discovery: "true", refresh: true } });
     assert.strictEqual(calls.discovery[2], false);
   } finally { await server.stop(); }
+});
+
+const post = (port, body = {}) => request(port, { method: "POST", path: "/api/devices/dev-1/report", headers: json, body });
+
+test("a scan is saved: the same device is not read again, and the link and the report are the same as the first time", async () => {
+  const { promise, calls } = startOthers();
+  const { server, port } = await promise;
+  try {
+    await request(port, { path: "/api/devices", headers: auth });
+    const first = JSON.parse((await post(port)).text);
+    const again = JSON.parse((await post(port)).text);
+    assert.strictEqual(calls.report.length, 1, "Wyze was asked once");
+    assert.strictEqual(first.cached, false);
+    assert.strictEqual(again.cached, true);
+    assert.strictEqual(again.collectedAt, first.collectedAt, "it says when the scan was made");
+    assert.strictEqual(again.issueUrl, first.issueUrl, "the issue link is the same from a saved scan");
+    assert.deepStrictEqual(again.report, first.report);
+    assert.deepStrictEqual(again.steps, first.steps);
+    // "Scan again" ignores what was saved
+    const fresh = JSON.parse((await post(port, { refresh: true })).text);
+    assert.strictEqual(calls.report.length, 2);
+    assert.strictEqual(fresh.cached, false);
+  } finally { await server.stop(); }
+});
+
+test("capability discovery is read once per device and firmware: a scan without it is upgraded, and a saved one is reused", async () => {
+  const { promise, calls } = startOthers();
+  const { server, port } = await promise;
+  try {
+    await request(port, { path: "/api/devices", headers: auth });
+    await post(port);                                   // plain scan
+    const withIt = JSON.parse((await post(port, { discovery: true })).text);   // needs discovery: a new read
+    assert.strictEqual(calls.report.length, 2);
+    assert.strictEqual(withIt.cached, false);
+    assert.ok(withIt.steps.some((st) => st.name === "Capability discovery"));
+    const saved = JSON.parse((await post(port, { discovery: true })).text);    // asked again: saved
+    assert.strictEqual(calls.report.length, 2);
+    assert.strictEqual(saved.cached, true);
+    const plain = JSON.parse((await post(port)).text);  // a plain ask is answered by the saved scan too
+    assert.strictEqual(calls.report.length, 2);
+    assert.strictEqual(plain.cached, true);
+    assert.deepStrictEqual(calls.discovery, [false, true]);
+  } finally { await server.stop(); }
+});
+
+test("when a saved scan is too old it is read again, but capability discovery is not (the firmware has not changed)", async (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: 1_800_000_000_000 });
+  const { promise, calls } = startOthers();
+  const { server, port } = await promise;
+  try {
+    await request(port, { path: "/api/devices", headers: auth });
+    await post(port, { discovery: true });
+    assert.deepStrictEqual(calls.discovery, [true]);
+    t.mock.timers.tick(11 * 60 * 1000);                 // past the ten minutes a scan is kept
+    const later = JSON.parse((await post(port, { discovery: true })).text);
+    assert.strictEqual(calls.report.length, 2, "the device is read again");
+    assert.deepStrictEqual(calls.discovery, [true, false], "but its capability groups are not asked for again");
+    assert.ok(later.report.device.capabilityDiscovery, "the saved discovery is still in the report");
+    assert.ok(later.report.device.endpoints.devicemgmt.includes("get_iot_prop"));
+    assert.strictEqual(later.cached, false);
+  } finally { await server.stop(); t.mock.timers.reset(); }
+});
+
+test("the device list is read once for both tabs within a minute, and again after that", async (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: 1_800_000_000_000 });
+  let reads = 0;
+  const { promise } = startOthers({ client: { getDeviceList: async () => { reads += 1; return THINGS; }, cameraUsesDeviceMgmt: () => false } });
+  const { server, port } = await promise;
+  try {
+    await request(port, { path: "/api/cameras", headers: auth });
+    await request(port, { path: "/api/devices", headers: auth });
+    await request(port, { path: "/api/cameras", headers: auth });
+    assert.strictEqual(reads, 1);
+    t.mock.timers.tick(61 * 1000);
+    await request(port, { path: "/api/devices", headers: auth });
+    assert.strictEqual(reads, 2);
+  } finally { await server.stop(); t.mock.timers.reset(); }
 });
 
 test("without an unsupported check there are no device routes", async () => {
