@@ -5,7 +5,7 @@
 ### Unreleased
 
 **New**
-- **`scripts/device-report.js` and the camera test page's Other devices tab record capability discovery for every device.** A `capabilityDiscovery` section lists which devicemgmt groups (`device-info`, `iot-device`, `wifi`, `battery`, `floodlight`, ...) come back with a value, by name only. A device that rejects groups, such as the Doorbell v2's chime, is asked again without the group it names. `--no-discovery` skips it. `_deviceMgmtGetIotProp` takes an optional list of capability groups as a fourth argument, and logs a rejection at debug level when it is used.
+- **Capability discovery in the device report, when asked for.** `node scripts/device-report.js --discovery`, or the box "Also find which capability groups it has" on a device's card in the camera test page's Other devices tab, adds a `capabilityDiscovery` section: which devicemgmt groups (`device-info`, `iot-device`, `wifi`, `battery`, `floodlight`, ...) come back with a value, by name only. A device that rejects groups, such as the Doorbell v2's chime, is asked again without the group it names. It is off by default (one to eleven more reads per device), and the prefilled issue link carries the result. `_deviceMgmtGetIotProp` takes an optional list of capability groups as a fourth argument, and logs a rejection at debug level when it is used.
 
 ### v2.0.0-beta.4
 

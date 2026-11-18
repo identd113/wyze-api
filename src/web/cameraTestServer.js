@@ -225,6 +225,11 @@ function createCameraTestServer({
     steps.push({ name: "Property list", endpoint: ep.propertyList, ok: answered(entry.propertyList), detail: answered(entry.propertyList) ? `${Object.keys(entry.propertyList).length} properties` : (entry.propertyList && entry.propertyList.error) || "no answer" });
     steps.push({ name: "Device info", endpoint: ep.deviceInfo, ok: answered(entry.deviceInfo), detail: answered(entry.deviceInfo) ? "answered" : (entry.deviceInfo && entry.deviceInfo.error) || "no answer" });
     if (entry.devicemgmt) steps.push({ name: "Devicemgmt read", endpoint: ep.devicemgmt, ok: !!entry.devicemgmt.answered, detail: entry.devicemgmt.answered ? `${Object.keys(entry.devicemgmt.capabilities || {}).length} capabilities` : entry.devicemgmt.error || "no answer" });
+    const found = entry.capabilityDiscovery;
+    if (found) {
+      const ok = !found.stopped;
+      steps.push({ name: "Capability discovery", endpoint: ep.devicemgmt, ok, detail: ok ? `${found.withValues.length ? `values for ${found.withValues.join(", ")}` : "no group has a value"}${found.rejected.length ? `; ${found.rejected.length} groups rejected` : ""} (${found.requests} reads)` : `stopped${found.stopped.httpStatus ? ` (HTTP ${found.stopped.httpStatus})` : ""}` });
+    }
     if (entry.local) {
       const ok = !!(entry.local.authenticated);
       steps.push({ name: "Direct local session", endpoint: ep.local, ok, detail: entry.local.skipped ? entry.local.skipped : ok ? `${Object.values(entry.local.answers || {}).filter((a) => a.answer).length} commands answered` : entry.local.error || "did not authenticate" });
@@ -353,6 +358,8 @@ function createCameraTestServer({
       if (req.method !== "POST") return sendText(res, 405, "Method not allowed");
       const device = await findOther(dm[1]);
       if (!device) return sendJson(res, 404, { error: "no such device" });
+      let body;
+      try { body = await readJson(req); } catch (e) { return sendJson(res, e.status || 400, { error: e.message }); }
       if (busy) return sendJson(res, 409, { error: "another test is running; wait for it to finish" });
       busy = true;
       try {
@@ -360,6 +367,7 @@ function createCameraTestServer({
           client,
           select: (d) => d.mac === device.mac,
           versions,
+          discovery: body.discovery === true, // only when the box on the page is ticked: up to eleven more reads
           routing: { devicemgmt: (m) => (typeof client.cameraUsesDeviceMgmt === "function" ? client.cameraUsesDeviceMgmt(m) : false) },
           localProbe: (camera) => oneAtATime(camera.mac, () => probe(camera)),
         });

@@ -497,18 +497,20 @@
     const issue = el("div", { className: "issue" });
     const steps = el("ul", { className: "steps" });
     const button = el("button", { className: "primary", textContent: "Test and collect report" });
+    const discover = el("input", { type: "checkbox" });
+    const discoverLabel = el("label", { className: "meta", title: "Asks Wyze which groups of its newer device API this device has (device info, power, Wi-Fi, battery, floodlight, siren ...). Read only. One to eleven more reads; it is left out unless you tick this." }, discover, document.createTextNode(" Also find which capability groups it has (more reads)"));
     const head = el("div", { className: "head" }, el("div", {}, el("span", { className: "name", textContent: dev.name }),
       el("span", { className: "meta", textContent: ` ${dev.model} · ${dev.type}${dev.firmware ? ` · firmware ${dev.firmware}` : ""}${dev.connected ? "" : " · offline"}` })));
     const box = el("div", { className: "card" }, head);
     if (dev.known) box.append(el("div", { className: "meta", textContent: dev.known }));
-    box.append(el("div", { className: "row" }, button), steps, results, issue);
+    box.append(el("div", { className: "row" }, button, discoverLabel), steps, results, issue);
     button.onclick = async () => {
       button.disabled = true;
       steps.replaceChildren(el("li", { textContent: "Asking Wyze (read only)..." }));
       results.replaceChildren();
       issue.replaceChildren();
       try {
-        const res = await api(`/api/devices/${dev.id}/report`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+        const res = await api(`/api/devices/${dev.id}/report`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ discovery: discover.checked }) });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || res.statusText);
         steps.replaceChildren(...data.steps.map((st) => el("li", { className: st.ok ? "ok" : "bad" }, document.createTextNode(`${st.ok ? "✓" : "✗"} ${st.name}: ${st.detail}`), st.endpoint ? el("div", { className: "meta endpoint", textContent: st.endpoint }) : "")));

@@ -5,7 +5,7 @@
 const test = require("node:test");
 const assert = require("node:assert");
 
-const { buildIssueUrl, MAX_URL } = require("../src/web/issueLink");
+const { buildIssueUrl, buildDeviceIssueUrl, MAX_URL } = require("../src/web/issueLink");
 
 const FORM = {
   url: "https://github.com/identd113/homebridge-wyze-smart-home/issues/new",
@@ -93,4 +93,25 @@ test("a thermostat room sensor is a thermostat or room sensor, not a plain senso
   assert.strictEqual(kindOf("RoomSensor"), "Thermostat or room sensor");
   assert.strictEqual(kindOf("ContactSensor"), "Sensor (contact, motion, leak, climate)");
   assert.strictEqual(kindOf("Thermostat"), "Thermostat or room sensor");
+});
+
+test("a device's issue link carries which devicemgmt groups came back with a value, and which it rejected, even when the full report does not fit", () => {
+  const discovery = { requests: 11, withValues: ["device-info", "iot-device", "wifi"], accepted: { "device-info": ["firmware-ver"], "iot-device": ["iot-state"], wifi: ["signal-strength"] }, rejected: ["camera", "camera-ai"] };
+  const report = { propertyList: {}, deviceInfo: { data: {} }, capabilityDiscovery: discovery };
+  const device = { model: "GW_CHI", type: "Common", firmware: "1.0.0.50" };
+  const link = new URL(buildDeviceIssueUrl(FORM, device, report));
+  assert.match(link.searchParams.get("details"), /devicemgmt has values for device-info, iot-device, wifi and rejected 2 groups/);
+  assert.deepStrictEqual(JSON.parse(link.searchParams.get("blob")).device_report.capabilityDiscovery, discovery);
+
+  // too long for a link: the short summary still names the groups
+  const big = { ...report, propertyList: Object.fromEntries(Array.from({ length: 400 }, (_, i) => [`P${i}`, "x".repeat(20)])) };
+  const short = new URL(buildDeviceIssueUrl(FORM, device, big));
+  const summary = JSON.parse(short.searchParams.get("blob")).device_report;
+  assert.deepStrictEqual(summary.devicemgmt_groups_with_values, ["device-info", "iot-device", "wifi"]);
+  assert.deepStrictEqual(summary.devicemgmt_groups_rejected, ["camera", "camera-ai"]);
+  assert.ok(short.toString().length <= MAX_URL);
+
+  // a discovery that stopped on an error says nothing about the groups
+  const stopped = new URL(buildDeviceIssueUrl(FORM, device, { ...report, capabilityDiscovery: { ...discovery, stopped: { httpStatus: 500 } } }));
+  assert.ok(!/devicemgmt has values/.test(stopped.searchParams.get("details") || ""));
 });

@@ -209,7 +209,7 @@ test("each section of the report says which endpoint it came from, and the paths
 
 test("the report records the endpoint of each answer: the cloud calls for every device, devicemgmt for a camera (and, with discovery, for every device), and the local session when asked", async () => {
   const { client } = fakeClient();
-  const report = await buildReport({ client, discovery: false, routing: { devicemgmt: () => true }, localProbe: async () => ({ authenticated: true, answers: {} }) });
+  const report = await buildReport({ client, routing: { devicemgmt: () => true }, localProbe: async () => ({ authenticated: true, answers: {} }) });
   const [camera, bulb] = report.devices;
   assert.deepStrictEqual(Object.keys(bulb.endpoints), ["propertyList", "deviceInfo"]);
   assert.match(bulb.endpoints.propertyList, /^POST https:\/\/api\.wyzecam\.com\/app\/v2\/device\/get_property_list$/);
@@ -242,7 +242,7 @@ test("discovery leaves out each group the device lacks, as the rejections name t
       return answer(groups);
     },
   });
-  const [chime] = (await buildReport({ client: { ...client, getDeviceList: async () => [DEVICES[1]] } })).devices;
+  const [chime] = (await buildReport({ client: { ...client, getDeviceList: async () => [DEVICES[1]] }, discovery: true })).devices;
   const found = chime.capabilityDiscovery;
   assert.deepStrictEqual(found.rejected, ["camera", "camera-ai"]);
   assert.strictEqual(found.requests, 3);
@@ -254,13 +254,12 @@ test("discovery leaves out each group the device lacks, as the rejections name t
   assert.strictEqual(chime.endpoints.devicemgmt.includes("get_iot_prop"), true);
 });
 
-test("discovery runs for every device, not only cameras, and --no-discovery skips it", async () => {
-  const { client, calls } = fakeClient({ _deviceMgmtGetIotProp: async (m, mo, p, groups) => answer(groups) });
-  const on = await buildReport({ client });
+test("discovery is off unless asked for; when asked it runs for every device, not only cameras", async () => {
+  const { client } = fakeClient({ _deviceMgmtGetIotProp: async (m, mo, p, groups) => answer(groups) });
+  const off = await buildReport({ client });
+  assert.ok(off.devices.every((d) => !("capabilityDiscovery" in d)), "no discovery by default");
+  const on = await buildReport({ client, discovery: true });
   assert.ok(on.devices.every((d) => d.capabilityDiscovery && d.capabilityDiscovery.requests === 1));
-  const off = await buildReport({ client, discovery: false });
-  assert.ok(off.devices.every((d) => !("capabilityDiscovery" in d)));
-  assert.ok(calls.length > 0);
 });
 
 test("discovery gives up on an answer it cannot read, and records it, instead of looping", async () => {

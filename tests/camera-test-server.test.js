@@ -352,7 +352,7 @@ const ENTRY = {
 };
 
 function startOthers(extra = {}) {
-  const calls = { report: [] };
+  const calls = { report: [], discovery: [] };
   const unsupported = (d) => d.product_model !== "WLPP1";
   return {
     calls,
@@ -364,13 +364,35 @@ function startOthers(extra = {}) {
       issueForm,
       deviceReport: async (opts) => {
         calls.report.push({ selected: THINGS.filter(opts.select).map((d) => d.product_model), versions: opts.versions, hasProbe: typeof opts.localProbe === "function" });
-        const entry = ENTRY;
+        calls.discovery.push(opts.discovery);
+        const entry = opts.discovery
+          ? { ...ENTRY, capabilityDiscovery: { requests: 3, withValues: ["device-info", "iot-device"], accepted: { "device-info": ["firmware-ver"], "iot-device": ["iot-state"] }, rejected: ["camera"] } }
+          : ENTRY;
         return { generated: "2026-11-14T00:00:00Z", versions: opts.versions, devices: [entry] };
       },
       ...extra,
     }) },
   };
 }
+
+test("capability discovery runs only when the request asks for it, and shows up as a step", async () => {
+  const { promise, calls } = startOthers();
+  const { server, port } = await promise;
+  try {
+    await request(port, { path: "/api/devices", headers: auth });
+    const plain = JSON.parse((await request(port, { method: "POST", path: "/api/devices/dev-1/report", headers: json, body: {} })).text);
+    assert.strictEqual(calls.discovery[0], false);
+    assert.ok(!plain.steps.some((st) => st.name === "Capability discovery"));
+    const asked = JSON.parse((await request(port, { method: "POST", path: "/api/devices/dev-1/report", headers: json, body: { discovery: true } })).text);
+    assert.strictEqual(calls.discovery[1], true);
+    const step = asked.steps.find((st) => st.name === "Capability discovery");
+    assert.ok(step && step.ok);
+    assert.match(step.detail, /values for device-info, iot-device; 1 groups rejected \(3 reads\)/);
+    // a truthy string is not a yes: it has to be the boolean true
+    await request(port, { method: "POST", path: "/api/devices/dev-1/report", headers: json, body: { discovery: "true" } });
+    assert.strictEqual(calls.discovery[2], false);
+  } finally { await server.stop(); }
+});
 
 test("without an unsupported check there are no device routes", async () => {
   const { server, port } = await start({});

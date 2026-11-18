@@ -225,13 +225,13 @@ async function localSection(d, probe, literals) {
  * @param {(device: object) => boolean} [opts.select] only the devices this returns true for (one device, for the test page)
  * @param {object} [opts.versions] shown at the end, for example { "wyze-api": "2.0.0" }
  * @param {object} [opts.routing] { devicemgmt: (model) => bool, runAction: (model) => bool }
- * @param {boolean} [opts.discovery] ask devicemgmt which capability groups each device has (default true; a few
- *   extra reads per device)
+ * @param {boolean} [opts.discovery] ask devicemgmt which capability groups each device has. Off unless asked for
+ *   (`--discovery`, or the box on the camera test page): it is one to eleven extra reads per device.
  * @param {(camera: object) => Promise<object>} [opts.localProbe] for each camera that has the dtls flag
  *   and an address, opens a read-only local session and returns what it answered. It gets the raw device
  *   (with its keys), so what it returns is scrubbed here like everything else. Left out unless asked for.
  */
-async function buildReport({ client: rawClient, models = [], select = null, versions = {}, routing = {}, discovery = true, localProbe = null }) {
+async function buildReport({ client: rawClient, models = [], select = null, versions = {}, routing = {}, discovery = false, localProbe = null }) {
   const client = readOnly(rawClient);
   const wanted = models.map((m) => m.toUpperCase());
   const all = await client.getDeviceList();

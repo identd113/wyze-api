@@ -1,7 +1,7 @@
 // Read-only report on the devices of a Wyze account, for bug reports about a device
 // that is missing or only partly works. Not part of `npm test` (it needs the network
 // and your login). Run it yourself and paste the file it writes into the issue:
-//   node scripts/device-report.js [--model CODE[,CODE...]] [--out FILE] [--local] [--no-discovery]
+//   node scripts/device-report.js [--model CODE[,CODE...]] [--out FILE] [--local] [--discovery]
 //
 // Without --model it covers every device. It writes JSON (default
 // ./wyze-device-report.json). Only read calls are made: the device list, each device's
@@ -31,12 +31,12 @@ function option(name) {
   return i === -1 ? undefined : args[i + 1];
 }
 if (args.includes("--help") || args.includes("-h")) {
-  console.log("Usage: node scripts/device-report.js [--model CODE[,CODE...]] [--out FILE] [--local] [--no-discovery]");
+  console.log("Usage: node scripts/device-report.js [--model CODE[,CODE...]] [--out FILE] [--local] [--discovery]");
   process.exit(0);
 }
 const models = (option("--model") || "").split(",").map((m) => m.trim()).filter(Boolean);
 const withLocal = args.includes("--local");
-const withDiscovery = !args.includes("--no-discovery");
+const withDiscovery = args.includes("--discovery");
 const outFile = option("--out") || path.join(process.cwd(), "wyze-device-report.json");
 
 const envPath = path.join(__dirname, "..", ".env");

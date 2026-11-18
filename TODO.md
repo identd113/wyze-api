@@ -127,7 +127,7 @@ What it shows:
 - The `GW_` model prefix is not a protocol family: `GW_CHI` is a chime, `GW_GC1` and `GW_GC2` are the Gwell-protocol OG cameras. `GW_CHI` was bound 13 minutes after the Doorbell v2 on the same account, so it is probably its chime (not proved; `parent_device_enr` is empty on all devices).
 
 To do:
-- Done (2026-11-18): the report has a `capabilityDiscovery` section for every device (devicemgmt groups with a value, by name). Only some devices reject a group they lack (`GW_CHI`); most accept all and answer null, so judge by `withValues`. Still to add: iot3 for locks, and the Venus, Earth, Ford, Lockwood and Olive reads where the model could use them. Record which answered and how many values, never the values themselves.
+- Done (2026-11-18): `--discovery` (and a box on the camera test page's Other devices cards) adds a `capabilityDiscovery` section for every device (devicemgmt groups with a value, by name). Only some devices reject a group they lack (`GW_CHI`); most accept all and answer null, so judge by `withValues`. Still to add: iot3 for locks, and the Venus, Earth, Ford, Lockwood and Olive reads where the model could use them. Record which answered and how many values, never the values themselves.
 - Support the doorbell's chime (`GW_CHI`) through devicemgmt (read only to start with: model, firmware, power state). Nothing in the library reads it today.
 - Find out where the Scale X (`WL_SC3`) answers (probably Olive or Earth); the classic list and devicemgmt give nothing.
 - Collect reports from other accounts (an OG, Pan v4, Duo Cam Doorbell, Window Cam) and build a model to backend table in `docs/`. Check the model-prefix guess against it (`HL_`, `GW_`, `AN_`, `LD_`, `DX_`, `CO_`, `JA_`, `BS_`, `WL_`, `YD.`).
