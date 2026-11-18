@@ -5,6 +5,8 @@
 ### Unreleased
 
 **New**
+- **Rate-limit history.** `getRateLimitHistory()` in `src/util/rateLimit.js` keeps the last 100 answers with rate-limit headers per host and path, with a count of all answers, to show whether Wyze limits per account, host or endpoint. Memory only; no device ids.
+- **Capability discovery is gentler.** A 300 ms wait between the asks for one device, and one log line per device with its number of reads.
 - **`getCameraAlarmSettings(mac)`** returns `{ smoke, co }` (`"on"`, `"off"` or `"unknown"`): the camera's smoke and CO alarm sound settings, the two toggles on the Wyze app's Alarm Settings page. Read only, over the local network like night vision (`K10020` params 17 and 18). There is no setter yet.
 - **Capability discovery in the device report, when asked for.** `node scripts/device-report.js --discovery`, or the box "Also find which capability groups it has" on a device's card in the camera test page's Other devices tab, adds a `capabilityDiscovery` section: which devicemgmt groups (`device-info`, `iot-device`, `wifi`, `battery`, `floodlight`, ...) come back with a value, by name only. A device that rejects groups, such as the Doorbell v2's chime, is asked again without the group it names. It is off by default (one to eleven more reads per device), and the prefilled issue link carries the result. `_deviceMgmtGetIotProp` takes an optional list of capability groups as a fourth argument, and logs a rejection at debug level when it is used.
 

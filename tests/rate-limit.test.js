@@ -121,6 +121,25 @@ test("the rate-limit headers of every answer are remembered per host and path", 
   assert.ok(!("api.wyzecam.com /app/v2/b" in seen), "an answer with no rate-limit headers is not recorded");
 });
 
+test("the history keeps every answer that had headers (capped) and counts the ones that had none", () => {
+  const { handlers } = harness();
+  const url = "https://api.wyzecam.com/app/v2/history-x";
+  for (let i = 0; i < rl.HISTORY_PER_KEY + 5; i += 1) {
+    handlers.onResponse({ config: { url }, status: 200, headers: { "x-ratelimit-remaining": String(1000 - i), "x-ratelimit-reset": "1700000000" } });
+  }
+  handlers.onResponse({ config: { url }, status: 200, headers: { "content-type": "x" } });
+  const mine = rl.getRateLimitHistory()["api.wyzecam.com /app/v2/history-x"];
+  assert.strictEqual(mine.answers, rl.HISTORY_PER_KEY + 6, "all answers are counted, with or without headers");
+  assert.strictEqual(mine.history.length, rl.HISTORY_PER_KEY, "the history is capped");
+  assert.strictEqual(mine.history[0].remaining, String(1000 - 5), "the oldest are dropped first");
+  assert.strictEqual(mine.history.at(-1).remaining, String(1000 - (rl.HISTORY_PER_KEY + 4)));
+  mine.history.length = 0;
+  assert.strictEqual(rl.getRateLimitHistory()["api.wyzecam.com /app/v2/history-x"].history.length, rl.HISTORY_PER_KEY, "a caller cannot change what is kept");
+  // a path with no headers is counted but has no history
+  handlers.onResponse({ config: { url: "https://api.wyzecam.com/app/v2/history-none" }, status: 200, headers: { a: "b" } });
+  assert.deepStrictEqual(rl.getRateLimitHistory()["api.wyzecam.com /app/v2/history-none"], { answers: 1, history: [] });
+});
+
 test("the handlers are installed on axios once, for Wyze hosts only", () => {
   const axios = require("axios");
   require("../src/index");

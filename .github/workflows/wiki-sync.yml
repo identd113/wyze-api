@@ -21,7 +21,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The wiki is a separate <repo>.wiki.git repository that GitHub only creates once the first page is made
+      # in the repository's Wiki tab (and Wikis are on in Settings). Until then there is nothing to push to, and
+      # the sync would fail on every push; this skips it with a notice instead, and it works by itself afterwards.
+      - name: Is the wiki set up?
+        id: wiki
+        run: |
+          if git ls-remote --exit-code "https://github.com/${{ github.repository }}.wiki.git" >/dev/null 2>&1; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::The wiki repository does not exist yet. Turn on Wikis in Settings and create the first page in the Wiki tab, then run this workflow again."
+          fi
+
       - name: Push wiki/ to GitHub Wiki
+        if: steps.wiki.outputs.ready == 'true'
         uses: Andrew-Chen-Wang/github-wiki-action@v4
         with:
           path: wiki/

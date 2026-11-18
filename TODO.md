@@ -150,7 +150,7 @@ Details are in `docs/camera-properties.md` ("What the Cam v3 answered") and `doc
 - **`K10020` params 19, 23, 24, 25** differ between the two Cam v3 (0 and 1380, 104 and 224, 40 and 254, 0 and 1); unmapped.
 - **`K10620` night check:** its third byte follows the IR LED on the two Cam v3; the rest is unknown.
 - **devicemgmt `floodlight::on` is not the light's state** (it read true while the light was off and did not change when the light was switched). That weakens the Floodlight v2 devicemgmt guess: do not read it as state.
-- **Rate limit:** record a history of the headers (not only the last answer per path) and run a few hundred calls to see whether `remaining` is per account, host or endpoint. `devicemgmt-service-beta` sends no rate-limit headers.
+- **Rate limit:** the history is recorded now (`getRateLimitHistory()` in `src/util/rateLimit.js`: the last 100 answers per path, and a count of all). Still to do: run a few hundred calls and read it to see whether `remaining` is per account, host or endpoint. `devicemgmt-service-beta` sends no rate-limit headers.
 - **Palm Lock** gets a `battery` group through devicemgmt (four values); check whether the plugin's battery reading already has the same data.
 
 ## Housekeeping

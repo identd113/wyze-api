@@ -24,6 +24,9 @@ const FALLBACK_WAIT_MS = 5_000;
 const events = new EventEmitter();
 const gates = new Map(); // host -> Unix ms until which requests to it are held
 const observations = new Map(); // "host path" -> the last rate-limit headers seen, with the time
+const HISTORY_PER_KEY = 100;
+const history = new Map(); // "host path" -> the last HISTORY_PER_KEY answers that had rate-limit headers, oldest first
+const counts = new Map(); // "host path" -> how many answers were seen, with or without rate-limit headers
 
 /** A Unix time that may be in seconds, in milliseconds or a date text, as a Unix time in ms (or null). */
 function toUnixMs(value) {
@@ -78,6 +81,8 @@ function hostAndPath(config) {
 function observe(config, headers, status, now = Date.now()) {
   const where = hostAndPath(config);
   if (!where || !headers) return;
+  const key = `${where.host} ${where.path}`;
+  counts.set(key, (counts.get(key) || 0) + 1);
   const get = (name) => headers[name];
   const seen = {
     limit: get("x-ratelimit-limit"),
@@ -86,12 +91,27 @@ function observe(config, headers, status, now = Date.now()) {
     retryAfter: get("retry-after"),
   };
   if (Object.values(seen).every((v) => v === undefined)) return;
-  observations.set(`${where.host} ${where.path}`, { ...seen, status, at: now });
+  const entry = { ...seen, status, at: now };
+  observations.set(key, entry);
+  const list = history.get(key) || [];
+  list.push(entry);
+  if (list.length > HISTORY_PER_KEY) list.shift();
+  history.set(key, list);
 }
 
 /** What the headers have said, per "host path". Shows whether the limit is shared or per endpoint. */
 function getRateLimitObservations() {
   return Object.fromEntries(observations);
+}
+
+/**
+ * Every answer's headers, not only the last: per "host path", `{ answers, history }`, where `answers` counts all
+ * answers seen (with or without rate-limit headers) and `history` holds the last 100 that had them, oldest first.
+ * Comparing `answers` with how far `remaining` fell, and `remaining` across paths, shows whether Wyze counts per
+ * account, host or endpoint. Held in memory only, and never holds a device id (the path is the endpoint's).
+ */
+function getRateLimitHistory() {
+  return Object.fromEntries([...counts.keys()].map((key) => [key, { answers: counts.get(key), history: [...(history.get(key) || [])] }]));
 }
 
 const defaultSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -173,7 +193,7 @@ function onRateLimit(fn) {
 
 module.exports = {
   MAX_RETRIES, MAX_WAIT_MS, FALLBACK_WAIT_MS,
-  toUnixMs, waitFromHeaders, holdHost, observe, getRateLimitObservations,
+  toUnixMs, waitFromHeaders, holdHost, observe, getRateLimitObservations, getRateLimitHistory, HISTORY_PER_KEY,
   createRateLimitHandlers, installRateLimitRetry, onRateLimit,
   _gates: gates,
 };

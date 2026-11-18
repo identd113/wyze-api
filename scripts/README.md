@@ -175,6 +175,7 @@ With `--discovery`, the report adds a `capabilityDiscovery` section for every de
 - **How:** it asks for every group any of our devicemgmt lists names (`src/util/devicemgmtProps.js`) in one request. Most devices accept it and answer null for what they lack. A few, such as the Doorbell v2's chime (`GW_CHI`), reject it with HTTP 400 and name the first group they lack ("unsupported capability camera"); that group is left out and it asks again, at most once per group.
 - **What it records:** `withValues` (the groups that came back with a value), `accepted` (each accepted group with the names of the properties that had a value), `rejected` (the groups a device refused) and `requests`. Names only, never values. An accepted group with no value means nothing; trust `withValues`.
 - **Why:** it shows what a model has, so a new model can be guessed from similar ones, and it is the only place a device the library does not know (a chime, a lock's battery) shows up on devicemgmt.
+- **Gentle:** it waits 300 ms between the asks for one device, never before the first, and logs one line per device with its number of reads (on the command line, and in the Homebridge log when the camera test page runs it).
 - **Off unless you ask:** it adds one to eleven reads per device, so it only runs with `--discovery`, or when you tick "Also find which capability groups it has" on a device's card in the camera test page's Other devices tab.
 
 ### `--local`: ask the cameras directly

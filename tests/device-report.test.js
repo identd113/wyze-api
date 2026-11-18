@@ -242,7 +242,7 @@ test("discovery leaves out each group the device lacks, as the rejections name t
       return answer(groups);
     },
   });
-  const [chime] = (await buildReport({ client: { ...client, getDeviceList: async () => [DEVICES[1]] }, discovery: true })).devices;
+  const [chime] = (await buildReport({ client: { ...client, getDeviceList: async () => [DEVICES[1]] }, discovery: true, discoveryPauseMs: 0 })).devices;
   const found = chime.capabilityDiscovery;
   assert.deepStrictEqual(found.rejected, ["camera", "camera-ai"]);
   assert.strictEqual(found.requests, 3);
@@ -265,14 +265,14 @@ test("discovery is off unless asked for; when asked it runs for every device, no
 test("discovery gives up on an answer it cannot read, and records it, instead of looping", async () => {
   let n = 0;
   const { client } = fakeClient({ _deviceMgmtGetIotProp: async () => { n += 1; throw Object.assign(new Error("boom"), { response: { status: 500, data: { message: "server error" } } }); } });
-  const found = await discoverCapabilities(client, DEVICES[1], []);
+  const found = await discoverCapabilities(client, DEVICES[1], [], 0);
   assert.strictEqual(n, 1);
   assert.strictEqual(found.stopped.httpStatus, 500);
   assert.deepStrictEqual(found.accepted, {});
   // a rejection that names a group we did not ask about does not loop either
   n = 0;
   const odd = fakeClient({ _deviceMgmtGetIotProp: async () => { n += 1; throw reject("not-a-group"); } }).client;
-  const stopped = await discoverCapabilities(odd, DEVICES[1], []);
+  const stopped = await discoverCapabilities(odd, DEVICES[1], [], 0);
   assert.strictEqual(n, 1);
   assert.ok(stopped.stopped);
 });
@@ -282,7 +282,7 @@ test("discovery asks for every group in all our devicemgmt lists, once each, and
   assert.strictEqual(new Set(DISCOVERY_GROUPS.map((g) => g.name)).size, DISCOVERY_GROUPS.length);
   const sent = [];
   const { client } = fakeClient({ _deviceMgmtGetIotProp: async (m, mo, p, groups) => { sent.push(groups); return answer(groups); } });
-  await discoverCapabilities(client, DEVICES[1], []);
+  await discoverCapabilities(client, DEVICES[1], [], 0);
   assert.ok(sent[0].every((g) => Array.isArray(g.properties) && g.properties.every((x) => typeof x === "string")), "names only");
 });
 
@@ -309,4 +309,28 @@ test("a rejection while discovering is logged as debug, not as an error", async 
 test("Wyze's per-request trace ids are removed from a report", () => {
   const out = scrub({ code: "1", traceId: "d8c45c142b8e791112d47a7be51c65e4", request_id: "9de4ded6-4769160", data: { traceId: "aaaa" } });
   assert.deepStrictEqual(out, { code: "1", data: {} });
+});
+
+test("discovery waits between the asks for one device, not before the first, and reports its reads once per device", async () => {
+  const lacks = new Set(["camera", "camera-ai"]);
+  const stamps = [];
+  const { client } = fakeClient({
+    _deviceMgmtGetIotProp: async (mac, model, propsModel, groups) => {
+      stamps.push(Date.now());
+      const missing = groups.find((g) => lacks.has(g.name));
+      if (missing) throw reject(missing.name);
+      return answer(groups);
+    },
+  });
+  const told = [];
+  const started = Date.now();
+  await buildReport({ client: { ...client, getDeviceList: async () => [DEVICES[1]] }, discovery: true, discoveryPauseMs: 40, onDiscovery: (i) => told.push(i) });
+  assert.strictEqual(stamps.length, 3);
+  assert.ok(stamps[1] - stamps[0] >= 35 && stamps[2] - stamps[1] >= 35, "a pause before each repeat ask");
+  assert.ok(stamps[0] - started < 35, "none before the first");
+  assert.deepStrictEqual(told, [{ model: "WLPA19C", requests: 3, rejected: 2 }]);
+  // no discovery, no report of reads
+  const none = [];
+  await buildReport({ client, onDiscovery: (i) => none.push(i) });
+  assert.deepStrictEqual(none, []);
 });

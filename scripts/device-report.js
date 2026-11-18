@@ -69,6 +69,7 @@ const wyze = new WyzeAPI({
     models,
     versions: { "wyze-api": require("../package.json").version, node: process.version },
     discovery: withDiscovery,
+    onDiscovery: (found) => console.log(`capability discovery for ${found.model}: ${found.requests} read${found.requests === 1 ? "" : "s"}${found.rejected ? `, ${found.rejected} group${found.rejected === 1 ? "" : "s"} rejected` : ""}`),
     localProbe: withLocal ? (camera) => require("../src/tutk/client").probeCamera(camera) : null,
     routing: {
       devicemgmt: (m) => wyze.cameraUsesDeviceMgmt(m),

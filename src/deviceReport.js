@@ -143,6 +143,10 @@ const DISCOVERY_GROUPS = discoveryGroups();
 
 // Wyze rejects a devicemgmt request that names a group the device lacks, with HTTP 400 and the first such group
 // in the message ("unsupported capability camera-ai").
+// A short wait between the asks for one device (a device that rejects groups takes up to eleven), so discovery
+// never sends a burst at Wyze.
+const DISCOVERY_PAUSE_MS = 300;
+
 const UNSUPPORTED_GROUP = /unsupported capability ([A-Za-z0-9_-]+)/;
 
 /**
@@ -153,11 +157,12 @@ const UNSUPPORTED_GROUP = /unsupported capability ([A-Za-z0-9_-]+)/;
  * groups that came back with a value, and `accepted` has the property names that did. Works for any device, not
  * only cameras. Records group and property NAMES only, never the values.
  */
-async function discoverCapabilities(client, d, literals) {
+async function discoverCapabilities(client, d, literals, pauseMs = DISCOVERY_PAUSE_MS) {
   let groups = DISCOVERY_GROUPS;
   const rejected = [];
   let requests = 0;
   while (groups.length && requests <= DISCOVERY_GROUPS.length) {
+    if (requests && pauseMs > 0) await new Promise((resolve) => setTimeout(resolve, pauseMs)); // be gentle with Wyze
     requests += 1;
     const r = await attempt(() => client._deviceMgmtGetIotProp(d.mac, d.product_model, DEVICEMGMT_FALLBACK_MODEL, groups), literals);
     if (r.ok) {
@@ -225,13 +230,16 @@ async function localSection(d, probe, literals) {
  * @param {(device: object) => boolean} [opts.select] only the devices this returns true for (one device, for the test page)
  * @param {object} [opts.versions] shown at the end, for example { "wyze-api": "2.0.0" }
  * @param {object} [opts.routing] { devicemgmt: (model) => bool, runAction: (model) => bool }
+ * @param {(info: {model: string, requests: number, rejected: number}) => void} [opts.onDiscovery] told once per
+ *   device after its discovery, so the host can log how many reads it made
+ * @param {number} [opts.discoveryPauseMs] wait between the asks for one device (default 300)
  * @param {boolean} [opts.discovery] ask devicemgmt which capability groups each device has. Off unless asked for
  *   (`--discovery`, or the box on the camera test page): it is one to eleven extra reads per device.
  * @param {(camera: object) => Promise<object>} [opts.localProbe] for each camera that has the dtls flag
  *   and an address, opens a read-only local session and returns what it answered. It gets the raw device
  *   (with its keys), so what it returns is scrubbed here like everything else. Left out unless asked for.
  */
-async function buildReport({ client: rawClient, models = [], select = null, versions = {}, routing = {}, discovery = false, localProbe = null }) {
+async function buildReport({ client: rawClient, models = [], select = null, versions = {}, routing = {}, discovery = false, onDiscovery = null, discoveryPauseMs = DISCOVERY_PAUSE_MS, localProbe = null }) {
   const client = readOnly(rawClient);
   const wanted = models.map((m) => m.toUpperCase());
   const all = await client.getDeviceList();
@@ -267,7 +275,8 @@ async function buildReport({ client: rawClient, models = [], select = null, vers
     }
     if (discovery) {
       entry.endpoints.devicemgmt = ENDPOINTS.devicemgmt;
-      entry.capabilityDiscovery = await discoverCapabilities(client, d, literals);
+      entry.capabilityDiscovery = await discoverCapabilities(client, d, literals, discoveryPauseMs);
+      if (onDiscovery) onDiscovery({ model: d.product_model, requests: entry.capabilityDiscovery.requests, rejected: entry.capabilityDiscovery.rejected.length });
     }
     if (localProbe && String(d.product_type).toLowerCase() === "camera") {
       entry.endpoints.local = ENDPOINTS.local;
@@ -278,4 +287,4 @@ async function buildReport({ client: rawClient, models = [], select = null, vers
   return report;
 }
 
-module.exports = { ENDPOINTS, localSkipReason, READ_METHODS, DEVICEMGMT_FALLBACK_MODEL, DISCOVERY_GROUPS, discoverCapabilities, scrub, scrubString, flattenProperties, readOnly, buildReport };
+module.exports = { ENDPOINTS, localSkipReason, READ_METHODS, DEVICEMGMT_FALLBACK_MODEL, DISCOVERY_GROUPS, DISCOVERY_PAUSE_MS, discoverCapabilities, scrub, scrubString, flattenProperties, readOnly, buildReport };

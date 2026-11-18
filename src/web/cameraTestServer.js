@@ -368,6 +368,7 @@ function createCameraTestServer({
           select: (d) => d.mac === device.mac,
           versions,
           discovery: body.discovery === true, // only when the box on the page is ticked: up to eleven more reads
+          onDiscovery: (found) => say("info", `capability discovery for a ${found.model}: ${found.requests} read${found.requests === 1 ? "" : "s"}${found.rejected ? `, ${found.rejected} group${found.rejected === 1 ? "" : "s"} rejected` : ""}`),
           routing: { devicemgmt: (m) => (typeof client.cameraUsesDeviceMgmt === "function" ? client.cameraUsesDeviceMgmt(m) : false) },
           localProbe: (camera) => oneAtATime(camera.mac, () => probe(camera)),
         });
