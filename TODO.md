@@ -108,6 +108,15 @@ Found on the backyard Cam v3 (floodlight) by toggling "Smoke Alarm sound" and "C
 - Set them: not possible today. The client's only write is night vision (`K10042`), and it refuses commands outside the read-only list. Find the write command in docker-wyze-bridge's source first (it may be a general set-params command or none for these two), then add it the way night vision was done: read before, write, read back, and a switch that is opt-in and off by default, because turning these off silently stops smoke and CO alerts.
 - Same method for other `K10020` params: change one setting in the app, read before and after.
 
+### Smoke and CO sensors for the plugin (idea, 2026-11-18)
+
+The params above are the setting (is the camera listening for T3 and T4 alarm tones), not a detection. A detection is an event: Wyze records an alert and sends a push. Event value 4 is smoke (`SMOKE: [4]` in `src/types.js`), 5 is probably CO. Lag is fine, as for the Motion and Sound sensors, which already come from the event list.
+- **Create the sensors when the setting is on.** A Smoke Sensor and a Carbon Monoxide Sensor service on the camera, from the camera's own `getCameraAlarmSettings` answer, in the "Sensors" list like the other sensor types.
+- **If the user turns it off in the Wyze app,** do not delete the accessory (that would drop its HomeKit automations and rooms): report `StatusActive` false so Home shows it as not responding, which is the "missing device" the user would expect, and log one line saying why. It comes back when the setting is on again.
+- **If the setting cannot be read** (the camera is not on this network, has no `dtls` flag, or is a Gwell model), say so once in the log. Decide then whether to create the sensors anyway.
+- **Needed first:** the real event shape. The smoke and CO event lists were empty over 7 days (`docs/endpoints.md`), so nobody has seen one: confirm that type 5 is CO and what a smoke or CO event holds (a sample from an owner, Wyze support, or a real test of a camera's alarm). Do not build the sensors against a guess.
+- **Safety wording:** HomeKit treats these as critical alerts. Say "not a safety device" in the sensor name's help text and the docs: the camera only listens for a tone, and a poll adds delay.
+
 ## Which devices use which backend (framework mapping, 2026-11-18)
 
 Goal: guess how a new model is controlled from what we know about similar ones. A first read-only probe of the 9 devices on one account (classic list, devicemgmt, iot3):
