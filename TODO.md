@@ -174,3 +174,12 @@ Open, none urgent:
 ## Cutover to upstream's `2.0.0` as the default branch
 
 Audited 2026-11-18. The ordered checklist is in `docs/releasing.md` ("Making `2.0.0` the default branch"), and the same section is in the plugin's. Done on `2.x` so far: CI and wiki-sync also run on `2.0.0`; the plugin's install action also tries `2.0.0`; wiki page for the local camera settings and the test page, and the rate-limit text in Troubleshooting. Not done: everything in the checklist from step 1. Do steps 3 to 5 as one commit after the merge, not before: until then the upstream pages they point to do not exist.
+
+## Backlog: a device picker that writes the config, with product images
+
+Asked for 2026-11-18. A page where a user picks their devices, chooses what to enable for each and how (for a camera: the extra HomeKit switches, sensors, snapshot refresh, night vision), and gets a config block to paste into Homebridge. Product pictures next to each device where possible.
+- **Where it can live.** A GitHub wiki page cannot run JavaScript (scripts are stripped), so the picker needs another home: the plugin's settings screen (`homebridge-ui`, which already saves config the way Homebridge expects), the camera test page (it already lists the account's devices, so the pick is real, not typed), or a static page on GitHub Pages for people who have not installed anything. The first two know the real device list; the third needs the user to choose from the supported-model table.
+- **Source of truth.** The model list and each model's options already exist in the plugin (`.github/scripts/known-models.json`, `device-names.json`, `config.schema.json`). Generate the picker's data from those, as `npm run known-models` does for the README, so it cannot drift.
+- **Images.** Wyze's product pictures are Wyze's: check the licence before copying any into a repository, and prefer linking to a picture Wyze already serves for the device (the device list carries picture URLs for some models) over bundling one. Needs a look at what the device list gives per model, and a plain icon per kind as the fallback (`kind:camera`, `kind:light` and so on already exist).
+- **Output.** Valid for both the flat and the nested config shapes (`configMigrator.js`), never containing a login; show a diff against the user's current config if the page can read it.
+

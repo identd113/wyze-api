@@ -2,7 +2,15 @@
 
 Full reference for [`wyze-api`](https://www.npmjs.com/package/wyze-api), an unofficial Node.js wrapper for the Wyze ecosystem. Method signatures and behaviors documented here track [src/index.js](../src/index.js) — file an issue if you spot drift.
 
-## Start here
+## Using the Homebridge plugin?
+
+Start here. Each page gives the short answer first and links to the detail.
+
+- **[My device is not showing up](Device-Not-Showing-Up.md)** — checks, then how to send us what we need to add it
+- **[Report a problem](Report-a-Problem.md)** — the camera test page does most of the work
+- **[Troubleshooting](Troubleshooting.md)** — common errors and fixes
+
+## Start here (developers)
 
 - **[Getting Started](Getting-Started.md)** — install, the minimum viable example, constructor options
 - **[Authentication](Authentication.md)** — `keyId` / `apiKey`, 2FA (`totpSecret` / `mfaCode`), token persistence, login debounce, refresh
