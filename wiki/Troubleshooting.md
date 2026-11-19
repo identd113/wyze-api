@@ -81,6 +81,10 @@ const conn = await wyze.getCameraWebRTCConnectionInfoWithReconnect(mac, model);
 
 `cameraGetStreamInfo` reads the `X-RateLimit-Remaining` header on every response. If it's below 7, the lib auto-sleeps until `X-RateLimit-Reset-By`. Below that, it throws "Wyze API rate limited (...)" — pause your loops and back off.
 
+Any request to a Wyze host that gets HTTP 429 (or a 503 with `Retry-After`) is waited out and sent again, up to 2 times. The wait is `Retry-After`, else `X-RateLimit-Reset` (seconds from now when small, otherwise a Unix time), else 5 s then 10 s. A wait longer than 2 minutes is not served: the error is thrown with the wait Wyze asked for. While one request waits, other requests to the same host are held for the rest of the wait. Only Wyze's own hosts are handled this way.
+
+The classic `api.wyzecam.com` endpoints send rate-limit headers (about 300 requests per 5 minutes); the newer devicemgmt service sends none.
+
 The 60-second cache on `getCameraWebRTCConnectionInfo` exists specifically to keep your rate-limit budget healthy under reconnect storms; don't bypass it (`noCache: true`) without a reason.
 
 ## Stream works for a few seconds then drops

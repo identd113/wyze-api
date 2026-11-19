@@ -47,3 +47,14 @@ Then release the plugin (see its `docs/releasing.md`). Its workflow refuses to p
 - Install both from the registry into a scratch Homebridge, start it, and check the log for errors.
 - Let a beta soak for a while with no new bugs before cutting a stable 2.0.0.
 - Not yet done for any release so far: a stable `latest` release. When it happens, the stable workflow is the one that moves `latest`, and every project pinned to 1.x is the audience for it (see [downstream.md](downstream.md)).
+
+## Making `2.0.0` the default branch (once the pull requests are merged)
+
+Until this is done, upstream's default branch is `main` (the old line). Issue forms, the issue-triggered workflows and the "Report" links all read the default branch, so they do not see our versions yet. Do these in order, in both repositories (`wyze-api` first).
+
+1. **Settings.** Set the default branch to `2.0.0`. In the plugin repository also: Settings > Actions > General > "Allow GitHub Actions to create and approve pull requests" (the verify-device workflow opens pull requests), and check the `NPM_TOKEN` secret exists in both.
+2. **Labels (plugin repository).** The issue workflows use these labels; create the ones upstream lacks: `from:wyze-api`, `from:readme`, `verified`, `report:works`, `report:partial`, `kind:camera`, `kind:light`, `kind:other`, `needs-info`, `needs-redaction`, `credentials-exposed`, `already-supported`, `new device`, `not-applicable`.
+3. **Links and metadata.** Change `identd113/...` to `wyze-smart-home/...` in: `package.json` (`homepage`, `repository`, `bugs`), the README (badges, clone URL, the device "report" links), `.github/ISSUE_TEMPLATE/*`, `config.schema.json` (footer), `src/WyzeSmartHome.js` and `src/plannedDevices.js` (form URLs), `wiki/` (`Local-Protocol.md` links to `blob/2.x`; `Browser-Viewer-Example.md` clone URL), `docs/downstream.md` and this file. Keep the copyright line, the credits and history entries that name the fork. Decide who the `assignees` are (the four issue forms and `.github/scripts/maintainers.js` name `identd113`).
+4. **Workflows.** `ci.yml` and `wiki-sync.yml` already run on `2.0.0`. CodeQL, dependency-review and njsscan are tied to `main`: point them at `2.0.0`. The plugin's `.github/dependabot.yml` still has an empty `package-ecosystem`, so Dependabot does nothing; fill it in or delete it. Change the README CI badge from `branch=2.x` to `branch=2.0.0`.
+5. **Wording.** Where these docs say `2.x` is "the default branch" or that a release is made "on the `2.x` branch", `2.0.0` takes that place and `2.x` is only our fork's working branch (`releasing.md`, `docs/downstream.md`, `docs/branch-archive.md`).
+6. **Check it works.** Open the new-device form from a README "report" link and from the camera test page; confirm the form opens with the fields filled. Open a throwaway issue and check the triage and label workflows ran. Run "Sync wiki" once and check the wiki shows the new pages (`wyze-api` only).

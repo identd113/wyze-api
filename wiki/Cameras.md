@@ -155,6 +155,7 @@ const state = await wyze.cameraGetDeviceMgmtState(cam.mac, cam.product_model);
 
 ## See also
 
+- **[Local Settings and Test Page](Camera-Local-and-Test-Page.md)** — night vision, the Smoke/CO alarm toggles (read only), the test page and the device report
 - **[Camera Streaming](Camera-Streaming.md)** — fetch WebRTC credentials for live video
 - **[Snapshot Capture](Snapshot-Capture.md)** — JPEG images (cloud or live)
 - **[Browser Viewer Example](Browser-Viewer-Example.md)** — runnable end-to-end demo

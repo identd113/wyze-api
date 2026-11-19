@@ -5,8 +5,10 @@ protocols so cameras can eventually be controlled and streamed without
 routing through Wyze's cloud HTTP API. This page tracks the status of
 each phase and what's actually shipped.
 
-This work is in progress. It does **not** yet replace any of the cloud
-methods documented elsewhere in this wiki; those still work exactly as
+This work is in progress. Reading and setting night vision, and reading the
+alarm settings, already use the local session (see
+[Local Settings and Test Page](Camera-Local-and-Test-Page.md)). Nothing else
+replaces a cloud method; those still work exactly as
 documented. When the local path is wired in (Phase 2.5 below), it will
 be opt-in via an `advanced.tutk.enabled` config flag and fall back to
 the cloud HTTP API when local is unavailable.

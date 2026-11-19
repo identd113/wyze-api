@@ -11,6 +11,7 @@ Full reference for [`wyze-api`](https://www.npmjs.com/package/wyze-api), an unof
 ## Device families
 
 - **[Cameras — Controls](Cameras.md)** — power, siren, flood/spotlight, motion, notifications, recording, garage door
+- **[Cameras — Local Settings and Test Page](Camera-Local-and-Test-Page.md)** — night vision and alarm settings over your network, the camera test page, the device report
 - **[Cameras — Streaming](Camera-Streaming.md)** — WebRTC stream credentials (signaling URL, ICE servers)
 - **[Cameras — Snapshot Capture](Snapshot-Capture.md)** — cloud thumbnails + headless live-capture fallback
 - **[Browser Viewer Example](Browser-Viewer-Example.md)** — runnable in-browser WebRTC demo

@@ -170,3 +170,7 @@ Open, none urgent:
 - The `wyze-api` wiki sync workflow (`wiki-sync.yml`) fails on every run with "Repository not found" for `identd113/wyze-api.wiki.git`: turn the wiki on in the fork's settings, or switch the workflow off.
 - Issues are disabled on `identd113/wyze-api`; problems and new devices go to the plugin repository.
 - Look at the camera test page's sidebar (logo, links, versions) in a real browser; only the unit tests have checked it.
+
+## Cutover to upstream's `2.0.0` as the default branch
+
+Audited 2026-11-18. The ordered checklist is in `docs/releasing.md` ("Making `2.0.0` the default branch"), and the same section is in the plugin's. Done on `2.x` so far: CI and wiki-sync also run on `2.0.0`; the plugin's install action also tries `2.0.0`; wiki page for the local camera settings and the test page, and the rate-limit text in Troubleshooting. Not done: everything in the checklist from step 1. Do steps 3 to 5 as one commit after the merge, not before: until then the upstream pages they point to do not exist.
