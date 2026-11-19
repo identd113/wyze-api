@@ -7,7 +7,7 @@ name: Sync wiki
 on:
   workflow_dispatch: {}
   push:
-    branches: [2.x]
+    branches: [2.x, 2.0.0]
     paths:
       - 'wiki/**'
       - '.github/workflows/wiki-sync.yml'
