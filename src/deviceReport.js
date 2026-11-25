@@ -30,6 +30,8 @@ const PRIVATE_KEY = new RegExp(
     "^lat$", "^lon$", "^lng$", "address", "^did$", "device_id", "^uid$", "cloud_id", "^id$", "authorization",
     "p2p", "url", "thumbnail", "timezone",
     "serial", "uuid", "guid", "traceid", "request_id", "requestid", "home_id", "homeid", "group_id", "parent_id", "owner", "city", "zip", "postal", "street",
+    // A name, a room or a place the user typed, and passwords under their short names.
+    "^name$", "room", "location", "^label$", "^title$", "pwd", "passwd",
   ].join("|")
 );
 

@@ -339,3 +339,12 @@ test("a key that only contains a private pattern inside an ordinary word is kept
   const out = scrub({ capacity: 1, "storage-capacity": 2, microphone: "on", velocity: 3, microphone_ip: "10.0.0.5", city: "Springfield", phone: "555", nickname: "x" });
   assert.deepStrictEqual(out, { capacity: 1, "storage-capacity": 2, microphone: "on", velocity: 3 });
 });
+
+test("scrub drops names, rooms, places and short-named passwords a person typed, and keeps the model and settings", () => {
+  const { scrub } = require("../src/deviceReport");
+  const out = scrub({
+    name: "Sam's camera", room_name: "Bedroom", roomId: "r1", location: "Home", label: "Kid", title: "Nursery", pwd: "x", passwd: "y",
+    product_model: "HL_CAM4", power: 1, motion_sensitivity: 3, plan_name: "Cam Plus",
+  });
+  assert.deepStrictEqual(out, { product_model: "HL_CAM4", power: 1, motion_sensitivity: 3, plan_name: "Cam Plus" });
+});
