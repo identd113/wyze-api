@@ -8,7 +8,7 @@ The first `2.0.0-beta.4` (GitHub pre-release 2026-11-02) never reached npm. Its 
 
 Before publishing:
 - On npmjs.com, or with `npm login` then `npm stage list wyze-api` and `npm stage list homebridge-wyze-smart-home`, look for a staged publish of the first `2.0.0-beta.4` still waiting, and reject it (`npm stage reject <stage-id>`). If it were approved it would publish the old contents under this number. (npm on this machine is not logged in, so this has not been checked.)
-- Push `2.x` in both repos (`wyze-api` first). Then cut `release/2.0.0-beta.4` from `2.x` and retarget the draft GitHub release `v2.0.0-beta.4` (it targets `2.x` for now) to it.
+- Push `2.0.0` in both repos (`wyze-api` first) and fast-forward `release/2.0.0-beta.4` to it. Then retarget the draft GitHub release `v2.0.0-beta.4` (it targets `2.x` for now) to `release/2.0.0-beta.4`.
 - The plugin's CI fails at `npm install` until `wyze-api` `2.0.0-beta.4` is on npm (its range is `^2.0.0-beta.4`). Re-run it after publishing.
 - Getting the release upstream, and the tags: see "Getting the release into the upstream repository" in `docs/releasing.md`. In short: merge commit (no squash or rebase), then `git fetch upstream --tags`, push our `v2.0.0-beta.3` to upstream, and push the upstream tags our fork lacks (`v0.1.1.9` to `v1.1.12`, `v2.0.0-beta.1`, `v2.0.0-beta.2`; in the plugin `v0.5.46`, `v0.5.47`, `v0.5.54`, `v0.5.56`, `v0.5.61`, `v2.0.0-beta.1`, `v2.0.0-beta.2`). Pushing branches or merging does not delete tags.
 - After publishing: install both from the registry into a scratch Homebridge, start it and read the log.
@@ -33,7 +33,7 @@ Limits that stay
 
 ## Upstream repositories (`wyze-smart-home` org)
 
-Plan: PR `2.x` into upstream `2.0.0` as a merge commit (not a squash, or the histories diverge), then make `2.0.0` the default branch, then point the issue and template links there. `2.x` is 0 behind and about 111 (`wyze-api`) / 164 (plugin) commits ahead of upstream `2.0.0`.
+Plan: PR `2.0.0` (our branch, renamed from `2.x`) into upstream `2.0.0` as a merge commit (not a squash, or the histories diverge), then make `2.0.0` the default branch, then point the issue and template links there. Our `2.0.0` is 0 behind and 159 (`wyze-api`) / 190 (plugin) commits ahead of upstream `2.0.0`.
 
 Checked 2026-11-16 (read only):
 - Default branch is `main` (the old 0.5.x / 1.x line) in both. No branch protection or rulesets on `main` or `2.0.0`. Issues are on in both; Discussions only in the plugin.
@@ -184,7 +184,7 @@ Open, none urgent:
 
 ## Housekeeping
 
-- The `wyze-api` wiki sync workflow (`wiki-sync.yml`) fails on every run with "Repository not found" for `identd113/wyze-api.wiki.git`: turn the wiki on in the fork's settings, or switch the workflow off.
+- The `wyze-api` wiki sync workflow (`wiki-sync.yml`) checks that the wiki repository exists and skips with a notice if it does not, so it no longer fails. Wikis are on in `wyze-smart-home/wyze-api`; run the workflow once after the first page exists.
 - Issues are disabled on `identd113/wyze-api`; problems and new devices go to the plugin repository.
 - Look at the camera test page's sidebar (logo, links, versions) in a real browser; only the unit tests have checked it.
 
