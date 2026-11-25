@@ -12,6 +12,7 @@ const { installRedirectGuard, WYZE_ALLOWED_HOSTNAMES, sanitizeLogMessage } = req
 const { freshStamp } = require("./util/requestStamp");
 const { installRateLimitRetry, onRateLimit, waitFromHeaders, holdHost, MAX_WAIT_MS } = require("./util/rateLimit");
 const httpsAgent = require("./httpsAgent");
+const { isPrivateAddress } = require("./util/network");
 const { normalizeMfaCode, isValidMfaCode } = require("./util/totp");
 const axios = require("axios");
 
@@ -1142,6 +1143,11 @@ module.exports = class WyzeAPI {
       characteristics: characteristicsEnc,
     }).replace(/\\\\/g, "\\");
 
+    // The address comes from Wyze's device list. A bulb is on the local network, so anything else is not sent to
+    // (bulbLocalOrCloud then falls back to the cloud).
+    if (!isPrivateAddress(deviceIp)) {
+      throw new Error(`localBulbCommand: ${deviceIp} is not an address on the local network`);
+    }
     const url = `http://${deviceIp}:88/device_request`;
     this.log.debug(`localBulbCommand: ${url}`);
 

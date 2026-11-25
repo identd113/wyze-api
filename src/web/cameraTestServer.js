@@ -34,6 +34,7 @@ const os = require("os");
 const path = require("path");
 
 const tutk = require("../tutk/client");
+const { isPrivateAddress } = require("../util/network");
 const { buildIssueUrl, buildDeviceIssueUrl, buildBugUrl } = require("./issueLink");
 const { describeSupport } = require("./support");
 const { buildReport, ENDPOINTS } = require("../deviceReport");
@@ -112,20 +113,6 @@ function validateWebPort(value) {
 }
 
 // ---- who may talk to it ----
-
-function isPrivateAddress(address) {
-  let a = String(address || "");
-  if (a.startsWith("::ffff:")) a = a.slice(7); // an IPv4 client on a dual-stack socket
-  if (net.isIPv4(a)) {
-    const [p, q] = a.split(".").map(Number);
-    return p === 127 || p === 10 || (p === 172 && q >= 16 && q <= 31) || (p === 192 && q === 168) || (p === 169 && q === 254);
-  }
-  if (net.isIPv6(a)) {
-    const lower = a.toLowerCase();
-    return lower === "::1" || /^f[cd][0-9a-f]{2}:/.test(lower) || /^fe[89ab][0-9a-f]:/.test(lower);
-  }
-  return false;
-}
 
 function isAllowedHost(hostHeader) {
   if (!hostHeader) return false;

@@ -21,6 +21,7 @@
 
 const crypto = require("crypto");
 const dgram = require("dgram");
+const { isPrivateAddress } = require("../util/network");
 
 const DEBUG = Boolean(process.env.WYZE_TUTK_DEBUG);
 const vlog = (...a) => { if (DEBUG) console.log("   ", ...a); };
@@ -1145,6 +1146,8 @@ function cameraLocalSkipReason(d) {
   const p = d.device_params || {};
   if (p.dtls !== 1) return "the camera does not report the dtls flag, and only the DTLS session is built";
   if (!p.ip) return "the Wyze device list has no IP address for it";
+  // The session sends packets to this address, and a value from the cloud is not trusted to be on the local network.
+  if (!isPrivateAddress(p.ip)) return "the Wyze device list gives an address that is not on the local network";
   if (!d.enr || !p.p2p_id || !d.mac) return "the Wyze device list is missing a key or id the local session needs";
   return "";
 }
