@@ -19,6 +19,24 @@
 - **`getCameraAlarmSettings(mac)`** returns `{ smoke, co }` (`"on"`, `"off"` or `"unknown"`): the camera's smoke and CO alarm sound settings, the two toggles on the Wyze app's Alarm Settings page. Read only, over the local network like night vision (`K10020` params 17 and 18). There is no setter yet.
 - **Capability discovery in the device report, when asked for.** `node scripts/device-report.js --discovery`, or the box "Also find which capability groups it has" on a device's card in the camera test page's Other devices tab, adds a `capabilityDiscovery` section: which devicemgmt groups (`device-info`, `iot-device`, `wifi`, `battery`, `floodlight`, ...) come back with a value, by name only. A device that rejects groups, such as the Doorbell v2's chime, is asked again without the group it names. It is off by default (one to eleven more reads per device), and the prefilled issue link carries the result. `_deviceMgmtGetIotProp` takes an optional list of capability groups as a fourth argument, and logs a rejection at debug level when it is used.
 
+**Changed (read before upgrading; the dependency, constant and export changes are measured against upstream's `2.0.0-beta.2`)**
+- **The scripts, samples and wiki log in with `WYZE_USERNAME`, `WYZE_PASSWORD`, `WYZE_KEY_ID` and `WYZE_API_KEY`.** A bare `USERNAME` is the operating system's login on Windows, and the `.env` loader never overrides a variable that is already set, so a script logged in as the wrong account. A `.env` file with the old names still works (read from the file only, with a message saying what to rename).
+- **`totpSecret` is deprecated and ignored.** Wyze accounts log in with the API key (`keyId` and `apiKey`). If Wyze asks for a code, pass the current 6-digit `mfaCode`. A `totpSecret` still in a config is accepted and logs a warning once.
+- **Node.js 22 or newer.** The `koffi` and `querystring` dependencies are gone, with `aws-sdk`, `crypto-js`, `urllib`, `base64-js` and `colorsys`.
+- **The `WyzeCamOGTelephoto3x` constant is `"GW_GC2"`** (it was `"GW_GC"`), and the `olive_create_signature` and `ford_create_signature` exports are removed.
+- **Thermostat setpoints are whole degrees Fahrenheit**, not tenths: a caller that passes `680` now gets an error. A setpoint is sent as text, as the Wyze app does, and as a number only if Wyze answers the text with an HTTP error; a write that times out is not sent twice.
+- **`new WyzeAPI()` no longer throws without a `username`.** 1.x did not either. The first login says clearly that it is needed.
+- **`cameraPrivacy` on a camera that uses the devicemgmt API takes `power_on` or `power_off`** and throws on anything else. Any other value used to switch the camera off.
+
+**Fixed after review**
+- **A request held for a 429 is built again after the wait** (new timestamp or nonce, signed again, current token), for every kind of signed request: the standard body, camera stream info, Venus, DeviceMgmt, Olive and Earth, Ford, IoT3 and HMS. A test fails on any new request that is signed and has no way to be built again.
+- **Audio gaps are filled for Wyze cameras.** They answer PCMU on payload type 96, which the buffer did not recognise, so the crackle fix never ran. The negotiated codec decides now. The buffer also restarts on a new SSRC or on restarted numbering instead of dropping every packet as late.
+- **A device's address from Wyze is only used when it is on the local network:** the local camera session, and the local bulb command (which falls back to the cloud).
+- **The cloud thumbnail is only fetched from an https address that is not on the local network,** with at most three redirects, each checked the same way.
+- **Cam Plus plan expiry can be in seconds or milliseconds;** read as milliseconds only, every plan whose date was in seconds looked expired.
+- **Camera connection details fetched ahead of use are dropped when unused,** as the comment said they were.
+- **The device report drops generic names, rooms, locations, labels, titles and passwords under their short names.**
+
 ### v2.0.0-beta.4
 
 Everything since the last published beta, **2.0.0-beta.3**. An earlier `2.0.0-beta.4` was tagged on GitHub (2026-11-02) but its publish was never approved on npm, so it never reached npm. That GitHub release and tag were deleted and the number is used for this release; the changes the first attempt carried are listed below the new ones. Pairs with `homebridge-wyze-smart-home` 2.0.0-beta.4.

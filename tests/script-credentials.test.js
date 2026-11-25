@@ -59,6 +59,7 @@ test("nothing in the repository reads or documents the unprefixed login variable
   const bare = /(^|[^A-Z_])(USERNAME|PASSWORD|KEY_ID|API_KEY)([^A-Z_]|$)/;
   const allowed = new Set([
     "scripts/lib/credentials.js", // the legacy names it still reads from a .env file
+    "CHANGELOG.md", // says what was renamed
     "tests/script-credentials.test.js",
     "package-lock.json",
   ]);
