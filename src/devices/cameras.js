@@ -2,6 +2,7 @@ const axios = require("axios");
 const crypto = require("../utils/crypto");
 const constants = require("../constants");
 const { freshStamp } = require("../util/requestStamp");
+const { isSafeThumbnailUrl } = require("../util/network");
 const cameraStreamCapture = require("./cameraStreamCapture");
 const { EventAlarmType, AiEventTag } = require("../types");
 
@@ -312,9 +313,22 @@ module.exports = {
     if (options.cloudOnly && options.skipCloud) throw new Error("getCameraSnapshotImage: cloudOnly and skipCloud cannot both be set");
     if (!options.skipCloud) {
       const cloud = await this.getCameraSnapshot(mac);
-      if (cloud?.url) {
+      if (cloud?.url && !isSafeThumbnailUrl(cloud.url)) {
+        this.log.warning("Cloud snapshot URL is not a public https address, not fetching it");
+      } else if (cloud?.url) {
         try {
-          const resp = await axios.get(cloud.url, { responseType: "arraybuffer", timeout: 15_000, maxContentLength: 20 * 1024 * 1024 }); // a thumbnail host is not a Wyze host: bound the wait and the size
+          // A thumbnail host is not a Wyze host: bound the wait and the size, and check every redirect too.
+          const resp = await axios.get(cloud.url, {
+            responseType: "arraybuffer",
+            timeout: 15_000,
+            maxContentLength: 20 * 1024 * 1024,
+            maxRedirects: 3,
+            beforeRedirect: (options) => {
+              if (!isSafeThumbnailUrl(options.href || `${options.protocol}//${options.hostname}${options.path}`)) {
+                throw new Error("the thumbnail redirected to an address that is not a public https one");
+              }
+            },
+          });
           return { buffer: Buffer.from(resp.data), source: "cloud" };
         } catch (err) {
           this.log.warning(`Cloud snapshot fetch failed, falling back to capture: ${err.message}`);

@@ -20,4 +20,23 @@ function isPrivateAddress(address) {
   return false;
 }
 
-module.exports = { isPrivateAddress };
+/**
+ * True for a URL it is safe to download a picture from: https, with a host name or a public address (not localhost, not
+ * a private or link-local address, not a name with no dot such as an internal host). The URL comes from Wyze's cloud, and
+ * the thumbnail host is not a Wyze host, so it is checked rather than trusted.
+ */
+function isSafeThumbnailUrl(value) {
+  let url;
+  try {
+    url = new URL(String(value));
+  } catch (_) {
+    return false;
+  }
+  if (url.protocol !== "https:") return false;
+  const host = url.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+  if (!host || host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) return false;
+  if (net.isIP(host)) return !isPrivateAddress(host);
+  return host.includes(".");
+}
+
+module.exports = { isPrivateAddress, isSafeThumbnailUrl };

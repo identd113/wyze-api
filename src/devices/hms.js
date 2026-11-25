@@ -39,12 +39,19 @@ module.exports = {
   async getCamPlusPlans() {
     const response = await this.getPlanBindingListByUser("cam-plus");
     const rows = response && Array.isArray(response.data) ? response.data : [];
+    // expired_date is a Unix time. It has been seen in milliseconds; a value that small is seconds, and read as
+    // milliseconds it would make every plan look expired.
+    const toMs = (value) => {
+      const n = Number(value);
+      if (!Number.isFinite(n) || n <= 0) return null;
+      return n < 1e11 ? n * 1000 : n;
+    };
     return rows.map((row) => ({
       pid: String(row.pid ?? ""),
       name: String(row.plan_name ?? row.pid ?? ""),
       status: String(row.service_status ?? ""),
-      active: row.service_status !== "EXPIRED" && Number(row.expired_date) > Date.now(),
-      expires: Number.isFinite(Number(row.expired_date)) ? Number(row.expired_date) : null,
+      active: row.service_status !== "EXPIRED" && (toMs(row.expired_date) ?? 0) > Date.now(),
+      expires: toMs(row.expired_date),
       quantity: Number(row.quantity) || 0,
       used: Number(row.used) || 0,
       macs: (Array.isArray(row.deviceList) ? row.deviceList : []).map((device) => String(device.device_id)),

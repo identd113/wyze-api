@@ -166,9 +166,10 @@ module.exports = {
   // the model-aware On/Off methods; all other models keep the original behavior.
   async cameraPrivacy(deviceMac, deviceModel, value) {
     if (this.cameraUsesDeviceMgmt(deviceModel)) {
-      return value === "power_on"
-        ? this.cameraTurnOn(deviceMac, deviceModel)
-        : this.cameraTurnOff(deviceMac, deviceModel);
+      // Only the two power actions mean anything here. Any other value used to switch the camera off.
+      if (value === "power_on") return this.cameraTurnOn(deviceMac, deviceModel);
+      if (value === "power_off") return this.cameraTurnOff(deviceMac, deviceModel);
+      throw new Error(`cameraPrivacy: ${deviceModel} takes "power_on" or "power_off", not ${JSON.stringify(value)}`);
     }
     await this.runAction(deviceMac, deviceModel, value);
   },
@@ -473,7 +474,13 @@ module.exports = {
     if (!this._prefetchedConn) this._prefetchedConn = new Map();
     const promise = this.getCameraWebRTCConnectionInfo(deviceMac, deviceModel, { noCache: true });
     promise.catch(() => {}); // an unused failure is not an error
-    this._prefetchedConn.set(`${deviceMac}:${deviceModel}`, { promise, at: Date.now() });
+    const key = `${deviceMac}:${deviceModel}`;
+    const entry = { promise, at: Date.now() };
+    this._prefetchedConn.set(key, entry);
+    // Unused credentials do not sit in memory: they go when they are too old to be taken.
+    setTimeout(() => {
+      if (this._prefetchedConn.get(key) === entry) this._prefetchedConn.delete(key);
+    }, PREFETCH_MAX_AGE_MS + 1000).unref();
   },
 
   /**
