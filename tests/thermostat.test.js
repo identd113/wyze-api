@@ -261,7 +261,7 @@ test("a setpoint is sent as text first and as a number if the text write throws,
   const sent = [];
   w.thermostatSetIotProp = async (mac, model, key, value) => {
     sent.push([key, value]);
-    if (typeof value === "string") throw new Error("Wyze API Error (3000) - bad value");
+    if (typeof value === "string") throw Object.assign(new Error("Request failed with status code 400"), { response: { status: 400 } });
     return { ok: true };
   };
 
@@ -272,7 +272,20 @@ test("a setpoint is sent as text first and as a number if the text write throws,
   assert.ok(warnings.length === 1 && /heat_sp as text failed/.test(warnings[0]), warnings.join("|"));
 
   // when the number fails as well, that error reaches the caller
-  w.thermostatSetIotProp = async () => { throw new Error("down"); };
+  w.thermostatSetIotProp = async () => { throw Object.assign(new Error("down"), { response: { status: 500 } }); };
   await assert.rejects(() => w.setThermostatCoolingSetpoint(thermostat.mac, thermostat.product_model, 75), /down/);
   assert.strictEqual(w.thermostatSetpointFallbacks, 2);
+});
+
+test("a setpoint write that gets no answer (a timeout, a dropped connection) is not sent a second time as a number", async () => {
+  const w = stub();
+  const sent = [];
+  w.thermostatSetIotProp = async (mac, model, key, value) => {
+    sent.push([key, value]);
+    throw Object.assign(new Error("timeout of 10000ms exceeded"), { code: "ECONNABORTED" });
+  };
+  await assert.rejects(() => w.setThermostatHeatingSetpoint(thermostat.mac, thermostat.product_model, 70), /timeout/);
+  await assert.rejects(() => w.setThermostatCoolingSetpoint(thermostat.mac, thermostat.product_model, 75), /timeout/);
+  assert.deepStrictEqual(sent, [["heat_sp", "70"], ["cool_sp", "75"]], "one write each, as text");
+  assert.strictEqual(w.thermostatSetpointFallbacks, undefined);
 });

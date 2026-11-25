@@ -139,14 +139,17 @@ module.exports = {
    * Writes a setpoint the way the Wyze app does, as text ("70"), and falls back to the number (70) this library
    * always sent if Wyze rejects the text. Experiment for plugin issue
    * https://github.com/wyze-smart-home/homebridge-wyze-smart-home/issues/317: the cloud takes a number and wakes the
-   * unit, but a CO_EA1 on firmware 1.2.8 reportedly ignores it. The fallback only runs when the text write throws;
-   * a unit that silently ignores a value cannot be told from one that applied it. Every fallback is logged with
+   * unit, but a CO_EA1 on firmware 1.2.8 reportedly ignores it. The fallback only runs when Wyze answers the text write with an HTTP error;
+   * a unit that silently ignores a value cannot be told from one that applied it. A write that fails with no answer from Wyze (a timeout, a dropped connection) is not repeated: it may have arrived. Every fallback is logged with
    * "setpoint as text" and counted in `thermostatSetpointFallbacks`.
    */
   async _thermostatSetpoint(deviceMac, deviceModel, propKey, value) {
     try {
       return await this.thermostatSetIotProp(deviceMac, deviceModel, propKey, String(value));
     } catch (e) {
+      // Only an answer from Wyze that refused the text is a reason to send the number. A timeout, a dropped connection
+      // or anything else may have reached the thermostat, and a second write would double-send it.
+      if (!e || !e.response) throw e;
       this.thermostatSetpointFallbacks = (this.thermostatSetpointFallbacks || 0) + 1;
       this.log.warn(
         `${propKey} as text failed for ${deviceModel} (${e.message}); sending it as a number instead (fallback ${this.thermostatSetpointFallbacks})`
