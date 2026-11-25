@@ -2,7 +2,7 @@
 
 Old branches that were cleaned out of the repository, what each one held, and where that work lives now. Each tip is kept as an `archive/<name>` tag, so the commits stay reachable (`git log archive/cameraStream`).
 
-`2.x` is the default branch. `main` is the 1.x line (npm `latest`, 1.1.15).
+`2.0.0` is the default branch (our fork called it `2.x` until it was renamed to match upstream; the dated notes below say `2.x` because that is what it was then). `main` is the 1.x line (npm `latest`, 1.1.15).
 
 ## Summary
 

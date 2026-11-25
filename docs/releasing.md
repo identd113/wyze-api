@@ -4,7 +4,7 @@ How a release gets to npm, and the order to do things in. The plugin ([homebridg
 
 ## How publishing works
 
-- A release is made on GitHub (a **GitHub Release** on the `2.x` branch). Publishing the release starts a workflow:
+- A release is made on GitHub (a **GitHub Release** on the `2.0.0` branch, from `release/<version>`). Publishing the release starts a workflow:
   - **Pre-release ticked** → `npm-publish-beta.yml`, which publishes to the npm `beta` tag. The version in `package.json` must contain `-beta.` (or `-alpha.` / `-rc.`) and must not already be on npm.
   - **Pre-release not ticked** → `npm-publish-stable.yml`, which publishes to `latest`.
   - Either workflow can also be started by hand (`workflow_dispatch`), for example to retry.
@@ -21,8 +21,8 @@ How a release gets to npm, and the order to do things in. The plugin ([homebridg
 
 ## Releasing
 
-1. Make sure `release/<version>` is level with the commit you mean to ship, and pushed (`git branch -f release/<version> 2.x`, then `git push origin release/<version>`). Push `2.x` too, so the two match.
-2. Make the GitHub Release (`v<version>`, **target `release/<version>`, not `2.x`**, pre-release ticked for a beta). The tag then sits on the release branch, so a later commit on `2.x` cannot slip into it.
+1. Make sure `release/<version>` is level with the commit you mean to ship, and pushed (`git branch -f release/<version> 2.0.0`, then `git push origin release/<version>`). Push `2.0.0` too, so the two match.
+2. Make the GitHub Release (`v<version>`, **target `release/<version>`, not `2.0.0`**, pre-release ticked for a beta). The tag then sits on the release branch, so a later commit on `2.0.0` cannot slip into it.
 3. Approve the staged publish on npmjs.com.
 4. Check the tags: `npm view wyze-api dist-tags`. For a beta, `beta` points at the new version and `latest` is unchanged.
 
@@ -30,11 +30,11 @@ Then release the plugin (see its `docs/releasing.md`). Its workflow refuses to p
 
 ## Getting the release into the upstream repository
 
-`2.x` lives in our fork; the `wyze-smart-home` organization's repository is upstream (its default branch is `main`, and `2.0.0` is the branch ours came from). To bring a release over:
+Our working branch is `2.0.0`, the same name as upstream's (it was `2.x` until the review of the merge into upstream's `2.0.0`), so a push to either runs the same CI. The `wyze-smart-home` organization's repository is upstream (its default branch is `main` until `2.0.0` is made the default). To bring a release over:
 
-1. Cut `release/<version>` from `2.x`, as above, and open the pull request from that branch to upstream `2.0.0`.
+1. Cut `release/<version>` from `2.0.0`, as above, and open the pull request from that branch to upstream `2.0.0`.
 2. Merge it with a **merge commit** (or fast-forward), never a squash or rebase. Those rewrite the commits, so the tags would point at commits that are not in upstream's history and the two repositories' histories would diverge.
-3. Bring `2.x` back level: `git fetch upstream`, then `git merge --ff-only upstream/2.0.0` on `2.x`.
+3. Bring our `2.0.0` back level: `git fetch upstream`, then `git merge --ff-only upstream/2.0.0` on `2.0.0`.
 
 **Tags.** Pushing a branch or merging a pull request never deletes or moves a tag, and never copies one. Tags travel only when you push or fetch them:
 - Our release tags (for example `v2.0.0-beta.3`) are on our fork only. Push one to upstream with `git push upstream <tag>` (after the merge, so its commit is in upstream's history).
@@ -54,7 +54,7 @@ Until this is done, upstream's default branch is `main` (the old line). Issue fo
 
 1. **Settings.** Set the default branch to `2.0.0`. In the plugin repository also: Settings > Actions > General > "Allow GitHub Actions to create and approve pull requests" (the verify-device workflow opens pull requests), and check the `NPM_TOKEN` secret exists in both.
 2. **Labels (plugin repository).** The issue workflows use these labels; create the ones upstream lacks: `from:wyze-api`, `from:readme`, `verified`, `report:works`, `report:partial`, `kind:camera`, `kind:light`, `kind:other`, `needs-info`, `needs-redaction`, `credentials-exposed`, `already-supported`, `new device`, `not-applicable`.
-3. **Links and metadata.** Change `identd113/...` to `wyze-smart-home/...` in: `package.json` (`homepage`, `repository`, `bugs`), the README (badges, clone URL, the device "report" links), `.github/ISSUE_TEMPLATE/*`, `config.schema.json` (footer), `src/WyzeSmartHome.js` and `src/plannedDevices.js` (form URLs), `wiki/` (`Local-Protocol.md` links to `blob/2.x`; `Browser-Viewer-Example.md` clone URL), `docs/downstream.md` and this file. Keep the copyright line, the credits and history entries that name the fork. Decide who the `assignees` are (the four issue forms and `.github/scripts/maintainers.js` name `identd113`).
-4. **Workflows.** `ci.yml` and `wiki-sync.yml` already run on `2.0.0`. CodeQL, dependency-review and njsscan are tied to `main`: point them at `2.0.0`. The plugin's `.github/dependabot.yml` still has an empty `package-ecosystem`, so Dependabot does nothing; fill it in or delete it. Change the README CI badge from `branch=2.x` to `branch=2.0.0`.
-5. **Wording.** Where these docs say `2.x` is "the default branch" or that a release is made "on the `2.x` branch", `2.0.0` takes that place and `2.x` is only our fork's working branch (`releasing.md`, `docs/downstream.md`, `docs/branch-archive.md`).
+3. **Links and metadata.** Done in the files (`identd113/...` is now `wyze-smart-home/...` in `package.json`, the README, the issue template links and the wiki). Check nothing was missed: `git grep -n identd113` should list only `LICENSE`, `TODO.md` and links to our own plugin issues. Issues are disabled on this repository: problems go to the plugin repository, and the issue template links say so.
+4. **Workflows.** `ci.yml`, `wiki-sync.yml` and the README badge use `2.0.0`. Still to do upstream: point CodeQL, dependency-review and njsscan at `2.0.0` (they are tied to `main`), and turn the wiki on, because the wiki sync fails with "Repository not found" until it is.
+5. **Wording.** Done: these docs call `2.0.0` the default branch.
 6. **Check it works.** Open the new-device form from a README "report" link and from the camera test page; confirm the form opens with the fields filled. Open a throwaway issue and check the triage and label workflows ran. Run "Sync wiki" once and check the wiki shows the new pages (`wyze-api` only).

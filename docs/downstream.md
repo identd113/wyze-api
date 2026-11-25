@@ -21,7 +21,7 @@ wyze-api  (this repo, npm: wyze-api)
 | | |
 |---|---|
 | npm `latest` | `1.1.15` (the 1.x line, branch `main`) |
-| npm `beta` | `2.0.0-beta.3` (this branch, `2.x`) |
+| npm `beta` | `2.0.0-beta.3` (this branch, `2.0.0`) |
 | Downloads | about 826 in the 30 days to 2026-10-29. Most are probably installs of the 1.x plugin. |
 | Outside projects found | See [Projects still on 1.x](#projects-still-on-1x). Every one pins the 1.x line; none is on 2.x. |
 | Outside use of 2.x-only methods | None found (searched for the device-object wrappers such as `plugOn(device)`). |

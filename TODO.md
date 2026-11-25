@@ -14,6 +14,23 @@ Before publishing:
 - After publishing: install both from the registry into a scratch Homebridge, start it and read the log.
 - `npm audit` on the plugin flags axios 1.19.0 in the local install only (`package-lock.json` is ignored). Re-run it after `wyze-api` is published and fix if it is still there.
 
+## Review of the merge PRs by jfarmer08 (2026-11-23)
+
+His review of wyze-api #53 and of homebridge-wyze-smart-home #316 is answered by commits on `2.0.0` (the branch our `2.x` is renamed to), one commit per concern, each with tests. Nothing was run on a camera or a thermostat for the library items; the test bridge (`~/homebridge-test`) is the place for that. What is still open:
+
+Decisions for the owner
+- **Licensing of `src/util/devicemgmtProps.js`.** The header says "Ported verbatim" from SecKatie/wyzeapy (`payload_factory.py`, 557 lines). wyzeapy is GPL-3.0-only and this package is MIT. The property names are API facts, so the risk may be small, but the choice is: rewrite it independently, ask the wyzeapy authors, or accept it. Same decision for `_deviceMgmtParseState` and the spotlight model list, which mirror wyzeapy's `CameraService`.
+- **Publishing.** `npm stage publish` has not been tried with the stage-only `NPM_TOKEN`; do a dry run of a staged release before the next release depends on it. Confirm the package owners and publish rights with jfarmer08, who is the only maintainer on npm.
+- **Comments on an issue are not scanned for credentials.** That needs the plugin's issue workflows to run on `issue_comment`, which widens what they read. A maintainers' decision.
+
+Limits that stay
+- **A spoofed LAN address can disrupt the local camera session.** The session takes the source port of whatever packet arrives from the camera's IP, and an unauthenticated DTLS alert record can fail the handshake. The address is now only used when it is local, but anyone on the LAN who can spoof the camera's IP can still interfere. A protocol limit; the session only reads and, on request, sets night vision.
+- **`setTempDirectory` is module-wide.** With two `WyzeAPI` instances that have different `persistPath`, the last one created decides where the short-lived SDP files go. Passing the folder down to each capture would fix it; nothing uses two instances today.
+- **The sprinkler duration unit is unchecked.** HomeKit's `SetDuration` is seconds and is passed through unchanged to Wyze's quick run; it has not been tried against a controller.
+- **Thermostat setpoints are whole degrees.** A half degree set from HomeKit is rounded.
+- **CI skips Markdown-only changes** (`paths-ignore: **.md`), so the verify-device pull requests get no CI status; if branch protection requires checks, they stay pending. Actions are pinned to tags, not commits. The plugin has no lockfile, so a new `wyze-api` model can turn the known-models test red on an unrelated pull request.
+- **The cloud thumbnail is tried first on purpose** (`0a96e61`), so the 30 s refresh and Quick Live View run only when it fails.
+
 ## Upstream repositories (`wyze-smart-home` org)
 
 Plan: PR `2.x` into upstream `2.0.0` as a merge commit (not a squash, or the histories diverge), then make `2.0.0` the default branch, then point the issue and template links there. `2.x` is 0 behind and about 111 (`wyze-api`) / 164 (plugin) commits ahead of upstream `2.0.0`.
