@@ -38,14 +38,23 @@ class RtpReorderBuffer {
    *        a longer gap is jumped over instead of filled
    * @param {number} [opts.maxHeld=60] — safety cap on held packets
    * @param {number} [opts.silenceByte=0xff] — PCMU silence (mu-law zero). PCMA uses 0xd5; other codecs are not concealed
+   * @param {{name:string, clockRate?:number}|null} [opts.codec] — the audio codec the camera negotiated (from the SDP
+   *        answer). Wyze answers PCMU on a dynamic payload type (96), which the packet alone cannot tell from video, so the
+   *        codec decides what silence is. Can be given later with `setCodec`.
+   * @param {number} [opts.maxLate=20] — this many late packets in a row mean the sender restarted its numbering (a
+   *        backward jump of less than half the range looks like "late" for ever), so the buffer restarts from the new number
    */
-  constructor({ send, makePacket, maxWaitMs = 80, maxConceal = 10, maxHeld = 60, silenceByte = 0xff }) {
+  constructor({ send, makePacket, maxWaitMs = 80, maxConceal = 10, maxHeld = 60, silenceByte = 0xff, codec = null, maxLate = 20 }) {
     this.send = send;
     this.makePacket = makePacket;
     this.maxWaitMs = maxWaitMs;
     this.maxConceal = maxConceal;
     this.maxHeld = maxHeld;
     this.silenceByte = silenceByte;
+    this.maxLate = maxLate;
+    this.lateRun = 0;
+    this.codec = null;
+    this.setCodec(codec);
     this.held = new Map(); // seq -> { pkt, at }
     this.nextSeq = null;
     this.lastTemplate = null;
@@ -53,8 +62,23 @@ class RtpReorderBuffer {
     this.stats = { received: 0, inOrder: 0, reordered: 0, duplicate: 0, late: 0, concealed: 0, jumped: 0 };
   }
 
-  /** The byte that is silence for this RTP payload type, or null when it is not a codec whose silence is known. */
+  /** Tell the buffer which codec was negotiated (see the constructor); null goes back to reading the payload type. */
+  setCodec(codec) {
+    this.codec = codec && typeof codec.name === "string" ? codec : null;
+  }
+
+  /**
+   * The byte that is silence for this RTP payload type, or null when it is not a codec whose silence is known.
+   * With a negotiated codec that decides, whatever the payload type: only 8 kHz G.711 is one byte per sample.
+   */
   silenceFor(payloadType) {
+    if (this.codec) {
+      const name = this.codec.name.toUpperCase();
+      if (this.codec.clockRate && this.codec.clockRate !== 8000) return null;
+      if (name === "PCMU") return this.silenceByte;
+      if (name === "PCMA") return 0xd5;
+      return null;
+    }
     if (payloadType === 0) return this.silenceByte; // PCMU: mu-law zero, 0xff
     if (payloadType === 8) return 0xd5; // PCMA: A-law zero
     return null;
@@ -68,14 +92,22 @@ class RtpReorderBuffer {
   push(pkt, now) {
     const seq = pkt.header.sequenceNumber;
     this.stats.received += 1;
+    // A new SSRC is a new stream: its numbering has nothing to do with the old one.
+    if (this.lastTemplate && pkt.header.ssrc !== this.lastTemplate.header.ssrc) this._restart();
     if (this.nextSeq === null) {
       this.nextSeq = seq;
     }
-    const d = seqDelta(seq, this.nextSeq);
+    let d = seqDelta(seq, this.nextSeq);
     if (d < 0) {
       this.stats.late += 1; // its slot was already played (or filled with silence)
-      return;
+      this.lateRun += 1;
+      if (this.lateRun < this.maxLate) return;
+      // So many in a row are not late, the numbering restarted: carry on from here.
+      this._restart();
+      this.nextSeq = seq;
+      d = 0;
     }
+    this.lateRun = 0;
     if (this.held.has(seq)) {
       this.stats.duplicate += 1;
       return;
@@ -100,6 +132,16 @@ class RtpReorderBuffer {
       this._emit(e.pkt);
       this.nextSeq = (s + 1) % SEQ_MOD;
     }
+  }
+
+  /** Release what is held and forget the old numbering (the sender restarted). */
+  _restart() {
+    this.flush();
+    this.nextSeq = null;
+    this.nextTs = null;
+    this.lastTemplate = null;
+    this.lateRun = 0;
+    this.stats.restarted = (this.stats.restarted || 0) + 1;
   }
 
   _emit(pkt) {

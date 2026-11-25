@@ -143,3 +143,73 @@ test("a missing packet of another codec (Opus or a dynamic type) is jumped, not 
   assert.deepStrictEqual(seqs(), [10, 12]);
   assert.strictEqual(buf.stats.jumped, 1);
 });
+
+// ---- Wyze answers PCMU on payload type 96 ----
+
+test("a gap in PCMU audio sent on dynamic payload type 96 is filled with silence once the codec is known", () => {
+  const { buf, out } = make({ codec: { name: "PCMU", clockRate: 8000 } });
+  buf.push(pkt(1, 0, 1, 160, 96), 0);
+  buf.push(pkt(3, 320, 1, 160, 96), 10); // 2 never comes
+  buf.tick(200);
+  assert.strictEqual(buf.stats.concealed, 1, "the hole is filled, not jumped");
+  assert.strictEqual(buf.stats.jumped, 0);
+  const filler = out.find((p) => p.synthetic);
+  assert.strictEqual(filler.header.payloadType, 96);
+  assert.ok(filler.payload.every((b) => b === 0xff), "mu-law silence");
+});
+
+test("the codec can be given after the stream starts (the answer arrives after the buffer is built)", () => {
+  const { buf } = make();
+  buf.setCodec({ name: "PCMA", clockRate: 8000 });
+  assert.strictEqual(buf.silenceFor(96), 0xd5);
+});
+
+test("without a codec, a dynamic payload type is jumped over, not guessed at", () => {
+  const { buf } = make();
+  buf.push(pkt(1, 0, 1, 160, 96), 0);
+  buf.push(pkt(3, 320, 1, 160, 96), 10);
+  buf.tick(200);
+  assert.strictEqual(buf.stats.concealed, 0);
+  assert.strictEqual(buf.stats.jumped, 1);
+});
+
+test("Opus and other codecs are never concealed, even when the codec is known", () => {
+  for (const codec of [{ name: "opus", clockRate: 48000 }, { name: "PCMU", clockRate: 16000 }]) {
+    const { buf } = make({ codec });
+    buf.push(pkt(1, 0, 1, 160, 111), 0);
+    buf.push(pkt(3, 320, 1, 160, 111), 10);
+    buf.tick(200);
+    assert.strictEqual(buf.stats.concealed, 0, JSON.stringify(codec));
+  }
+});
+
+// ---- the sender restarts its numbering ----
+
+test("a new SSRC restarts the buffer instead of dropping every packet as late", () => {
+  const { buf, out } = make();
+  for (let i = 0; i < 5; i++) buf.push(pkt(1000 + i, i * 160), i * 20);
+  const other = (seq) => ({ header: { sequenceNumber: seq, timestamp: 0, payloadType: 0, ssrc: 99 }, payload: Buffer.alloc(160, 2) });
+  buf.push(other(10), 200);
+  buf.push(other(11), 220);
+  assert.deepStrictEqual(out.slice(-2).map((p) => p.header.sequenceNumber), [10, 11]);
+  assert.strictEqual(buf.stats.restarted, 1);
+});
+
+test("numbering that jumps back by less than half the range is not late for ever", () => {
+  const { buf, out } = make({ maxLate: 5 });
+  for (let i = 0; i < 5; i++) buf.push(pkt(30000 + i, i * 160), i * 20);
+  const before = out.length;
+  for (let i = 0; i < 12; i++) buf.push(pkt(100 + i, 1000 + i * 160), 200 + i * 20); // same SSRC, numbering restarted
+  assert.ok(out.length - before >= 8, `only ${out.length - before} of 12 reached ffmpeg`);
+  assert.strictEqual(buf.stats.restarted, 1);
+});
+
+test("a few really late packets are still dropped, not taken for a restart", () => {
+  const { buf, out } = make({ maxLate: 20 });
+  for (let i = 0; i < 5; i++) buf.push(pkt(50 + i, i * 160), i * 20);
+  buf.push(pkt(48, 0), 100);
+  buf.push(pkt(49, 0), 110);
+  assert.strictEqual(out.length, 5);
+  assert.strictEqual(buf.stats.late, 2);
+  assert.strictEqual(buf.stats.restarted, undefined);
+});

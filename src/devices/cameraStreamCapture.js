@@ -1147,6 +1147,8 @@ async function _startRtpForwarding({
   const stop = () => closeEverything();
 
   const audioCodec = localAudioRtpPort ? extractAudioCodec(pc.remoteDescription?.sdp ?? null) : null;
+  // The answer names the codec (PCMU on payload type 96 for Wyze), which is what tells the buffer what silence is.
+  if (audioReorder && audioCodec) audioReorder.setCodec(audioCodec);
   if (localAudioRtpPort) {
     log("debug", audioCodec
       ? `audio: ${audioCodec.name}/${audioCodec.clockRate} on payload type ${audioCodec.payloadType}`
