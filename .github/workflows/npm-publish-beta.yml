@@ -62,7 +62,7 @@ jobs:
       - name: Ensure NPM_TOKEN is configured
         run: |
           if [ -z "$NODE_AUTH_TOKEN" ]; then
-            echo "NPM_TOKEN secret is missing. Add a granular stage-only npm token for this package (npm token create --packages-and-scopes-permission read-write-stage-only); approve the staged release on npmjs.com."
+            echo "NPM_TOKEN secret is missing. Add a granular npm token with Bypass 2FA enabled."
             exit 1
           fi
         env:
@@ -79,7 +79,6 @@ jobs:
             exit 1
           fi
           echo "Publishing wyze-api@$VERSION to beta tag"
-      - name: Stage the release (approve it on npmjs.com to publish)
-        run: npm install -g npm@^11.15.0 && npm stage publish --access public --tag beta
+      - run: npm publish --access public --tag beta
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

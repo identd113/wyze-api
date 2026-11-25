@@ -20,7 +20,7 @@ His review of wyze-api #53 and of homebridge-wyze-smart-home #316 is answered by
 
 Decisions for the owner
 - **Licensing of `src/util/devicemgmtProps.js`.** The header says "Ported verbatim" from SecKatie/wyzeapy (`payload_factory.py`, 557 lines). wyzeapy is GPL-3.0-only and this package is MIT. The property names are API facts, so the risk may be small, but the choice is: rewrite it independently, ask the wyzeapy authors, or accept it. Same decision for `_deviceMgmtParseState` and the spotlight model list, which mirror wyzeapy's `CameraService`.
-- **Publishing.** `npm stage publish` has not been tried with the stage-only `NPM_TOKEN`; do a dry run of a staged release before the next release depends on it. Confirm the package owners and publish rights with jfarmer08, who is the only maintainer on npm.
+- **Publishing.** The workflows are upstream's own (plain `npm publish` with `NPM_TOKEN`, on a GitHub Release; beta releases go to the `beta` tag). jfarmer08 said on Discord (2026-11-25) that a beta goes out first, and a stable release only after the beta has been out a while with nothing major reported. He thought he had given identd113 npm access; confirm it, and that the `NPM_TOKEN` secret works, before the first publish. We have not published from this repository's workflow yet.
 - **Comments on an issue are not scanned for credentials.** That needs the plugin's issue workflows to run on `issue_comment`, which widens what they read. A maintainers' decision.
 
 Limits that stay
@@ -38,7 +38,7 @@ Plan: PR `2.0.0` (our branch, renamed from `2.x`) into upstream `2.0.0` as a mer
 Checked 2026-11-16 (read only):
 - Default branch is `main` (the old 0.5.x / 1.x line) in both. No branch protection or rulesets on `main` or `2.0.0`. Issues are on in both; Discussions only in the plugin.
 - Upstream has only the old issue templates (`bug-report.md`, `feature-request.md`, `support-request.md`); `wyze-api` has none. Our `new-device.yml` and the triage, origin-label and verify-device workflows exist only in our fork, and issue events run workflows from the default branch.
-- Actions: enabled, default token permission is read, and "Allow GitHub Actions to create and approve pull requests" is **off** (`verify-device` needs it on). A secret named `NPM_TOKEN` exists in both; its value and whether it works for `npm stage publish` are unknown.
+- Actions: enabled, default token permission is read, and "Allow GitHub Actions to create and approve pull requests" is **off** (`verify-device` needs it on). A secret named `NPM_TOKEN` exists in both; its value and whether it can publish are unknown.
 - Upstream has old workflows (`greetings.yml`, `npm_publish.yml` / `npm-publish.yml`, and in `wyze-api` `label.yml`, `njsscan.yml`, `wiki-sync.yml`) that a merge of our tree would remove.
 - To do: tell the maintainers (plugin issue #315 is the place), turn on the Actions setting above, check the `NPM_TOKEN`, then switch the default branch, then change the issue, template and discussion links (README, `.github/ISSUE_TEMPLATE/config.yml`, `src/plannedDevices.js`, `src/WyzeSmartHome.js`, `config.schema.json`, both `package.json` `bugs` URLs, the test fixtures). Leave the fork's own `repository`, `homepage`, badge and clone links.
 

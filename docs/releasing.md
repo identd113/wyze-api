@@ -8,7 +8,7 @@ How a release gets to npm, and the order to do things in. The plugin ([homebridg
   - **Pre-release ticked** → `npm-publish-beta.yml`, which publishes to the npm `beta` tag. The version in `package.json` must contain `-beta.` (or `-alpha.` / `-rc.`) and must not already be on npm.
   - **Pre-release not ticked** → `npm-publish-stable.yml`, which publishes to `latest`.
   - Either workflow can also be started by hand (`workflow_dispatch`), for example to retry.
-- Publishing is **staged**. The workflow runs `npm stage publish` with a stage-only token, so nothing goes live until you approve it on npmjs.com (with 2FA) or with `npm stage approve <id>`.
+- Publishing is a plain `npm publish` with the repository's `NPM_TOKEN` (a granular token that bypasses 2FA), the same workflow upstream uses. Publishing a GitHub Release is what publishes to npm, so check the version and the target branch before you click Publish.
 - Until 2.0 is stable, `latest` stays on 1.x (`1.1.15` at the time of writing), so a plain `npm install wyze-api` does not move anyone to 2.x.
 
 ## Before the release
@@ -23,7 +23,7 @@ How a release gets to npm, and the order to do things in. The plugin ([homebridg
 
 1. Make sure `release/<version>` is level with the commit you mean to ship, and pushed (`git branch -f release/<version> 2.0.0`, then `git push origin release/<version>`). Push `2.0.0` too, so the two match.
 2. Make the GitHub Release (`v<version>`, **target `release/<version>`, not `2.0.0`**, pre-release ticked for a beta). The tag then sits on the release branch, so a later commit on `2.0.0` cannot slip into it.
-3. Approve the staged publish on npmjs.com.
+3. Watch the publish workflow run on the Actions tab. It stops by itself if the version is already on npm.
 4. Check the tags: `npm view wyze-api dist-tags`. For a beta, `beta` points at the new version and `latest` is unchanged.
 
 Then release the plugin (see its `docs/releasing.md`). Its workflow refuses to publish until a `wyze-api` that satisfies its declared range is on npm.
