@@ -74,14 +74,9 @@ module.exports = class WyzeAPI {
   // line and color-codes the level tag, independently of whatever the
   // homebridge plugin layer does with its own log object.
   constructor(options /*, log [unused] */) {
-    if (typeof options.username !== "string" || !options.username) {
-      throw new Error(
-        "WyzeAPI requires a non-empty 'username' option (your Wyze account email) - " +
-        "this is needed even when logging in with apiKey/keyId, since it's used to " +
-        "namespace the persisted token cache file."
-      );
-    }
-
+    // A missing username is reported by the first login (see _requireUsername), not here: 1.x let the constructor
+    // succeed, and code that builds a client before it has the account (to read static helpers, or to set it later)
+    // must keep working.
     // Resolve effective log level. apiLogEnabled is the legacy option —
     // honored for back-compat: true → debug, false/unset → info.
     const requestedLevel = options.logLevel
@@ -608,6 +603,17 @@ module.exports = class WyzeAPI {
     return this._maybeLoginPromise;
   }
 
+  /** The account email is needed even with apiKey/keyId: it names the persisted token cache file. */
+  _requireUsername() {
+    if (typeof this.username !== "string" || !this.username) {
+      throw new Error(
+        "WyzeAPI requires a non-empty 'username' option (your Wyze account email) - " +
+        "this is needed even when logging in with apiKey/keyId, since it's used to " +
+        "namespace the persisted token cache file."
+      );
+    }
+  }
+
   async _maybeLogin() {
     // Check if the access token is available.
     if (!this.access_token) {
@@ -806,6 +812,7 @@ module.exports = class WyzeAPI {
   * @returns {string} - The file path where tokens are stored.
   */
   _tokenPersistPath() {
+    this._requireUsername();
     const uuid = getUuid(this.username); // Generate a unique identifier based on the username.
     if (!uuid) {
       throw new Error("Failed to generate UUID for token persistence path.");

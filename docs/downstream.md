@@ -49,7 +49,7 @@ These are only the ones a public search can find. deps.dev lists two npm package
 What to tell a project on 1.x:
 
 - `npm install wyze-api@beta` installs 2.x. Until 2.0 is stable, `latest` stays on 1.x, so nobody is moved by accident.
-- Code that calls the methods in the 1.x fixture runs unchanged. The differences are the ones listed below: Node.js 22 or newer, a constructor that throws on an empty username, and the removed dependencies.
+- Code that calls the methods in the 1.x fixture runs unchanged. The differences are the ones listed below: Node.js 22 or newer and the removed dependencies.
 - What 2.x adds that a 1.x user does not have: bulk property reads, camera event lists with AI labels, the Cam Plus plan lookup, camera streaming and snapshots through a warm WebRTC connection, and the newer devices (Lock Bolt v2, Palm Lock, the newer cameras).
 
 Contacting these projects (an issue or a pull request that bumps the version) is a decision for the maintainer of this repo. Doing it from a public account is outward-facing, so nothing has been sent.
@@ -81,7 +81,7 @@ These are on purpose. Each is also listed, with its reason, in `KNOWN_DIFFERENCE
 | `localBulbCommand` no longer takes a seventh parameter, `actionKey` | 1.x never used it. |
 | `setIotProp`'s third parameter is `deviceModel`, not `product_model`. `getLockState`'s is `hardlock`, not `deviceState` | A rename only. Callers pass these by position, so nothing changes for them. |
 | `checkColorTemp` and `checkBrightnessValue` clamp to HomeKit's valid ranges | 1.x returned 500 for any colour temperature below 500, and passed brightness through unchanged. Both were bugs. |
-| The constructor throws when `username` is empty | 1.x failed later, at login. |
+| A missing or empty `username` is reported by the first login with a clear message | 1.x failed there too, with a cryptic `TypeError`. The constructor accepts it, as 1.x did. |
 | Node.js 22 or newer | 1.x declared no minimum. |
 | Login and token errors no longer include Wyze's response text | The text could carry account details. |
 | These dependencies are gone: `aws-sdk`, `colorsys`, `crypto-js`, `urllib`, `base64-js`, `@ptkdev/logger` | Nothing in 2.x uses them. A project that relied on getting one of them through `wyze-api` must now install it itself. |
