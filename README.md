@@ -3,7 +3,7 @@
 [![npm](https://img.shields.io/npm/v/wyze-api.svg?style=flat-square)](https://www.npmjs.com/package/wyze-api)
 [![Chat](https://img.shields.io/discord/1134601590762913863)](https://discord.gg/Mjkpq2x9)
 [![GitHub last commit](https://img.shields.io/github/last-commit/wyze-smart-home/wyze-api)](https://github.com/wyze-smart-home/wyze-api)
-[![CI](https://github.com/wyze-smart-home/wyze-api/actions/workflows/ci.yml/badge.svg?branch=2.x)](https://github.com/wyze-smart-home/wyze-api/actions/workflows/ci.yml)
+[![CI](https://github.com/wyze-smart-home/wyze-api/actions/workflows/ci.yml/badge.svg?branch=2.0.0)](https://github.com/wyze-smart-home/wyze-api/actions/workflows/ci.yml)
 
 
 This is an unofficial Wyze API. This library uses the internal APIs from the Wyze mobile app. A list of all Wyze devices can be retrieved to check the status of Cameras, Senors, Bulbs, Plugs, Locks and more. This API can turn on and off cameras, lightbulbs and plugs and more.

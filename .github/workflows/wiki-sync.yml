@@ -1,13 +1,13 @@
 # Sync the in-repo wiki/ directory to the project's GitHub Wiki.
 # Wikis live in a separate <repo>.wiki.git repository; this workflow keeps
-# them in lockstep with what's committed under wiki/ on the 2.x branch.
+# them in lockstep with what's committed under wiki/ on the 2.0.0 branch.
 
 name: Sync wiki
 
 on:
   workflow_dispatch: {}
   push:
-    branches: [2.x, 2.0.0]
+    branches: [2.0.0]
     paths:
       - 'wiki/**'
       - '.github/workflows/wiki-sync.yml'
