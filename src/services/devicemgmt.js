@@ -2,6 +2,7 @@ const axios = require("axios");
 const nodeCrypto = require("crypto");
 const constants = require("../constants");
 const devicemgmtProps = require("../util/devicemgmtProps");
+const { freshStamp } = require("../util/requestStamp");
 
 /**
  * DeviceMgmt API — used by newer cameras (Floodlight Pro / Battery Cam Pro
@@ -52,6 +53,7 @@ module.exports = {
     try {
       const result = await axios.post(url, payload, {
         headers: { authorization: this.access_token },
+        __wyzeRebuild: () => ({ data: freshStamp(payload), headers: { authorization: this.access_token } }),
       });
               this.log.debug(`API response DeviceMgmt run_action: ${JSON.stringify(result.data)}`);
       return result.data;
@@ -92,6 +94,7 @@ module.exports = {
     try {
       const result = await axios.post(url, payload, {
         headers: { authorization: this.access_token },
+        __wyzeRebuild: () => ({ data: freshStamp(payload), headers: { authorization: this.access_token } }),
       });
       this.log.debug(`API response DeviceMgmt get_iot_prop: ${JSON.stringify(result.data)}`);
       return result.data;

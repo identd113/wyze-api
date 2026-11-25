@@ -37,32 +37,29 @@ module.exports = {
   async _venusRequest(method, path, payload = {}) {
     await this.maybeLogin();
 
-    const nonce = Date.now();
     const url = `${constants.venusBaseUrl}${path}`;
     const verb = method.toUpperCase();
 
-    let response;
-    try {
+    // The nonce is in the signature and in a header, so a request sent again after a rate-limit wait is built again.
+    const build = () => {
+      const nonce = Date.now();
       if (verb === "GET") {
         const params = { ...payload, nonce };
-        const signature = crypto.venusGenerateDynamicSignature(
-          this._venusSortedQuery(params),
-          this.access_token
-        );
-        const headers = this._venusBuildHeaders(nonce, signature);
-        this.log.debug(`Performing request: ${url}`);
-        response = await axios.get(url, { headers, params });
-      } else {
-        const body = { ...payload, nonce: String(nonce) };
-        const bodyStr = JSON.stringify(body);
-        const signature = crypto.venusGenerateDynamicSignature(bodyStr, this.access_token);
-        const headers = {
-          ...this._venusBuildHeaders(nonce, signature),
-          "Content-Type": "application/json; charset=utf-8",
-        };
-        this.log.debug(`Performing request: ${url}`);
-        response = await axios.request({ url, method: verb, headers, data: bodyStr });
+        const signature = crypto.venusGenerateDynamicSignature(this._venusSortedQuery(params), this.access_token);
+        return { headers: this._venusBuildHeaders(nonce, signature), params };
       }
+      const bodyStr = JSON.stringify({ ...payload, nonce: String(nonce) });
+      const signature = crypto.venusGenerateDynamicSignature(bodyStr, this.access_token);
+      return {
+        headers: { ...this._venusBuildHeaders(nonce, signature), "Content-Type": "application/json; charset=utf-8" },
+        data: bodyStr,
+      };
+    };
+
+    let response;
+    try {
+      this.log.debug(`Performing request: ${url}`);
+      response = await axios.request({ url, method: verb, ...build(), __wyzeRebuild: build });
     } catch (e) {
       this.log.error(`Request failed: ${e.message}`);
       if (e.response) {

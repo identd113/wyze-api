@@ -21,7 +21,11 @@ module.exports = {
     const url = `${constants.fordBaseUrl}${urlPath}`;
     this.log.debug(`Performing request: ${url}`);
     try {
-      const result = await axios.get(url, { params: signedParams });
+      const result = await axios.get(url, {
+        params: signedParams,
+        // Signed over a timestamp, so it is signed again when sent again after a rate-limit wait.
+        __wyzeRebuild: () => ({ params: payloadFactory.fordCreatePayload(this.access_token, params, urlPath, "get") }),
+      });
               this.log.debug(`API response Ford GET ${urlPath}: ${JSON.stringify(result.data)}`);
       return result.data;
     } catch (e) {
@@ -49,7 +53,12 @@ module.exports = {
     const url = `${constants.fordBaseUrl}${urlPath}`;
     this.log.debug(`Performing request: ${url}`);
     try {
-      const result = await axios.request({ url, method, data: signedPayload });
+      const result = await axios.request({
+        url,
+        method,
+        data: signedPayload,
+        __wyzeRebuild: () => ({ data: payloadFactory.fordCreatePayload(this.access_token, params, urlPath, method) }),
+      });
               this.log.debug(`API response Ford ${method.toUpperCase()} ${urlPath}: ${JSON.stringify(result.data)}`);
       return result.data;
     } catch (e) {

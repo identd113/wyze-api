@@ -9,6 +9,7 @@ const constants = require("./constants");
 const util = require("./util");
 const types = require("./types");
 const { installRedirectGuard, WYZE_ALLOWED_HOSTNAMES, sanitizeLogMessage } = require("./util/security");
+const { freshStamp } = require("./util/requestStamp");
 const { installRateLimitRetry, onRateLimit, waitFromHeaders, holdHost, MAX_WAIT_MS } = require("./util/rateLimit");
 const httpsAgent = require("./httpsAgent");
 const { normalizeMfaCode, isValidMfaCode } = require("./util/totp");
@@ -273,6 +274,10 @@ module.exports = class WyzeAPI {
       url,
       data,
       baseURL: this.apiBaseUrl,
+      // After a rate-limit wait the request is sent again with a new timestamp and the token as it is by then.
+      __wyzeRebuild: () => ({
+        data: { ...freshStamp(data), ...("access_token" in data ? { access_token: this.access_token } : {}) },
+      }),
       ...config,
     };
 

@@ -1,6 +1,7 @@
 const axios = require("axios");
 const crypto = require("../utils/crypto");
 const constants = require("../constants");
+const { freshStamp } = require("../util/requestStamp");
 
 /**
  * Olive-signed plugin services (earth, sirius, platform, membership,
@@ -25,7 +26,17 @@ module.exports = {
     };
     this.log.debug(`Performing request: ${url}`);
     try {
-      const result = await axios.get(url, config);
+      const result = await axios.get(url, {
+        ...config,
+        // Signed over the nonce in the params, so it is stamped and signed again after a rate-limit wait.
+        __wyzeRebuild: () => {
+          const again = freshStamp(params);
+          return {
+            params: again,
+            headers: { ...config.headers, access_token: this.access_token, signature2: crypto.oliveCreateSignature(again, this.access_token) },
+          };
+        },
+      });
               this.log.debug(`API response ${label || "Olive GET"}: ${JSON.stringify(result.data)}`);
       return result.data;
     } catch (e) {
@@ -57,7 +68,16 @@ module.exports = {
     };
     this.log.debug(`Performing request: ${url}`);
     try {
-      const result = await axios.post(url, bodyStr, config);
+      const result = await axios.post(url, bodyStr, {
+        ...config,
+        __wyzeRebuild: () => {
+          const again = JSON.stringify(freshStamp(payload));
+          return {
+            data: again,
+            headers: { ...config.headers, access_token: this.access_token, signature2: crypto.oliveCreateSignatureSingle(again, this.access_token) },
+          };
+        },
+      });
               this.log.debug(`API response ${label || "Olive POST"}: ${JSON.stringify(result.data)}`);
       return result.data;
     } catch (e) {

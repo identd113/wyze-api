@@ -2,6 +2,7 @@ const axios = require("axios");
 const nodeCrypto = require("crypto");
 const crypto = require("../utils/crypto");
 const constants = require("../constants");
+const { freshStamp } = require("../util/requestStamp");
 
 /**
  * IoT3 service (app.wyzecam.com/app/v4/iot3) — used by Lock Bolt V2
@@ -35,7 +36,14 @@ module.exports = {
     const url = `${constants.iot3BaseUrl}${urlPath}`;
           this.log.debug(`Performing request: ${url}`);
     try {
-      const response = await axios.post(url, body, { headers });
+      const response = await axios.post(url, body, {
+        headers,
+        // Signed over the body, which holds a nonce: stamped and signed again after a rate-limit wait.
+        __wyzeRebuild: () => {
+          const again = JSON.stringify(freshStamp(payload));
+          return { data: again, headers: this._iot3BuildHeaders(again) };
+        },
+      });
               this.log.debug(`API response IoT3 ${urlPath}: ${JSON.stringify(response.data)}`);
       return response.data;
     } catch (error) {

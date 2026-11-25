@@ -13,6 +13,10 @@
  * decides. Nobody has measured whether Wyze limits per account, per endpoint or per host, so while one request waits
  * every other request to the same host waits too (a shared gate), and the headers of every answer are remembered per
  * host and path (`getRateLimitObservations()`), which is what shows which of the three it is.
+ *
+ * A request that carries a timestamp, a nonce or a signature made before the wait would be stale when it is sent again
+ * (the wait can be two minutes). Such a request is built with `rebuildable(build)`: after the wait the retry calls
+ * `build()` again, so the timestamp, nonce, signature and token are fresh.
  */
 
 const EventEmitter = require("events");
@@ -114,6 +118,20 @@ function getRateLimitHistory() {
   return Object.fromEntries([...counts.keys()].map((key) => [key, { answers: counts.get(key), history: [...(history.get(key) || [])] }]));
 }
 
+/**
+ * A request config that can be made again. `build()` returns what changes between attempts (`data`, `headers`, `params`,
+ * `url`): the timestamp, the nonce, the signature, the token. The first attempt uses it, and so does each retry after a
+ * rate-limit wait. Extra config (a timeout, a response type) is passed as the second argument.
+ */
+function rebuildable(build, extra = {}) {
+  return { ...extra, ...build(), __wyzeRebuild: build };
+}
+
+/** The headers of an axios config as a plain object (they may be an AxiosHeaders instance). */
+function plainHeaders(headers) {
+  return headers && typeof headers.toJSON === "function" ? headers.toJSON() : { ...(headers || {}) };
+}
+
 const defaultSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
@@ -165,6 +183,10 @@ function createRateLimitHandlers({ isWyzeHost, send, sleep = defaultSleep, now =
     events.emit("wait", info);
     await sleep(wait);
     config.__wyzeRateRetries = attempt + 1;
+    if (typeof config.__wyzeRebuild === "function") {
+      const fresh = await config.__wyzeRebuild();
+      Object.assign(config, fresh, { headers: { ...plainHeaders(config.headers), ...plainHeaders(fresh.headers) } });
+    }
     return send(config);
   }
 
@@ -194,6 +216,6 @@ function onRateLimit(fn) {
 module.exports = {
   MAX_RETRIES, MAX_WAIT_MS, FALLBACK_WAIT_MS,
   toUnixMs, waitFromHeaders, holdHost, observe, getRateLimitObservations, getRateLimitHistory, HISTORY_PER_KEY,
-  createRateLimitHandlers, installRateLimitRetry, onRateLimit,
+  createRateLimitHandlers, installRateLimitRetry, onRateLimit, rebuildable,
   _gates: gates,
 };

@@ -1,6 +1,7 @@
 const axios = require("axios");
 const crypto = require("../utils/crypto");
 const constants = require("../constants");
+const { freshStamp } = require("../util/requestStamp");
 const cameraStreamCapture = require("./cameraStreamCapture");
 const { EventAlarmType, AiEventTag } = require("../types");
 
@@ -90,24 +91,35 @@ module.exports = {
       ],
       nonce: String(Date.now()),
     };
-    const body = JSON.stringify(payload);
-    const signature = crypto.web_create_signature(body, this.access_token);
-
-    const headers = {
-      "Accept-Encoding": "gzip",
-      appId: constants.webAppId,
-      appInfo: constants.webAppInfo,
-      access_token: this.access_token,
-      Authorization: this.access_token,
-      signature2: signature,
-      requestid: String(Date.now() % 100000),
-      "Content-Type": "application/json; charset=utf-8",
+    // The body is signed with the nonce in it, so a request sent again after a rate-limit wait is built again.
+    const build = (stamped = payload) => {
+      const body = JSON.stringify(stamped);
+      return {
+        body,
+        headers: {
+          "Accept-Encoding": "gzip",
+          appId: constants.webAppId,
+          appInfo: constants.webAppInfo,
+          access_token: this.access_token,
+          Authorization: this.access_token,
+          signature2: crypto.web_create_signature(body, this.access_token),
+          requestid: String(Date.now() % 100000),
+          "Content-Type": "application/json; charset=utf-8",
+        },
+      };
     };
+    const { body, headers } = build();
 
     const url = `${constants.iot3BaseUrl}/app/v4/camera/get-streams`;
     this.log.debug(`Performing request: ${url}`);
     try {
-      const response = await axios.post(url, body, { headers });
+      const response = await axios.post(url, body, {
+        headers,
+        __wyzeRebuild: () => {
+          const again = build(freshStamp(payload));
+          return { data: again.body, headers: again.headers };
+        },
+      });
       await this._checkRateLimit(response.headers);
 
       const data = response.data;
