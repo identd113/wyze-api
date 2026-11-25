@@ -8,11 +8,10 @@
 // it is protected: a random token, local network clients only, no proxies, one test at a time.
 //
 // --port is 1024 to 65535 (lower ports need root). Default 8099. Stop it with Ctrl-C.
-// Login comes from USERNAME, PASSWORD, KEY_ID and API_KEY in the environment or in the .env file next
+// Login comes from WYZE_USERNAME, WYZE_PASSWORD, WYZE_KEY_ID and WYZE_API_KEY in the environment or in the .env file next
 // to the package, as with the other scripts.
 
-const fs = require("fs");
-const path = require("path");
+const { requireCredentials } = require("./lib/credentials");
 
 const args = process.argv.slice(2);
 if (args.includes("--help") || args.includes("-h")) {
@@ -21,18 +20,7 @@ if (args.includes("--help") || args.includes("-h")) {
 }
 const portArg = args.indexOf("--port") === -1 ? "8099" : args[args.indexOf("--port") + 1];
 
-const envPath = path.join(__dirname, "..", ".env");
-if (fs.existsSync(envPath)) {
-  for (const line of fs.readFileSync(envPath, "utf8").split("\n")) {
-    const match = line.match(/^([A-Z_]+)=(.*)$/);
-    if (match && !process.env[match[1]]) process.env[match[1]] = match[2];
-  }
-}
-const missing = ["USERNAME", "PASSWORD", "KEY_ID", "API_KEY"].filter((key) => !process.env[key]);
-if (missing.length) {
-  console.error(`Missing required env vars: ${missing.join(", ")}`);
-  process.exit(1);
-}
+const creds = requireCredentials();
 
 const WyzeAPI = require("../src/index");
 const check = WyzeAPI.validateWebPort(portArg);
@@ -42,10 +30,10 @@ if (!check.enabled) {
 }
 
 const wyze = new WyzeAPI({
-  username: process.env.USERNAME,
-  password: process.env.PASSWORD,
-  keyId: process.env.KEY_ID,
-  apiKey: process.env.API_KEY,
+  username: creds.username,
+  password: creds.password,
+  keyId: creds.keyId,
+  apiKey: creds.apiKey,
   persistPath: process.env.PERSIST_PATH, // unset: the library default (~/.wyze-api)
   logLevel: process.env.LOG_LEVEL || "warn",
 });

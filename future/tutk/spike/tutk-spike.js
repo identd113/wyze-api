@@ -27,7 +27,7 @@
  *                                        [--port 32761] [--verbose] [--timeout 8000]
  *                                        [--night-vision] [--set on|off|auto [--restore]]
  *
- * Credentials come from wyze-api's .env (USERNAME, PASSWORD, KEY_ID, API_KEY), the same as scripts/.
+ * Credentials come from wyze-api's .env (WYZE_USERNAME, WYZE_PASSWORD, WYZE_KEY_ID, WYZE_API_KEY), the same as scripts/.
  * The camera's enr, P2P id and MAC are read from the Wyze device list and never printed.
  *
  * Exit code: 0 authenticated, 1 failed, 2 bad usage.
@@ -71,7 +71,7 @@ async function cameraFromCloud() {
     }
   }
   const WyzeAPI = require(path.join(root, "src", "index"));
-  const wyze = new WyzeAPI({ username: process.env.USERNAME, password: process.env.PASSWORD, keyId: process.env.KEY_ID, apiKey: process.env.API_KEY, logLevel: "error" });
+  const wyze = new WyzeAPI({ username: process.env.WYZE_USERNAME, password: process.env.WYZE_PASSWORD, keyId: process.env.WYZE_KEY_ID, apiKey: process.env.WYZE_API_KEY, logLevel: "error" });
   const list = (await wyze.getObjectList()).data.device_list;
   const model = opt("model", "HL_DB2");
   const name = typeof opt("name", null) === "string" ? opt("name").toLowerCase() : null;

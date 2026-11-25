@@ -12,25 +12,12 @@
 
 const fs = require("fs");
 const path = require("path");
+const { requireCredentials } = require("./lib/credentials");
 
-const envPath = path.join(__dirname, "..", ".env");
-if (fs.existsSync(envPath)) {
-  for (const line of fs.readFileSync(envPath, "utf8").split("\n")) {
-    const match = line.match(/^([A-Z_]+)=(.*)$/);
-    if (match && !process.env[match[1]]) {
-      process.env[match[1]] = match[2];
-    }
-  }
-}
 
 const WyzeAPI = require("../src/index");
 
-const required = ["USERNAME", "PASSWORD", "KEY_ID", "API_KEY"];
-const missing = required.filter((key) => !process.env[key]);
-if (missing.length) {
-  console.error(`Missing required env vars: ${missing.join(", ")}`);
-  process.exit(1);
-}
+const creds = requireCredentials();
 
 const outDir = process.argv[2] || path.join(process.cwd(), "poll");
 const intervalMs = Number(process.argv[3] || 300) * 1000;
@@ -38,10 +25,10 @@ const count = Number(process.argv[4] || 12);
 fs.mkdirSync(outDir, { recursive: true });
 
 const wyze = new WyzeAPI({
-  username: process.env.USERNAME,
-  password: process.env.PASSWORD,
-  keyId: process.env.KEY_ID,
-  apiKey: process.env.API_KEY,
+  username: creds.username,
+  password: creds.password,
+  keyId: creds.keyId,
+  apiKey: creds.apiKey,
   persistPath: process.env.PERSIST_PATH, // unset: the library default (~/.wyze-api)
   logLevel: process.env.LOG_LEVEL || "warn",
 });

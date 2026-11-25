@@ -11,10 +11,10 @@ const Logger = require("@ptkdev/logger");
 const logger = new Logger();
 
 const options = {
-  username: process.env.USERNAME,
-  password: process.env.PASSWORD,
-  keyId: process.env.KEY_ID,
-  apiKey: process.env.API_KEY,
+  username: process.env.WYZE_USERNAME,
+  password: process.env.WYZE_PASSWORD,
+  keyId: process.env.WYZE_KEY_ID,
+  apiKey: process.env.WYZE_API_KEY,
   persistPath: process.env.PERSIST_PATH,
   logLevel: process.env.LOG_LEVEL,
   apiLogEnabled: process.env.API_LOG_ENABLED,

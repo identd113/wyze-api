@@ -8,10 +8,10 @@ You don't normally call `login()` directly — every public method calls `maybeL
 
 ```js
 const wyze = new Wyze({
-  username: process.env.USERNAME,
-  password: process.env.PASSWORD,
-  keyId: process.env.KEY_ID,
-  apiKey: process.env.API_KEY,
+  username: process.env.WYZE_USERNAME,
+  password: process.env.WYZE_PASSWORD,
+  keyId: process.env.WYZE_KEY_ID,
+  apiKey: process.env.WYZE_API_KEY,
   // persistPath: "/path/for/saved-tokens", // optional; defaults to ~/.wyze-api
 });
 ```
@@ -50,10 +50,10 @@ Pass the base32 key Wyze shows next to the QR code when you set up the authentic
 
 ```js
 const wyze = new Wyze({
-  username: process.env.USERNAME,
-  password: process.env.PASSWORD,
-  keyId: process.env.KEY_ID,
-  apiKey: process.env.API_KEY,
+  username: process.env.WYZE_USERNAME,
+  password: process.env.WYZE_PASSWORD,
+  keyId: process.env.WYZE_KEY_ID,
+  apiKey: process.env.WYZE_API_KEY,
   totpSecret: process.env.TOTP_SECRET,
   // persistPath: "/path/for/saved-tokens", // optional; defaults to ~/.wyze-api
 });
@@ -67,10 +67,10 @@ Pass the current TOTP code as `mfaCode` in the constructor:
 
 ```js
 const wyze = new Wyze({
-  username: process.env.USERNAME,
-  password: process.env.PASSWORD,
-  keyId: process.env.KEY_ID,
-  apiKey: process.env.API_KEY,
+  username: process.env.WYZE_USERNAME,
+  password: process.env.WYZE_PASSWORD,
+  keyId: process.env.WYZE_KEY_ID,
+  apiKey: process.env.WYZE_API_KEY,
   mfaCode: "123456",
   // persistPath: "/path/for/saved-tokens", // optional; defaults to ~/.wyze-api
 });

@@ -14,10 +14,10 @@ Node.js 22 or newer is required (`engines.node` is `>=22`; the WebRTC library `w
 const Wyze = require("wyze-api");
 
 const wyze = new Wyze({
-  username: process.env.USERNAME,
-  password: process.env.PASSWORD,
-  keyId: process.env.KEY_ID,
-  apiKey: process.env.API_KEY,
+  username: process.env.WYZE_USERNAME,
+  password: process.env.WYZE_PASSWORD,
+  keyId: process.env.WYZE_KEY_ID,
+  apiKey: process.env.WYZE_API_KEY,
   // persistPath: "/path/for/saved-tokens", // optional; defaults to ~/.wyze-api
 });
 
@@ -57,10 +57,10 @@ const wyze = new Wyze({
 The convention used in [example/](../example/) is to keep credentials in a `.env` file at the repo root:
 
 ```env
-USERNAME=you@example.com
-PASSWORD=...
-KEY_ID=...
-API_KEY=...
+WYZE_USERNAME=you@example.com
+WYZE_PASSWORD=...
+WYZE_KEY_ID=...
+WYZE_API_KEY=...
 TOTP_SECRET=...   # only if your account has 2FA
 PERSIST_PATH=./
 LOG_LEVEL=info
@@ -72,10 +72,10 @@ Run with [dotenv](https://www.npmjs.com/package/dotenv):
 ```js
 require("dotenv").config();
 const wyze = new Wyze({
-  username: process.env.USERNAME,
-  password: process.env.PASSWORD,
-  keyId: process.env.KEY_ID,
-  apiKey: process.env.API_KEY,
+  username: process.env.WYZE_USERNAME,
+  password: process.env.WYZE_PASSWORD,
+  keyId: process.env.WYZE_KEY_ID,
+  apiKey: process.env.WYZE_API_KEY,
   persistPath: process.env.PERSIST_PATH,
 });
 ```

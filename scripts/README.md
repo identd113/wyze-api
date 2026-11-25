@@ -133,7 +133,7 @@ node scripts/camera-test-web.js              # port 8099
 node scripts/camera-test-web.js --port 9000  # 1024 to 65535
 ```
 
-Login comes from `USERNAME`, `PASSWORD`, `KEY_ID` and `API_KEY` in the environment or in `.env`. The script prints a link ending in `?token=...`; open it from a browser on the same network. The page lists the account's cameras. **Test** asks one camera directly over the local network (the read-only TUTK commands described under `--local` below) and shows each step as it passes and what the camera answered. After a test, **Off / Auto / On** set night vision; each asks you to confirm first. **Download results** saves the answers as JSON (no addresses, ids or keys). When the host program gives it a GitHub issue form (the Homebridge plugin does), a finished test also shows **Report this camera on GitHub**: it opens that form in a new tab with the model, firmware, plugin version and a short summary of the test already filled in. Nothing is sent from the page; GitHub shows the form and you read it, edit it and submit it (or close it). Only the model, firmware, which steps passed, how many commands were answered and the night-vision setting go into the link, never an address, id or key. The standalone script has no form, so it shows no link.
+Login comes from `WYZE_USERNAME`, `WYZE_PASSWORD`, `WYZE_KEY_ID` and `WYZE_API_KEY` in the environment or in `.env`. The script prints a link ending in `?token=...`; open it from a browser on the same network. The page lists the account's cameras. **Test** asks one camera directly over the local network (the read-only TUTK commands described under `--local` below) and shows each step as it passes and what the camera answered. After a test, **Off / Auto / On** set night vision; each asks you to confirm first. **Download results** saves the answers as JSON (no addresses, ids or keys). When the host program gives it a GitHub issue form (the Homebridge plugin does), a finished test also shows **Report this camera on GitHub**: it opens that form in a new tab with the model, firmware, plugin version and a short summary of the test already filled in. Nothing is sent from the page; GitHub shows the form and you read it, edit it and submit it (or close it). Only the model, firmware, which steps passed, how many commands were answered and the night-vision setting go into the link, never an address, id or key. The standalone script has no form, so it shows no link.
 
 A browser cannot speak the camera protocol, so the server does the talking. It can change a camera setting, so it is not open to the world:
 
@@ -166,7 +166,7 @@ node scripts/device-report.js --local              # also ask each camera direct
 node scripts/device-report.js --discovery          # also find which devicemgmt groups each device has (see below)
 ```
 
-Login comes from `USERNAME`, `PASSWORD`, `KEY_ID` and `API_KEY` in the environment or in `.env` (the same as the other scripts here).
+Login comes from `WYZE_USERNAME`, `WYZE_PASSWORD`, `WYZE_KEY_ID` and `WYZE_API_KEY` in the environment or in `.env` (the same as the other scripts here).
 
 For each device it records the model, type, firmware, the property list (`P1056 = 2`, and so on) and the device info. For cameras it also records whether the devicemgmt API answers and which capabilities it lists. A camera with no devicemgmt property list of its own is asked with the Floodlight Pro list (`LD_CFP`), and the report says so. It also records which API path this version of the library uses for the device.
 

@@ -22,10 +22,10 @@ That's it. The deps `werift` (pure-JS WebRTC), `ws` (WebSocket client), and `ffm
 const Wyze = require("wyze-api");
 
 const wyze = new Wyze({
-  username: process.env.USERNAME,
-  password: process.env.PASSWORD,
-  keyId: process.env.KEY_ID,
-  apiKey: process.env.API_KEY,
+  username: process.env.WYZE_USERNAME,
+  password: process.env.WYZE_PASSWORD,
+  keyId: process.env.WYZE_KEY_ID,
+  apiKey: process.env.WYZE_API_KEY,
   // persistPath: "/path/for/saved-tokens", // optional; defaults to ~/.wyze-api
 });
 

@@ -17,11 +17,12 @@
 // records what each camera answered, or why it could not be asked. Each camera takes up to
 // about 40 seconds if it answers little.
 //
-// Login comes from USERNAME, PASSWORD, KEY_ID and API_KEY in the environment or in
+// Login comes from WYZE_USERNAME, WYZE_PASSWORD, WYZE_KEY_ID and WYZE_API_KEY in the environment or in
 // the .env file next to the package, as with the other scripts.
 
 const fs = require("fs");
 const path = require("path");
+const { requireCredentials } = require("./lib/credentials");
 
 const { buildReport } = require("../src/deviceReport");
 
@@ -39,25 +40,14 @@ const withLocal = args.includes("--local");
 const withDiscovery = args.includes("--discovery");
 const outFile = option("--out") || path.join(process.cwd(), "wyze-device-report.json");
 
-const envPath = path.join(__dirname, "..", ".env");
-if (fs.existsSync(envPath)) {
-  for (const line of fs.readFileSync(envPath, "utf8").split("\n")) {
-    const match = line.match(/^([A-Z_]+)=(.*)$/);
-    if (match && !process.env[match[1]]) process.env[match[1]] = match[2];
-  }
-}
-const missing = ["USERNAME", "PASSWORD", "KEY_ID", "API_KEY"].filter((key) => !process.env[key]);
-if (missing.length) {
-  console.error(`Missing required env vars: ${missing.join(", ")}`);
-  process.exit(1);
-}
+const creds = requireCredentials();
 
 const WyzeAPI = require("../src/index");
 const wyze = new WyzeAPI({
-  username: process.env.USERNAME,
-  password: process.env.PASSWORD,
-  keyId: process.env.KEY_ID,
-  apiKey: process.env.API_KEY,
+  username: creds.username,
+  password: creds.password,
+  keyId: creds.keyId,
+  apiKey: creds.apiKey,
   persistPath: process.env.PERSIST_PATH, // unset: the library default (~/.wyze-api)
   logLevel: process.env.LOG_LEVEL || "warn",
 });
