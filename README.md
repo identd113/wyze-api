@@ -2,13 +2,13 @@
 [![npm](https://img.shields.io/npm/dt/wyze-api)](https://www.npmjs.com/package/wyze-api)
 [![npm](https://img.shields.io/npm/v/wyze-api.svg?style=flat-square)](https://www.npmjs.com/package/wyze-api)
 [![Chat](https://img.shields.io/discord/1134601590762913863)](https://discord.gg/Mjkpq2x9)
-[![GitHub last commit](https://img.shields.io/github/last-commit/identd113/wyze-api)](https://github.com/identd113/wyze-api)
-[![CI](https://github.com/identd113/wyze-api/actions/workflows/ci.yml/badge.svg?branch=2.x)](https://github.com/identd113/wyze-api/actions/workflows/ci.yml)
+[![GitHub last commit](https://img.shields.io/github/last-commit/wyze-smart-home/wyze-api)](https://github.com/wyze-smart-home/wyze-api)
+[![CI](https://github.com/wyze-smart-home/wyze-api/actions/workflows/ci.yml/badge.svg?branch=2.x)](https://github.com/wyze-smart-home/wyze-api/actions/workflows/ci.yml)
 
 
 This is an unofficial Wyze API. This library uses the internal APIs from the Wyze mobile app. A list of all Wyze devices can be retrieved to check the status of Cameras, Senors, Bulbs, Plugs, Locks and more. This API can turn on and off cameras, lightbulbs and plugs and more.
 
-**Problems and new devices:** this library's issues are tracked in the [homebridge-wyze-smart-home](https://github.com/identd113/homebridge-wyze-smart-home/issues/new/choose) repository. [Report a library bug](https://github.com/identd113/homebridge-wyze-smart-home/issues/new?template=bug-report.yml&origin=wyze-api), [report or request a device](https://github.com/identd113/homebridge-wyze-smart-home/issues/new?template=new-device.yml&origin=wyze-api), and ask questions in its [discussions](https://github.com/identd113/homebridge-wyze-smart-home/discussions).
+**Problems and new devices:** this library's issues are tracked in the [homebridge-wyze-smart-home](https://github.com/wyze-smart-home/homebridge-wyze-smart-home/issues/new/choose) repository. [Report a library bug](https://github.com/wyze-smart-home/homebridge-wyze-smart-home/issues/new?template=bug-report.yml&origin=wyze-api), [report or request a device](https://github.com/wyze-smart-home/homebridge-wyze-smart-home/issues/new?template=new-device.yml&origin=wyze-api), and ask questions in its [discussions](https://github.com/wyze-smart-home/homebridge-wyze-smart-home/discussions).
 
 ## Setup
 `npm install wyze-api --save`
@@ -291,7 +291,7 @@ see [`scripts/README.md`](scripts/README.md) and run
 ## Development
 
 ```
-git clone https://github.com/identd113/wyze-api.git
+git clone https://github.com/wyze-smart-home/wyze-api.git
 cd wyze-api
 npm install
 npm test

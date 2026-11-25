@@ -10,7 +10,7 @@ wyze-api  (this repo, npm: wyze-api)
 
 ## Who depends on us
 
-**The Homebridge plugin** ([homebridge-wyze-smart-home](https://github.com/identd113/homebridge-wyze-smart-home)) is the main user.
+**The Homebridge plugin** ([homebridge-wyze-smart-home](https://github.com/wyze-smart-home/homebridge-wyze-smart-home)) is the main user.
 
 - It declares `wyze-api` as a dependency (`^2.0.0-beta.3` today). Each release's notes say which plugin version it pairs with.
 - At startup the plugin checks that the `wyze-api` it loaded satisfies that range (`src/wyzeApiVersion.js` in the plugin), and warns if it does not.

@@ -1,6 +1,6 @@
 # Releasing wyze-api
 
-How a release gets to npm, and the order to do things in. The plugin ([homebridge-wyze-smart-home](https://github.com/identd113/homebridge-wyze-smart-home)) depends on this package, so **`wyze-api` always goes first**.
+How a release gets to npm, and the order to do things in. The plugin ([homebridge-wyze-smart-home](https://github.com/wyze-smart-home/homebridge-wyze-smart-home)) depends on this package, so **`wyze-api` always goes first**.
 
 ## How publishing works
 

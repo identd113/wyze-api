@@ -8,7 +8,7 @@ const assert = require("node:assert");
 const { buildIssueUrl, buildDeviceIssueUrl, buildBugUrl, reportForTest, MAX_URL, REPORT_KINDS } = require("../src/web/issueLink");
 
 const FORM = {
-  url: "https://github.com/identd113/homebridge-wyze-smart-home/issues/new",
+  url: "https://github.com/wyze-smart-home/homebridge-wyze-smart-home/issues/new",
   template: "new-device.yml",
   origin: "camera-test-page",
   plugin: "2.0.0-beta.4 (wyze-api 2.0.0-beta.4)",
