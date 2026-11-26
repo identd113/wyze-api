@@ -5,9 +5,9 @@ How a release gets to npm, and the order to do things in. The plugin ([homebridg
 ## How publishing works
 
 - A release is made on GitHub (a **GitHub Release** on the `2.0.0` branch, from `release/<version>`). Publishing the release starts a workflow:
-  - **Pre-release ticked** → `npm-publish-beta.yml`, which publishes to the npm `beta` tag. The version in `package.json` must contain `-beta.` (or `-alpha.` / `-rc.`) and must not already be on npm.
-  - **Pre-release not ticked** → `npm-publish-stable.yml`, which publishes to `latest`.
-  - Either workflow can also be started by hand (`workflow_dispatch`), for example to retry.
+  - One workflow, `npm-publish.yml`, handles both. **Pre-release ticked** → the npm `beta` tag (or `alpha` / `rc`, named by the version). **Pre-release not ticked** → `latest`.
+  - The version in `package.json` must agree with the box: a `-beta.`, `-alpha.` or `-rc.` version needs it ticked, a plain version needs it unticked. The workflow stops if they disagree, and if the version is already on npm.
+  - The workflow can also be started by hand (`workflow_dispatch`), for example to retry.
 - Publishing is a plain `npm publish` with the repository's `NPM_TOKEN` (a granular token that bypasses 2FA), the same workflow upstream uses. Publishing a GitHub Release is what publishes to npm, so check the version and the target branch before you click Publish.
 - Until 2.0 is stable, `latest` stays on 1.x (`1.1.15` at the time of writing), so a plain `npm install wyze-api` does not move anyone to 2.x.
 
@@ -46,7 +46,7 @@ Our working branch is `2.0.0`, the same name as upstream's (it was `2.x` until t
 
 - Install both from the registry into a scratch Homebridge, start it, and check the log for errors.
 - Let a beta soak for a while with no new bugs before cutting a stable 2.0.0.
-- Not yet done for any release so far: a stable `latest` release. When it happens, the stable workflow is the one that moves `latest`, and every project pinned to 1.x is the audience for it (see [downstream.md](downstream.md)).
+- Not yet done for any release so far: a stable `latest` release. When it happens, an unticked release is what moves `latest`, and every project pinned to 1.x is the audience for it (see [downstream.md](downstream.md)).
 
 ## Making `2.0.0` the default branch (once the pull requests are merged)
 

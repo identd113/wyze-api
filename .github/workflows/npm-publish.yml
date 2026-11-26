@@ -1,5 +1,18 @@
-# Publish package to npm when a GitHub release is published.
-# For more information see: https://docs.github.com/en/actions/publishing-packages/publishing-nodejs-packages
+# npm release, one workflow for both channels.
+#
+# Trigger: a GitHub release is published. A release marked "Pre-release" goes to the
+# `beta` tag (or `alpha` / `rc`, named by the version); a full release goes to `latest`.
+# Users on `npm install wyze-api` keep getting whatever is on `latest`; a beta is only seen by
+# people who ask for it with `npm install wyze-api@beta`.
+#
+# Safeguards:
+#   * The version in package.json must agree with the release: a `-beta.`, `-alpha.` or
+#     `-rc.` version needs the Pre-release box ticked, and a plain version needs it unticked.
+#   * The version must not already be on npm.
+#   * The NPM_TOKEN secret must be present and valid.
+
+# Run it by hand (workflow_dispatch) to publish again after fixing something; the channel
+# then comes from the version alone.
 
 name: npm publish
 
@@ -12,19 +25,7 @@ permissions:
   contents: read
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-      - run: npm ci
-
-  publish-npm:
-    needs: build
+  publish:
     runs-on: ubuntu-latest
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -35,6 +36,31 @@ jobs:
           node-version: 24
           registry-url: https://registry.npmjs.org/
           always-auth: true
+      - name: Work out the version and the npm tag
+        id: channel
+        env:
+          EVENT: ${{ github.event_name }}
+          RELEASE_IS_PRERELEASE: ${{ github.event.release.prerelease }}
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          case "$VERSION" in
+            *-beta.*|*-alpha.*|*-rc.*) VERSION_IS_PRERELEASE=true ;;
+            *) VERSION_IS_PRERELEASE=false ;;
+          esac
+          if [ "$EVENT" = "release" ] && [ "$RELEASE_IS_PRERELEASE" != "$VERSION_IS_PRERELEASE" ]; then
+            echo "Version $VERSION and the GitHub release disagree: the release is marked Pre-release=$RELEASE_IS_PRERELEASE."
+            echo "Tick or untick the Pre-release box, or change the version in package.json, then publish again."
+            exit 1
+          fi
+          if [ "$VERSION_IS_PRERELEASE" = "true" ]; then
+            PRERELEASE="${VERSION#*-}"
+            TAG="${PRERELEASE%%.*}"
+          else
+            TAG=latest
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Publishing wyze-api@$VERSION to the $TAG tag"
       - run: npm ci
       - name: Ensure NPM_TOKEN is configured
         run: |
@@ -49,24 +75,15 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Validate version is unpublished
+        env:
+          VERSION: ${{ steps.channel.outputs.version }}
         run: |
-          VERSION=$(node -p "require('./package.json').version")
           if npm view "wyze-api@$VERSION" version >/dev/null 2>&1; then
-            echo "Version $VERSION is already published to npm. Bump package.json version first."
+            echo "Version $VERSION is already published to npm. Bump the version in package.json first."
             exit 1
           fi
-          echo "Publishing wyze-api@$VERSION"
-      - name: Determine dist-tag
-        id: dist-tag
-        run: |
-          VERSION=$(node -p "require('./package.json').version")
-          if [[ "$VERSION" == *-* ]]; then
-            PRERELEASE="${VERSION#*-}"
-            echo "tag=${PRERELEASE%%.*}" >> "$GITHUB_OUTPUT"
-          else
-            echo "tag=latest" >> "$GITHUB_OUTPUT"
-          fi
-      - run: npm publish --access public --tag "${{ steps.dist-tag.outputs.tag }}"
+      - name: Publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
+          TAG: ${{ steps.channel.outputs.tag }}
+        run: npm publish --access public --tag "$TAG"
